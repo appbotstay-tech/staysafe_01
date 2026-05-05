@@ -693,8 +693,9 @@ model ControleBuffetAmostraRegistro {
   data                 DateTime                        @db.Date
   servicoId            Int
   servico              ControleBuffetAmostraServico    @relation(fields: [servicoId], references: [id], onDelete: Restrict)
-  itemId               Int
-  item                 ControleBuffetAmostraItem       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemId               Int?
+  item                 ControleBuffetAmostraItem?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemExtra            Boolean                         @default(false)
   itemNome             String
   classificacao        ClassificacaoItemBuffetAmostra
   tcEquipamento        Float?
@@ -720,6 +721,7 @@ model ControleBuffetAmostraRegistro {
   @@index([status])
   @@index([responsavelUsuarioId])
   @@index([classificacao])
+  @@index([itemExtra])
   @@map("controle_buffet_amostra_registro")
 }
 

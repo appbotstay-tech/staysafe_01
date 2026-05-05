@@ -8,7 +8,12 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import {
+  canDeleteOperationalRecords,
+  canManageModuleOptions,
+  canViewManagementSections,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import {
   closeMonthAction,
@@ -22,10 +27,12 @@ import { SearchableOptionField } from "./searchable-option-field";
 import { ThemeToggleButton } from "./theme-toggle-button";
 import {
   formatDateDisplay,
+  formatDateInput,
   formatDateTimeDisplay,
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
+  getTodaySystemDate,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -73,12 +80,17 @@ export default async function HigienizacaoHortifrutiPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
 
-  const filtroData = firstParam(params.filtroData).trim();
+  const todayInput = formatDateInput(getTodaySystemDate());
+  const filtroData = firstParam(params.filtroData).trim() || (isFuncionario ? todayInput : "");
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes));
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno));
   const filtroHortifruti = firstParam(params.filtroHortifruti).trim();
@@ -224,9 +236,11 @@ export default async function HigienizacaoHortifrutiPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/higienizacao-hortifruti/opcoes" className="btn-secondary">
-              Gerenciar Opções
-            </Link>
+            {podeGerenciarOpcoes ? (
+              <Link href="/higienizacao-hortifruti/opcoes" className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
             <Link href="/chamados-manutencao?origem=HORTIFRUTI" className="btn-secondary">
               Abrir Chamado de Manutenção
             </Link>
@@ -265,11 +279,15 @@ export default async function HigienizacaoHortifrutiPage({
           </p>
         ) : !catalogoDisponivel ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-            Nenhuma opção de hortifruti ou produto foi cadastrada ainda. Use
-            {" "}
-            <strong>Gerenciar Opções</strong>
-            {" "}
-            para iniciar o módulo.
+            Nenhuma opção de hortifruti ou produto foi cadastrada ainda.
+            {podeGerenciarOpcoes ? (
+              <>
+                {" "}
+                Use <strong>Gerenciar Opções</strong> para iniciar o módulo.
+              </>
+            ) : (
+              " Solicite à gestão a configuração inicial do módulo."
+            )}
           </p>
         ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
@@ -334,19 +352,25 @@ export default async function HigienizacaoHortifrutiPage({
             <Link href={hrefNovoRegistro} className="btn-primary">Novo Registro</Link>
           ) : null}
         </div>
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-5 dark:bg-slate-800">
-          <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
-          <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
-          <label className="text-sm text-slate-700 dark:text-slate-200">Data<input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} /></label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">Mês<select name="filtroMes" defaultValue={filtroMes ? String(filtroMes) : ""} className={INPUT_CLASS}><option value="">Todos</option>{MONTH_OPTIONS.map((month) => <option key={month.value} value={String(month.value)}>{month.label}</option>)}</select></label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">Ano<input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} /></label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">Hortifruti<input type="text" name="filtroHortifruti" defaultValue={filtroHortifruti} className={INPUT_CLASS} /></label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">Responsável<input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} /></label>
-          <div className="btn-group md:col-span-5">
-            <button type="submit" className="btn-primary">Aplicar Filtros</button>
-            <Link href={buildPathWithParams(new URLSearchParams({ fechamentoMes: String(fechamentoMes), fechamentoAno: String(fechamentoAno) }))} className="btn-secondary">Limpar</Link>
-          </div>
-        </form>
+        {podeVerGestao ? (
+          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-5 dark:bg-slate-800">
+            <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
+            <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
+            <label className="text-sm text-slate-700 dark:text-slate-200">Data<input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} /></label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">Mês<select name="filtroMes" defaultValue={filtroMes ? String(filtroMes) : ""} className={INPUT_CLASS}><option value="">Todos</option>{MONTH_OPTIONS.map((month) => <option key={month.value} value={String(month.value)}>{month.label}</option>)}</select></label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">Ano<input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} /></label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">Hortifruti<input type="text" name="filtroHortifruti" defaultValue={filtroHortifruti} className={INPUT_CLASS} /></label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">Responsável<input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} /></label>
+            <div className="btn-group md:col-span-5">
+              <button type="submit" className="btn-primary">Aplicar Filtros</button>
+              <Link href={buildPathWithParams(new URLSearchParams({ fechamentoMes: String(fechamentoMes), fechamentoAno: String(fechamentoAno) }))} className="btn-secondary">Limpar</Link>
+            </div>
+          </form>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Exibindo apenas os registros operacionais de hoje.
+          </p>
+        )}
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
@@ -393,17 +417,19 @@ export default async function HigienizacaoHortifrutiPage({
                           <Link href={hrefEditar} className="btn-action">
                             Editar
                           </Link>
-                          <form action={deleteRegistroAction} className="m-0">
-                            <input type="hidden" name="id" value={registro.id} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <button
-                              type="submit"
-                              disabled={bloqueado}
-                              className="btn-danger"
-                            >
-                              Excluir
-                            </button>
-                          </form>
+                          {podeExcluirRegistros ? (
+                            <form action={deleteRegistroAction} className="m-0">
+                              <input type="hidden" name="id" value={registro.id} />
+                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <button
+                                type="submit"
+                                disabled={bloqueado}
+                                className="btn-danger"
+                              >
+                                Excluir
+                              </button>
+                            </form>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -415,6 +441,7 @@ export default async function HigienizacaoHortifrutiPage({
         </div>
       </section>
 
+      {podeVerGestao ? (
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
         <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
@@ -494,6 +521,7 @@ export default async function HigienizacaoHortifrutiPage({
           )}
         </div>
       </section>
+      ) : null}
 
     </div>
   );

@@ -5,6 +5,7 @@ import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
   canCloseMonth,
+  canDeleteOperationalRecords,
   canManageModuleOptions,
   canManageUsers,
   canOpenMaintenanceTicket,
@@ -39,6 +40,12 @@ export function ensureCanManageOptions(role: UserRole) {
 export function ensureCanCloseMonth(role: UserRole) {
   if (!canCloseMonth(role)) {
     throw new Error("Seu perfil não pode assinar fechamento mensal.");
+  }
+}
+
+export function ensureCanDeleteOperationalRecords(role: UserRole) {
+  if (!canDeleteOperationalRecords(role)) {
+    throw new Error("Seu perfil não pode excluir registros operacionais.");
   }
 }
 

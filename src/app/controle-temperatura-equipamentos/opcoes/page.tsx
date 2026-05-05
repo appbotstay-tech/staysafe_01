@@ -338,11 +338,11 @@ export default async function ControleTemperaturaOpcoesPage({
 
                     <label className="text-sm text-slate-700 dark:text-slate-200">
                       Temperatura Mín.
-                      <input type="text" name="temperaturaMin" inputMode="decimal" className={INPUT_CLASS} />
+                      <input type="text" name="temperaturaMin" inputMode="text" className={INPUT_CLASS} />
                     </label>
                     <label className="text-sm text-slate-700 dark:text-slate-200">
                       Temperatura Máx.
-                      <input type="text" name="temperaturaMax" inputMode="decimal" className={INPUT_CLASS} />
+                      <input type="text" name="temperaturaMax" inputMode="text" className={INPUT_CLASS} />
                     </label>
                     <label className="text-sm text-slate-700 dark:text-slate-200">
                       Status

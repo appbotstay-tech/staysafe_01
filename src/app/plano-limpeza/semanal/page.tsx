@@ -8,7 +8,13 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import {
+  canCloseMonth,
+  canManageModuleOptions,
+  canReopenMonth,
+  canViewManagementSections,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import { closeWeeklyMonthAction, reopenWeeklyMonthAction } from "../actions";
 import { MONTH_OPTIONS, WEEKLY_AREAS, WEEKLY_STATUS_OPTIONS } from "../constants";
@@ -65,6 +71,11 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
+  const podeReabrir = authUser ? canReopenMonth(authUser.perfil) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -79,15 +90,17 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
 
-  const hasManualFilters = Boolean(
-    filtroDataRaw ||
-      filtroMesRaw ||
-      filtroAnoRaw ||
-      filtroArea ||
-      filtroStatusRaw ||
-      filtroResponsavel ||
-      filtroItem
-  );
+  const hasManualFilters =
+    !isFuncionario &&
+    Boolean(
+      filtroDataRaw ||
+        filtroMesRaw ||
+        filtroAnoRaw ||
+        filtroArea ||
+        filtroStatusRaw ||
+        filtroResponsavel ||
+        filtroItem
+    );
 
   const filtroData = hasManualFilters ? filtroDataRaw : "";
   const filtroMes = parsePositiveInt(filtroMesRaw);
@@ -315,12 +328,16 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             <Link href="/plano-limpeza" className="btn-secondary">
               Voltar para Módulo
             </Link>
-            <Link href="/plano-limpeza/semanal/historico" className="btn-secondary">
-              Histórico Completo
-            </Link>
-            <Link href="/plano-limpeza/semanal/opcoes" className="btn-secondary">
-              Gerenciar Plano Semanal
-            </Link>
+            {podeVerGestao ? (
+              <Link href="/plano-limpeza/semanal/historico" className="btn-secondary">
+                Histórico Completo
+              </Link>
+            ) : null}
+            {podeGerenciarOpcoes ? (
+              <Link href="/plano-limpeza/semanal/opcoes" className="btn-secondary">
+                Gerenciar Plano Semanal
+              </Link>
+            ) : null}
             <Link href="/chamados-manutencao?origem=LIMPEZA" className="btn-secondary">
               Abrir Chamado de Manutenção
             </Link>
@@ -349,93 +366,103 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       {activeItems.length === 0 ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          Nenhum item ativo do plano semanal foi configurado. Use
-          {" "}
-          <strong>Gerenciar Plano Semanal</strong>
-          {" "}
-          para cadastrar itens por área.
+          {podeGerenciarOpcoes ? (
+            <>
+              Nenhum item ativo do plano semanal foi configurado. Use{" "}
+              <strong>Gerenciar Plano Semanal</strong>{" "}
+              para cadastrar itens por área.
+            </>
+          ) : (
+            "Nenhum item ativo do plano semanal foi configurado. Solicite à gestão a configuração do plano."
+          )}
         </section>
       ) : null}
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Execuções Semanais por Área
+          {isFuncionario ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Área"}
         </h2>
 
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
-          <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
-          <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
+        {isFuncionario ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            Exibindo automaticamente as rotinas da semana atual que exigem execução operacional.
+          </p>
+        ) : (
+          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
+            <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
+            <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
 
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Data
-            <input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="filtroMes" defaultValue={filtroMes ? String(filtroMes) : ""} className={INPUT_CLASS}>
-              <option value="">Todos</option>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Área
-            <select name="filtroArea" defaultValue={filtroArea} className={INPUT_CLASS}>
-              <option value="">Todas</option>
-              {areaOptions.map((area) => (
-                <option key={area} value={area}>
-                  {area}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Status
-            <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
-              <option value="">Todos</option>
-              {WEEKLY_STATUS_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Responsável
-            <input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
-          </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Data
+              <input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} />
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Mês
+              <select name="filtroMes" defaultValue={filtroMes ? String(filtroMes) : ""} className={INPUT_CLASS}>
+                <option value="">Todos</option>
+                {MONTH_OPTIONS.map((month) => (
+                  <option key={month.value} value={String(month.value)}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Ano
+              <input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} />
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Área
+              <select name="filtroArea" defaultValue={filtroArea} className={INPUT_CLASS}>
+                <option value="">Todas</option>
+                {areaOptions.map((area) => (
+                  <option key={area} value={area}>
+                    {area}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Status
+              <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
+                <option value="">Todos</option>
+                {WEEKLY_STATUS_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Responsável
+              <input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
+            </label>
 
-          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-3">
-            Item
-            <input type="text" name="filtroItem" defaultValue={filtroItem} className={INPUT_CLASS} />
-          </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-3">
+              Item
+              <input type="text" name="filtroItem" defaultValue={filtroItem} className={INPUT_CLASS} />
+            </label>
 
-          <div className="btn-group md:col-span-6">
-            <button type="submit" className="btn-primary">
-              Aplicar Filtros
-            </button>
-            <Link
-              href={buildPathWithParams(
-                new URLSearchParams({
-                  fechamentoMes: String(fechamentoMes),
-                  fechamentoAno: String(fechamentoAno)
-                })
-              )}
-              className="btn-secondary"
-            >
-              Limpar
-            </Link>
-          </div>
-        </form>
+            <div className="btn-group md:col-span-6">
+              <button type="submit" className="btn-primary">
+                Aplicar Filtros
+              </button>
+              <Link
+                href={buildPathWithParams(
+                  new URLSearchParams({
+                    fechamentoMes: String(fechamentoMes),
+                    fechamentoAno: String(fechamentoAno)
+                  })
+                )}
+                className="btn-secondary"
+              >
+                Limpar
+              </Link>
+            </div>
+          </form>
+        )}
 
-        {!hasManualFilters ? (
+        {!hasManualFilters && !isFuncionario ? (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             Exibindo automaticamente as execuções da semana atual por área.
           </p>
@@ -547,6 +574,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         </div>
       </section>
 
+      {podeVerGestao ? (
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
 
@@ -636,14 +664,22 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                   {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
                 </strong>
               </p>
-              <form id={reaberturaFormId} action={reopenWeeklyMonthAction} className="mt-4">
-                <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-              </form>
-              <ReopenMonthModal mes={fechamentoMes} ano={fechamentoAno} formId={reaberturaFormId} />
+              {podeReabrir ? (
+                <>
+                  <form id={reaberturaFormId} action={reopenWeeklyMonthAction} className="mt-4">
+                    <input type="hidden" name="mes" value={String(fechamentoMes)} />
+                    <input type="hidden" name="ano" value={String(fechamentoAno)} />
+                    <input type="hidden" name="returnTo" value={returnTo} />
+                  </form>
+                  <ReopenMonthModal
+                    mes={fechamentoMes}
+                    ano={fechamentoAno}
+                    formId={reaberturaFormId}
+                  />
+                </>
+              ) : null}
             </div>
-          ) : (
+          ) : podeFechar ? (
             <form action={closeWeeklyMonthAction} className="grid gap-3 md:grid-cols-2">
               <input type="hidden" name="mes" value={String(fechamentoMes)} />
               <input type="hidden" name="ano" value={String(fechamentoAno)} />
@@ -663,9 +699,14 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                 </button>
               </div>
             </form>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Seu perfil não possui permissão para assinar o fechamento mensal.
+            </p>
           )}
         </div>
       </section>
+      ) : null}
 
       {executionParaAssinatura &&
       executionItemsParaAssinatura.length > 0 &&

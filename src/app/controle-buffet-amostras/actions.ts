@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  ClassificacaoItemBuffetAmostra,
   StatusFechamentoBuffetAmostra,
   StatusItemBuffetAmostra
 } from "@prisma/client";
@@ -46,10 +47,37 @@ const OPTIONS_PATH = "/controle-buffet-amostras/opcoes";
 const NAO_SE_APLICA_NORMALIZED = normalizeOption("Não se aplica");
 
 type FeedbackType = "success" | "error";
+type FormActionState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  invalidRowKey?: string;
+};
+
+const FORM_ACTION_INITIAL_STATE: FormActionState = {
+  status: "idle",
+  message: ""
+};
+
+type RegistroTemperaturaInput = {
+  tcEquipamentoInput: string;
+  primeiraTcInput: string;
+  segundaTcInput: string;
+  acaoCorretivaInput: string;
+  observacao: string;
+};
+
+type RegistroItemSource = {
+  nome: string;
+  classificacao: ClassificacaoItemBuffetAmostra;
+};
 
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getRowInputValue(formData: FormData, rowKey: string, key: string): string {
+  return getInputValue(formData, `${rowKey}-${key}`);
 }
 
 function getInputNumberList(formData: FormData, key: string): number[] {
@@ -132,9 +160,65 @@ async function ensureAcoesCorretivasConfiguradas() {
   const options = await getAcoesCorretivas(true);
   if (options.length === 0) {
     throw new Error(
-      "Não há ações corretivas ativas cadastradas. Configure em Gerenciar Opções antes de registrar."
+      "Não há ações corretivas ativas cadastradas. Solicite à gestão a configuração antes de registrar."
     );
   }
+}
+
+async function buildRegistroPayload(params: {
+  actor: Awaited<ReturnType<typeof getCurrentUserForAction>>;
+  item: RegistroItemSource;
+  input: RegistroTemperaturaInput;
+}) {
+  const tcEquipamento = parseTemperatureInput(params.input.tcEquipamentoInput);
+  const primeiraTc = parseTemperatureInput(params.input.primeiraTcInput);
+  const segundaTc = parseTemperatureInput(params.input.segundaTcInput);
+
+  if (tcEquipamento === null || primeiraTc === null || segundaTc === null) {
+    throw new Error("Preencha TC Equipamento, 1ª TC e 2ª TC com valores válidos.");
+  }
+
+  const avaliacao = avaliarTemperaturaBuffet(params.item.classificacao, segundaTc);
+  const acaoCorretivaOption = params.input.acaoCorretivaInput
+    ? await findAcaoCorretivaByName(params.input.acaoCorretivaInput, false)
+    : null;
+
+  if (params.input.acaoCorretivaInput && !acaoCorretivaOption) {
+    throw new Error("Selecione uma ação corretiva válida da lista cadastrada.");
+  }
+
+  if (
+    avaliacao.exigeAcaoCorretiva &&
+    (!acaoCorretivaOption ||
+      normalizeOption(acaoCorretivaOption.nome) === NAO_SE_APLICA_NORMALIZED)
+  ) {
+    throw new Error(
+      "A ação corretiva é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+    );
+  }
+
+  const acaoCorretiva = acaoCorretivaOption
+    ? acaoCorretivaOption.nome
+    : await (async () => {
+        const naoSeAplica = await findAcaoCorretivaByName("Não se aplica", false);
+        return naoSeAplica?.nome ?? null;
+      })();
+
+  return {
+    itemNome: params.item.nome,
+    classificacao: params.item.classificacao,
+    tcEquipamento,
+    primeiraTc,
+    segundaTc,
+    statusTemperatura: avaliacao.status,
+    acaoCorretiva,
+    observacao: params.input.observacao || null,
+    responsavelUsuarioId: params.actor.id,
+    responsavelNome: params.actor.nomeCompleto,
+    responsavelPerfil: params.actor.perfil,
+    dataHoraRegistro: getCurrentSystemDateTime(),
+    status: StatusItemBuffetAmostra.PREENCHIDO
+  };
 }
 
 export async function saveRegistroItemAction(formData: FormData) {
@@ -269,6 +353,273 @@ export async function saveRegistroItemAction(formData: FormData) {
   }
 }
 
+export async function saveServicoItemsStateAction(
+  _previousState: FormActionState = FORM_ACTION_INITIAL_STATE,
+  formData: FormData
+): Promise<FormActionState> {
+  try {
+    const actor = await getCurrentUserForAction();
+    const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
+    const dataInput = getInputValue(formData, "data");
+    const rowKeys = formData
+      .getAll("rowKey")
+      .map((value) => (typeof value === "string" ? value : ""))
+      .filter(Boolean);
+
+    if (!servicoId) {
+      throw new Error("Serviço inválido para salvar os itens.");
+    }
+
+    const data = parseDateInput(dataInput);
+    if (!data) {
+      throw new Error("Data inválida para salvar os itens.");
+    }
+
+    if (rowKeys.length === 0) {
+      throw new Error("Não há itens disponíveis para salvar.");
+    }
+
+    await ensurePeriodIsOpen(data);
+    await ensureAcoesCorretivasConfiguradas();
+
+    const [servico, registros] = await Promise.all([
+      prisma.controleBuffetAmostraServico.findUnique({
+        where: { id: servicoId },
+        include: {
+          itens: {
+            where: { item: { ativo: true } },
+            include: { item: true }
+          }
+        }
+      }),
+      prisma.controleBuffetAmostraRegistro.findMany({
+        where: { data, servicoId }
+      })
+    ]);
+
+    if (!servico) {
+      throw new Error("Serviço não encontrado.");
+    }
+
+    const fixedItemsById = new Map(servico.itens.map((vinculo) => [vinculo.itemId, vinculo.item]));
+    const registrosByItemId = new Map<number, (typeof registros)[number]>();
+    const extraRegistrosById = new Map<number, (typeof registros)[number]>();
+
+    for (const registro of registros) {
+      if (registro.itemExtra) {
+        extraRegistrosById.set(registro.id, registro);
+      } else if (registro.itemId !== null) {
+        registrosByItemId.set(registro.itemId, registro);
+      }
+    }
+
+    const updates: Array<
+      | {
+          type: "fixed";
+          itemId: number;
+          payload: Awaited<ReturnType<typeof buildRegistroPayload>>;
+        }
+      | {
+          type: "extra";
+          registroId: number;
+          payload: Awaited<ReturnType<typeof buildRegistroPayload>>;
+        }
+    > = [];
+
+    for (const rowKey of rowKeys) {
+      try {
+        const input = {
+          tcEquipamentoInput: getRowInputValue(formData, rowKey, "tcEquipamento"),
+          primeiraTcInput: getRowInputValue(formData, rowKey, "primeiraTc"),
+          segundaTcInput: getRowInputValue(formData, rowKey, "segundaTc"),
+          acaoCorretivaInput: getRowInputValue(formData, rowKey, "acaoCorretiva"),
+          observacao: getRowInputValue(formData, rowKey, "observacao")
+        };
+
+        if (rowKey.startsWith("item-")) {
+          const itemId = parsePositiveInt(rowKey.replace("item-", ""));
+          const item = itemId ? fixedItemsById.get(itemId) : null;
+          const existing = itemId ? registrosByItemId.get(itemId) : null;
+
+          if (!itemId || !item) {
+            throw new Error("Item não configurado para este serviço.");
+          }
+
+          if (existing?.status === StatusItemBuffetAmostra.ASSINADO) {
+            continue;
+          }
+
+          updates.push({
+            type: "fixed",
+            itemId,
+            payload: await buildRegistroPayload({ actor, item, input })
+          });
+          continue;
+        }
+
+        if (rowKey.startsWith("extra-")) {
+          const registroId = parsePositiveInt(rowKey.replace("extra-", ""));
+          const registro = registroId ? extraRegistrosById.get(registroId) : null;
+
+          if (!registroId || !registro) {
+            throw new Error("Item extra não encontrado para este serviço.");
+          }
+
+          if (registro.status === StatusItemBuffetAmostra.ASSINADO) {
+            continue;
+          }
+
+          updates.push({
+            type: "extra",
+            registroId,
+            payload: await buildRegistroPayload({
+              actor,
+              item: {
+                nome: registro.itemNome,
+                classificacao: registro.classificacao
+              },
+              input
+            })
+          });
+          continue;
+        }
+
+        throw new Error("Linha inválida para salvar.");
+      } catch (error) {
+        return {
+          status: "error",
+          message: getErrorMessage(
+            error,
+            "Não foi possível salvar os itens. Verifique os campos obrigatórios."
+          ),
+          invalidRowKey: rowKey
+        };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const update of updates) {
+        if (update.type === "fixed") {
+          await tx.controleBuffetAmostraRegistro.upsert({
+            where: {
+              data_servicoId_itemId: {
+                data,
+                servicoId,
+                itemId: update.itemId
+              }
+            },
+            create: {
+              data,
+              servicoId,
+              itemId: update.itemId,
+              itemExtra: false,
+              ...update.payload
+            },
+            update: update.payload
+          });
+        } else {
+          await tx.controleBuffetAmostraRegistro.update({
+            where: { id: update.registroId },
+            data: update.payload
+          });
+        }
+      }
+    });
+
+    revalidateModulePaths(servicoId);
+    return {
+      status: "success",
+      message: "Itens do Serviço Salvos com Sucesso."
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(
+        error,
+        "Não foi possível salvar os itens. Verifique os campos obrigatórios."
+      )
+    };
+  }
+}
+
+export async function createExtraItemStateAction(
+  _previousState: FormActionState = FORM_ACTION_INITIAL_STATE,
+  formData: FormData
+): Promise<FormActionState> {
+  try {
+    const actor = await getCurrentUserForAction();
+    const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
+    const dataInput = getInputValue(formData, "data");
+    const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
+    const classificacao = parseItemClassification(getInputValue(formData, "classificacao"));
+
+    if (!servicoId) {
+      throw new Error("Serviço inválido para adicionar item extra.");
+    }
+
+    const data = parseDateInput(dataInput);
+    if (!data) {
+      throw new Error("Data inválida para adicionar item extra.");
+    }
+
+    if (!nome || !classificacao) {
+      throw new Error("Informe nome e classificação válidos para o item extra.");
+    }
+
+    await ensurePeriodIsOpen(data);
+
+    const servico = await prisma.controleBuffetAmostraServico.findUnique({
+      where: { id: servicoId },
+      select: { id: true }
+    });
+
+    if (!servico) {
+      throw new Error("Serviço não encontrado.");
+    }
+
+    const existingExtra = await prisma.controleBuffetAmostraRegistro.findFirst({
+      where: {
+        data,
+        servicoId,
+        itemExtra: true,
+        itemNome: { equals: nome, mode: "insensitive" }
+      },
+      select: { id: true }
+    });
+
+    if (existingExtra) {
+      throw new Error("Este item extra já foi adicionado para o serviço nesta data.");
+    }
+
+    await prisma.controleBuffetAmostraRegistro.create({
+      data: {
+        data,
+        servicoId,
+        itemId: null,
+        itemExtra: true,
+        itemNome: nome,
+        classificacao,
+        responsavelUsuarioId: actor.id,
+        responsavelNome: actor.nomeCompleto,
+        responsavelPerfil: actor.perfil,
+        dataHoraRegistro: getCurrentSystemDateTime(),
+        status: StatusItemBuffetAmostra.PENDENTE
+      }
+    });
+
+    revalidateModulePaths(servicoId);
+    return {
+      status: "success",
+      message: "Item extra adicionado ao serviço."
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error, "Não foi possível adicionar o item extra.")
+    };
+  }
+}
+
 export async function signRegistroItemAction(formData: FormData) {
   const returnTo = getReturnToPath(formData, MODULE_PATH);
 
@@ -374,10 +725,6 @@ export async function signServicoItensAction(formData: FormData) {
       throw new Error("Serviço não encontrado.");
     }
 
-    if (servico.itens.length === 0) {
-      throw new Error("Não há itens ativos configurados neste serviço para assinatura.");
-    }
-
     const registros = await prisma.controleBuffetAmostraRegistro.findMany({
       where: {
         data,
@@ -385,17 +732,27 @@ export async function signServicoItensAction(formData: FormData) {
       }
     });
 
+    if (servico.itens.length === 0 && registros.length === 0) {
+      throw new Error("Não há itens ativos configurados neste serviço para assinatura.");
+    }
+
     const registroPorItem = new Map<number, (typeof registros)[number]>();
     for (const registro of registros) {
-      registroPorItem.set(registro.itemId, registro);
+      if (registro.itemId !== null) {
+        registroPorItem.set(registro.itemId, registro);
+      }
     }
 
     const itensPendentes = servico.itens.filter((vinculo) => {
       const registro = registroPorItem.get(vinculo.itemId);
       return !registro || registro.status === StatusItemBuffetAmostra.PENDENTE;
     });
+    const itensExtrasPendentes = registros.filter(
+      (registro) =>
+        registro.itemExtra && registro.status === StatusItemBuffetAmostra.PENDENTE
+    );
 
-    if (itensPendentes.length > 0) {
+    if (itensPendentes.length > 0 || itensExtrasPendentes.length > 0) {
       throw new Error(
         "Ainda existem itens não preenchidos neste serviço. Preencha todos os itens antes de assinar."
       );

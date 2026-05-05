@@ -8,11 +8,9 @@ import { prisma } from "@/lib/prisma";
 import {
   deleteNoteAction,
   deleteItemAction,
-  finalizeNotaAction,
-  saveNotaItemsAction
+  finalizeNotaAction
 } from "../../actions";
 import { DeleteNoteModal } from "../../delete-note-modal";
-import { ConformidadeBadge } from "../../status-badges";
 import { ThemeToggleButton } from "../../theme-toggle-button";
 import {
   formatDateDisplay,
@@ -20,14 +18,12 @@ import {
   getMonthYear,
   parsePositiveInt
 } from "../../utils";
+import { NoteItemsForm, type NoteItemFormRow } from "./note-items-form";
 
 const CARD_CLASS =
   "rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-5 lg:p-6 dark:border-slate-700 dark:bg-slate-900";
 const INPUT_CLASS =
   "h-10 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900";
-const TABLE_HEAD_CLASS =
-  "px-2 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200";
-const TABLE_CELL_CLASS = "px-2 py-1.5 align-top";
 const MODULE_PATH = "/rastreabilidade-recebimento";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -72,6 +68,23 @@ function getNotaStatusClass(status: StatusNotaRecebimento): string {
 
 function canEditImportedXmlFields(role: string | undefined): boolean {
   return role === "DEV" || role === "GESTOR";
+}
+
+function canDeleteRecebimentoNote(role: string | undefined): boolean {
+  return role === "DEV" || role === "GESTOR";
+}
+
+function formatSifInputValue(value: string | null): string {
+  if (!value) {
+    return "NA";
+  }
+
+  const normalized = value.trim().toLocaleLowerCase("pt-BR");
+  if (normalized === "não se aplica" || normalized === "nao se aplica") {
+    return "NA";
+  }
+
+  return value;
 }
 
 function formatCnpj(value: string): string {
@@ -122,8 +135,12 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const readOnlyMode = monthSigned || noteFinalizada;
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const xmlFieldsLocked = note.origemXml && !canEditImportedXmlFields(authUser?.perfil);
-  const canDeleteNote = !monthSigned && note.statusNota !== StatusNotaRecebimento.FINALIZADA;
+  const xmlProductLocked = note.origemXml && !canEditImportedXmlFields(authUser?.perfil);
+  const canDeleteNote =
+    canDeleteRecebimentoNote(authUser?.perfil) &&
+    !monthSigned &&
+    note.statusNota !== StatusNotaRecebimento.FINALIZADA;
+  const canDeleteItems = canDeleteRecebimentoNote(authUser?.perfil) && !readOnlyMode;
   const returnTo = `/rastreabilidade-recebimento/nota/${note.id}`;
 
   const query = await searchParams;
@@ -137,6 +154,23 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
       : null,
     note.chaveNfe ? { label: "Chave NF-e", value: formatChaveNfe(note.chaveNfe) } : null
   ].filter((item): item is { label: string; value: string } => item !== null);
+  const noteItemRows: NoteItemFormRow[] = note.itens.map((item) => ({
+    id: item.id,
+    produto: item.produto,
+    lote: item.lote ?? "",
+    dataFabricacao: item.dataFabricacao ? formatDateInput(item.dataFabricacao) : "",
+    dataValidade: item.dataValidade ? formatDateInput(item.dataValidade) : "",
+    sif: formatSifInputValue(item.sif),
+    temperatura:
+      item.temperatura !== null ? String(item.temperatura).replace(".", ",") : "",
+    transporteEntregador: item.transporteEntregador ?? "",
+    aspectoSensorial: item.aspectoSensorial ?? "",
+    embalagem: item.embalagem ?? "",
+    acaoCorretiva: item.acaoCorretiva ?? "",
+    responsavelRecebimento: item.responsavelRecebimento ?? null,
+    observacoes: item.observacoes ?? "",
+    statusGeral: item.statusGeral
+  }));
 
   return (
     <div className="space-y-5 dark:text-slate-100">
@@ -234,10 +268,10 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
           </div>
         ) : null}
 
-        {!readOnlyMode && xmlFieldsLocked ? (
+        {!readOnlyMode && xmlProductLocked ? (
           <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
-            Dados importados do XML (produto, lote e datas) estão bloqueados para edição operacional.
-            Preencha apenas os campos de conferência física.
+            Dados fiscais importados do XML estão protegidos. Preencha a conferência operacional
+            da nota com o usuário logado.
           </div>
         ) : null}
 
@@ -247,211 +281,18 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
           </p>
         ) : (
           <>
-            <form action={saveNotaItemsAction}>
-              <input type="hidden" name="notaId" value={note.id} />
-              <input type="hidden" name="returnTo" value={returnTo} />
+            <NoteItemsForm
+              notaId={note.id}
+              returnTo={returnTo}
+              rows={noteItemRows}
+              readOnlyMode={readOnlyMode}
+              xmlProductLocked={xmlProductLocked}
+              canDeleteItems={canDeleteItems}
+              responsavelLogado={responsavelLogado}
+              inputClassName={INPUT_CLASS}
+            />
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                <table className="w-full min-w-[1240px] table-auto divide-y divide-slate-200 text-sm dark:divide-slate-700">
-                  <thead className="bg-slate-50 text-left dark:bg-slate-800">
-                    <tr>
-                      <th className={TABLE_HEAD_CLASS}>Produto</th>
-                      <th className={TABLE_HEAD_CLASS}>Lote *</th>
-                      <th className={TABLE_HEAD_CLASS}>Data de Fabricação *</th>
-                      <th className={TABLE_HEAD_CLASS}>Validade *</th>
-                      <th className={TABLE_HEAD_CLASS}>SIF</th>
-                      <th className={TABLE_HEAD_CLASS}>Temperatura *</th>
-                      <th className={TABLE_HEAD_CLASS}>Transporte *</th>
-                      <th className={TABLE_HEAD_CLASS}>Aspecto *</th>
-                      <th className={TABLE_HEAD_CLASS}>Embalagem *</th>
-                      <th className={TABLE_HEAD_CLASS}>Ação Corretiva</th>
-                      <th className={TABLE_HEAD_CLASS}>Responsável</th>
-                      <th className={TABLE_HEAD_CLASS}>Observações</th>
-                      <th className={TABLE_HEAD_CLASS}>Status</th>
-                      <th className={TABLE_HEAD_CLASS}>Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {note.itens.map((item) => (
-                      <tr key={item.id}>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-produto`}
-                            defaultValue={item.produto}
-                            required
-                            disabled={readOnlyMode || xmlFieldsLocked}
-                            className={`${INPUT_CLASS} min-w-[9rem] md:min-w-[11rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-lote`}
-                            defaultValue={item.lote ?? ""}
-                            required
-                            disabled={readOnlyMode || xmlFieldsLocked}
-                            className={`${INPUT_CLASS} min-w-[5.5rem] md:min-w-[6.5rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="date"
-                            name={`item-${item.id}-dataFabricacao`}
-                            defaultValue={
-                              item.dataFabricacao ? formatDateInput(item.dataFabricacao) : ""
-                            }
-                            required
-                            disabled={readOnlyMode || xmlFieldsLocked}
-                            className={`${INPUT_CLASS} min-w-[7.5rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="date"
-                            name={`item-${item.id}-dataValidade`}
-                            defaultValue={
-                              item.dataValidade ? formatDateInput(item.dataValidade) : ""
-                            }
-                            required
-                            disabled={readOnlyMode || xmlFieldsLocked}
-                            className={`${INPUT_CLASS} min-w-[7.5rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-sif`}
-                            defaultValue={item.sif ?? "Não se aplica"}
-                            list="sif-opcoes"
-                            required
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[4.5rem] md:min-w-[5rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-temperatura`}
-                            defaultValue={
-                              item.temperatura !== null
-                                ? String(item.temperatura).replace(".", ",")
-                                : ""
-                            }
-                            required
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[5rem] md:min-w-[5.5rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <select
-                            name={`item-${item.id}-transporteEntregador`}
-                            defaultValue={item.transporteEntregador ?? ""}
-                            required
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[6.5rem]`}
-                          >
-                            <option value="">Selecione</option>
-                            <option value="CONFORME">Conforme</option>
-                            <option value="NAO_CONFORME">Não Conforme</option>
-                          </select>
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <select
-                            name={`item-${item.id}-aspectoSensorial`}
-                            defaultValue={item.aspectoSensorial ?? ""}
-                            required
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[6.5rem]`}
-                          >
-                            <option value="">Selecione</option>
-                            <option value="CONFORME">Conforme</option>
-                            <option value="NAO_CONFORME">Não Conforme</option>
-                          </select>
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <select
-                            name={`item-${item.id}-embalagem`}
-                            defaultValue={item.embalagem ?? ""}
-                            required
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[6.5rem]`}
-                          >
-                            <option value="">Selecione</option>
-                            <option value="CONFORME">Conforme</option>
-                            <option value="NAO_CONFORME">Não Conforme</option>
-                          </select>
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-acaoCorretiva`}
-                            defaultValue={item.acaoCorretiva ?? ""}
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[8rem] md:min-w-[9rem]`}
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <div className="min-w-[7.5rem] rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {readOnlyMode
-                              ? (item.responsavelRecebimento ?? "-")
-                              : responsavelLogado}
-                          </div>
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          <input
-                            type="text"
-                            name={`item-${item.id}-observacoes`}
-                            defaultValue={item.observacoes ?? ""}
-                            disabled={readOnlyMode}
-                            className={`${INPUT_CLASS} min-w-[8rem] md:min-w-[9rem]`}
-                          />
-                        </td>
-                        <td className={`${TABLE_CELL_CLASS} whitespace-nowrap`}>
-                          <ConformidadeBadge
-                            value={
-                              item.statusGeral === "NAO_CONFORME"
-                                ? "NAO_CONFORME"
-                                : item.statusGeral === "CONFORME"
-                                  ? "CONFORME"
-                                  : null
-                            }
-                          />
-                        </td>
-                        <td className={TABLE_CELL_CLASS}>
-                          {readOnlyMode ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              Bloqueado
-                            </span>
-                          ) : (
-                            <button
-                              type="submit"
-                              form={`delete-item-form-${item.id}`}
-                              className="btn-danger"
-                            >
-                              Excluir
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <datalist id="sif-opcoes">
-                <option value="Não se aplica" />
-              </datalist>
-
-              {!readOnlyMode ? (
-                <div className="mt-4 btn-group">
-                  <button type="submit" className="btn-primary">
-                    Salvar Itens da Nota
-                  </button>
-                </div>
-              ) : null}
-            </form>
-
-            {!readOnlyMode
+            {canDeleteItems
               ? note.itens.map((item) => (
                   <form
                     key={item.id}

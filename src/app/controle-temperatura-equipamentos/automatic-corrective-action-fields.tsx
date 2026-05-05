@@ -120,7 +120,7 @@ export function AutomaticCorrectiveActionFields({
           type="text"
           name="temperaturaAferida"
           required
-          inputMode="decimal"
+          inputMode="text"
           placeholder="Ex.: 4,0"
           defaultValue={defaultTemperatura}
           className={inputClassName}

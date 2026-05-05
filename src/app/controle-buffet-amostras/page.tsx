@@ -4,7 +4,13 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { canCloseMonth, canReopenMonth, getRoleLabel } from "@/lib/rbac";
+import {
+  canCloseMonth,
+  canManageModuleOptions,
+  canReopenMonth,
+  canViewManagementSections,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import { closeMonthAction, reopenMonthAction } from "./actions";
 import { ReopenMonthModal } from "./reopen-month-modal";
@@ -64,6 +70,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
   const podeReabrir = authUser ? canReopenMonth(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -104,6 +112,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
         id: true,
         servicoId: true,
         itemId: true,
+        itemExtra: true,
         status: true
       }
     }),
@@ -122,9 +131,13 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const servicosDoDia = servicos.map((servico) => {
     const registrosServico = registrosPorServico.get(servico.id) ?? [];
     const itensAtivos = servico.itens.map((vinculo) => vinculo.item.id);
-    const registrosItensAtivos = registrosServico.filter((registro) =>
-      itensAtivos.includes(registro.itemId)
+    const registrosItensAtivos = registrosServico.filter(
+      (registro) =>
+        registro.itemExtra ||
+        (registro.itemId !== null && itensAtivos.includes(registro.itemId))
     );
+    const quantidadeItens =
+      itensAtivos.length + registrosServico.filter((registro) => registro.itemExtra).length;
 
     const itensAssinados = registrosItensAtivos.filter(
       (registro) => registro.status === StatusItemBuffetAmostra.ASSINADO
@@ -134,7 +147,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     ).length;
 
     const status = calcularStatusServico({
-      totalItens: itensAtivos.length,
+      totalItens: quantidadeItens,
       itensAssinados,
       itensIniciados
     });
@@ -142,7 +155,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     return {
       id: servico.id,
       nome: servico.nome,
-      quantidadeItens: itensAtivos.length,
+      quantidadeItens,
       status
     };
   });
@@ -159,7 +172,12 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       servico: { select: { nome: true } },
       item: { select: { nome: true } }
     },
-    orderBy: [{ data: "asc" }, { servico: { ordem: "asc" } }, { item: { ordem: "asc" } }]
+    orderBy: [
+      { data: "asc" },
+      { servico: { ordem: "asc" } },
+      { itemExtra: "asc" },
+      { itemNome: "asc" }
+    ]
   });
 
   const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
@@ -184,12 +202,16 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
             </p>
           </div>
           <div className="btn-group">
-            <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
-              Histórico Completo
-            </Link>
-            <Link href={`${MODULE_PATH}/opcoes`} className="btn-secondary">
-              Gerenciar Opções
-            </Link>
+            {podeVerGestao ? (
+              <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
+                Histórico Completo
+              </Link>
+            ) : null}
+            {podeGerenciarOpcoes ? (
+              <Link href={`${MODULE_PATH}/opcoes`} className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
             <Link
               href="/chamados-manutencao?origem=BUFFET_AMOSTRAS"
               className="btn-secondary"
@@ -263,6 +285,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
         </div>
       </section>
 
+      {podeVerGestao ? (
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Fechamento Mensal
@@ -330,7 +353,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                     <tr key={registro.id}>
                       <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
                       <td className="px-3 py-2">{registro.servico.nome}</td>
-                      <td className="px-3 py-2">{registro.itemNome || registro.item.nome}</td>
+                      <td className="px-3 py-2">
+                        {registro.itemNome || registro.item?.nome}
+                        {registro.itemExtra ? (
+                          <span className="ml-2 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                            Item extra
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">{getClassificacaoLabel(registro.classificacao)}</td>
                       <td className="px-3 py-2">
                         {registro.tcEquipamento !== null ? `${registro.tcEquipamento}°C` : "-"}
@@ -404,6 +434,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }

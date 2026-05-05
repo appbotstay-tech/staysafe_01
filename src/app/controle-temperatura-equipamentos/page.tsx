@@ -12,7 +12,12 @@ import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import {
+  canDeleteOperationalRecords,
+  canManageModuleOptions,
+  canViewManagementSections,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import {
   closeMonthAction,
@@ -99,6 +104,9 @@ export default async function ControleTemperaturaEquipamentosPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -310,12 +318,16 @@ export default async function ControleTemperaturaEquipamentosPage({
             </p>
           </div>
           <div className="btn-group">
-            <Link href="/controle-temperatura-equipamentos/historico" className="btn-secondary">
-              Histórico Completo
-            </Link>
-            <Link href="/controle-temperatura-equipamentos/opcoes" className="btn-secondary">
-              Gerenciar Opções
-            </Link>
+            {podeVerGestao ? (
+              <Link href="/controle-temperatura-equipamentos/historico" className="btn-secondary">
+                Histórico Completo
+              </Link>
+            ) : null}
+            {podeGerenciarOpcoes ? (
+              <Link href="/controle-temperatura-equipamentos/opcoes" className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
             <Link
               href="/chamados-manutencao?origem=TEMPERATURA"
               className="btn-secondary"
@@ -358,11 +370,14 @@ export default async function ControleTemperaturaEquipamentosPage({
         ) : !configuracaoDisponivel ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
             O módulo ainda não possui equipamentos ou regras de temperatura suficientes para cadastro.
-            Use
-            {" "}
-            <strong>Gerenciar Opções</strong>
-            {" "}
-            para concluir a configuração inicial.
+            {podeGerenciarOpcoes ? (
+              <>
+                {" "}
+                Use <strong>Gerenciar Opções</strong> para concluir a configuração inicial.
+              </>
+            ) : (
+              " Solicite à gestão a configuração inicial do módulo."
+            )}
           </p>
         ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
@@ -469,6 +484,7 @@ export default async function ControleTemperaturaEquipamentosPage({
           ) : null}
         </div>
 
+        {podeVerGestao ? (
         <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
           <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
           <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
@@ -548,9 +564,20 @@ export default async function ControleTemperaturaEquipamentosPage({
             </Link>
           </div>
         </form>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Exibindo os registros de temperatura de hoje.
+          </p>
+        )}
 
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-          A listagem principal mostra os registros da data atual automaticamente. Use os filtros ou o <strong>Histórico Completo</strong> para outras consultas.
+          A listagem principal mostra os registros da data atual automaticamente.
+          {podeVerGestao ? (
+            <>
+              {" "}
+              Use os filtros ou o <strong>Histórico Completo</strong> para outras consultas.
+            </>
+          ) : null}
         </p>
 
         <div className="mt-4 overflow-x-auto">
@@ -623,13 +650,15 @@ export default async function ControleTemperaturaEquipamentosPage({
                           <Link href={hrefEditar} className="btn-action">
                             Editar
                           </Link>
-                          <form action={deleteRegistroAction} className="m-0">
-                            <input type="hidden" name="id" value={registro.id} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <button type="submit" disabled={bloqueado} className="btn-danger">
-                              Excluir
-                            </button>
-                          </form>
+                          {podeExcluirRegistros ? (
+                            <form action={deleteRegistroAction} className="m-0">
+                              <input type="hidden" name="id" value={registro.id} />
+                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <button type="submit" disabled={bloqueado} className="btn-danger">
+                                Excluir
+                              </button>
+                            </form>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -641,6 +670,7 @@ export default async function ControleTemperaturaEquipamentosPage({
         </div>
       </section>
 
+      {podeVerGestao ? (
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
 
@@ -771,6 +801,7 @@ export default async function ControleTemperaturaEquipamentosPage({
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }

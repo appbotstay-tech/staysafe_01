@@ -148,7 +148,7 @@ export function OilRegisterFields({
           type="text"
           name="temperatura"
           required={!semUtilizacao}
-          inputMode="decimal"
+          inputMode="text"
           placeholder="Ex.: 175"
           value={temperaturaInput}
           className={`${inputClassName} ${

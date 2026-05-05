@@ -324,7 +324,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                   <tr key={registro.id}>
                     <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
                     <td className="px-3 py-2">{registro.servico.nome}</td>
-                    <td className="px-3 py-2">{registro.itemNome || registro.item.nome}</td>
+                    <td className="px-3 py-2">
+                      {registro.itemNome || registro.item?.nome}
+                      {registro.itemExtra ? (
+                        <span className="ml-2 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                          Item extra
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">{getClassificacaoLabel(registro.classificacao)}</td>
                     <td className="px-3 py-2">
                       {registro.tcEquipamento !== null ? `${registro.tcEquipamento}°C` : "-"}

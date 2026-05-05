@@ -8,7 +8,12 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import {
+  canDeleteOperationalRecords,
+  canManageModuleOptions,
+  canViewManagementSections,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import {
   closeMonthAction,
@@ -100,6 +105,9 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -294,12 +302,16 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
             </p>
           </div>
           <div className="btn-group">
-            <Link href="/controle-qualidade-oleo/historico" className="btn-secondary">
-              Histórico Completo
-            </Link>
-            <Link href="/controle-qualidade-oleo/opcoes" className="btn-secondary">
-              Gerenciar Opções
-            </Link>
+            {podeVerGestao ? (
+              <Link href="/controle-qualidade-oleo/historico" className="btn-secondary">
+                Histórico Completo
+              </Link>
+            ) : null}
+            {podeGerenciarOpcoes ? (
+              <Link href="/controle-qualidade-oleo/opcoes" className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
             <Link href="/chamados-manutencao?origem=OLEO" className="btn-secondary">
               Abrir Chamado de Manutenção
             </Link>
@@ -347,11 +359,15 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
           </p>
         ) : !configuracaoDisponivel ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-            Nenhuma opção de fita do óleo está cadastrada. Use
-            {" "}
-            <strong>Gerenciar Opções</strong>
-            {" "}
-            para iniciar o módulo.
+            Nenhuma opção de fita do óleo está cadastrada.
+            {podeGerenciarOpcoes ? (
+              <>
+                {" "}
+                Use <strong>Gerenciar Opções</strong> para iniciar o módulo.
+              </>
+            ) : (
+              " Solicite à gestão a configuração inicial do módulo."
+            )}
           </p>
         ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
@@ -433,6 +449,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
           ) : null}
         </div>
 
+        {podeVerGestao ? (
         <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
           <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
           <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
@@ -512,9 +529,15 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
             </Link>
           </div>
         </form>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Exibindo os registros operacionais de hoje.
+          </p>
+        )}
 
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-          A listagem principal mostra os registros da data atual automaticamente. Use os filtros para ampliar a consulta.
+          A listagem principal mostra os registros da data atual automaticamente.
+          {podeVerGestao ? " Use os filtros para ampliar a consulta." : null}
         </p>
 
         <div className="mt-4 overflow-x-auto">
@@ -573,13 +596,15 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
                           <Link href={hrefEditar} className="btn-action">
                             Editar
                           </Link>
-                          <form action={deleteRegistroAction} className="m-0">
-                            <input type="hidden" name="id" value={registro.id} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <button type="submit" disabled={bloqueado} className="btn-danger">
-                              Excluir
-                            </button>
-                          </form>
+                          {podeExcluirRegistros ? (
+                            <form action={deleteRegistroAction} className="m-0">
+                              <input type="hidden" name="id" value={registro.id} />
+                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <button type="submit" disabled={bloqueado} className="btn-danger">
+                                Excluir
+                              </button>
+                            </form>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -591,6 +616,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
         </div>
       </section>
 
+      {podeVerGestao ? (
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
 
@@ -709,6 +735,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }

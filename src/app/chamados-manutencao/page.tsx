@@ -94,6 +94,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
+  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
   const now = new Date();
 
   const params = await searchParams;
@@ -124,6 +125,9 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
       dayEnd.setHours(23, 59, 59, 999);
       where.dataHoraCriacao = { gte: dayStart, lte: dayEnd };
     }
+  }
+  if (isFuncionario && authUser) {
+    where.criadoPorId = authUser.id;
   }
 
   const chamados = await prisma.chamadoManutencao.findMany({
@@ -247,47 +251,53 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Lista de Chamados
+          {isFuncionario ? "Meus Chamados" : "Lista de Chamados"}
         </h2>
 
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-3 dark:bg-slate-800">
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Status
-            <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
-              <option value="">Todos</option>
-              <option value={StatusChamadoManutencao.ABERTO}>Aberto</option>
-              <option value={StatusChamadoManutencao.EM_ANDAMENTO}>Em Andamento</option>
-              <option value={StatusChamadoManutencao.CONCLUIDO}>Concluído</option>
-              <option value={StatusChamadoManutencao.CANCELADO}>Cancelado</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Origem
-            <select name="filtroOrigem" defaultValue={filtroOrigem} className={INPUT_CLASS}>
-              <option value="">Todas</option>
-              <option value={OrigemChamadoManutencao.TEMPERATURA}>Temperatura</option>
-              <option value={OrigemChamadoManutencao.LIMPEZA}>Limpeza</option>
-              <option value={OrigemChamadoManutencao.OLEO}>Óleo</option>
-              <option value={OrigemChamadoManutencao.RECEBIMENTO}>Recebimento</option>
-              <option value={OrigemChamadoManutencao.HORTIFRUTI}>Hortifruti</option>
-              <option value={OrigemChamadoManutencao.BUFFET_AMOSTRAS}>Buffet / Amostras</option>
-              <option value={OrigemChamadoManutencao.MANUAL}>Outros</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Data
-            <input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} />
-          </label>
+        {isFuncionario ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            Acompanhamento simples dos chamados que você abriu.
+          </p>
+        ) : (
+          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-3 dark:bg-slate-800">
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Status
+              <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
+                <option value="">Todos</option>
+                <option value={StatusChamadoManutencao.ABERTO}>Aberto</option>
+                <option value={StatusChamadoManutencao.EM_ANDAMENTO}>Em Andamento</option>
+                <option value={StatusChamadoManutencao.CONCLUIDO}>Concluído</option>
+                <option value={StatusChamadoManutencao.CANCELADO}>Cancelado</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Origem
+              <select name="filtroOrigem" defaultValue={filtroOrigem} className={INPUT_CLASS}>
+                <option value="">Todas</option>
+                <option value={OrigemChamadoManutencao.TEMPERATURA}>Temperatura</option>
+                <option value={OrigemChamadoManutencao.LIMPEZA}>Limpeza</option>
+                <option value={OrigemChamadoManutencao.OLEO}>Óleo</option>
+                <option value={OrigemChamadoManutencao.RECEBIMENTO}>Recebimento</option>
+                <option value={OrigemChamadoManutencao.HORTIFRUTI}>Hortifruti</option>
+                <option value={OrigemChamadoManutencao.BUFFET_AMOSTRAS}>Buffet / Amostras</option>
+                <option value={OrigemChamadoManutencao.MANUAL}>Outros</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Data
+              <input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} />
+            </label>
 
-          <div className="btn-group md:col-span-3">
-            <button type="submit" className="btn-primary">
-              Aplicar Filtros
-            </button>
-            <Link href={PAGE_PATH} className="btn-secondary">
-              Limpar
-            </Link>
-          </div>
-        </form>
+            <div className="btn-group md:col-span-3">
+              <button type="submit" className="btn-primary">
+                Aplicar Filtros
+              </button>
+              <Link href={PAGE_PATH} className="btn-secondary">
+                Limpar
+              </Link>
+            </div>
+          </form>
+        )}
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">

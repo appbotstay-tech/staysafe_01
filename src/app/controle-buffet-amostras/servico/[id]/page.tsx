@@ -1,26 +1,29 @@
-import { StatusFechamentoBuffetAmostra, StatusItemBuffetAmostra } from "@prisma/client";
+import {
+  ClassificacaoItemBuffetAmostra,
+  StatusFechamentoBuffetAmostra,
+  StatusItemBuffetAmostra
+} from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import { canViewManagementSections, getRoleLabel } from "@/lib/rbac";
 
-import { saveRegistroItemAction, signServicoItensAction } from "../../actions";
-import { ItemStatusBadge, TemperatureStatusBadge } from "../../status-badges";
+import { signServicoItensAction } from "../../actions";
 import {
   avaliarTemperaturaBuffet,
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
-  getClassificacaoLabel,
   getCurrentSystemDateTime,
   getMonthYear,
   parseDateInput,
   parsePositiveInt
 } from "../../utils";
 import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
+import { ServiceItemsForm, type ServiceItemFormRow } from "./service-items-form";
 
 const MODULE_PATH = "/controle-buffet-amostras";
 const CARD_CLASS =
@@ -52,7 +55,9 @@ function buildReturnToPath(servicoId: number, dataInput: string): string {
     : `${MODULE_PATH}/servico/${servicoId}`;
 }
 
-function getGuidelineByClassificacao(classificacao: "QUENTE" | "FRIO" | "FRIO_CRU"): string {
+function getGuidelineByClassificacao(
+  classificacao: ClassificacaoItemBuffetAmostra
+): string {
   if (classificacao === "QUENTE") {
     return "Regra: acima de 60°C (até 6h) | abaixo de 60°C (até 1h).";
   }
@@ -71,6 +76,8 @@ export default async function ExecucaoServicoBuffetPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const now = getCurrentSystemDateTime();
 
   const routeParams = await params;
@@ -85,7 +92,8 @@ export default async function ExecucaoServicoBuffetPage({
 
   const dataFiltroRaw = firstParam(query.data).trim();
   const dataFiltro = parseDateInput(dataFiltroRaw);
-  const dataReferencia = dataFiltro ?? parseDateInput(formatDateInput(now)) ?? now;
+  const hoje = parseDateInput(formatDateInput(now)) ?? now;
+  const dataReferencia = isFuncionario ? hoje : dataFiltro ?? hoje;
   const dataReferenciaInput = formatDateInput(dataReferencia);
   const returnTo = buildReturnToPath(servicoId, dataReferenciaInput);
 
@@ -111,7 +119,7 @@ export default async function ExecucaoServicoBuffetPage({
         data: dataReferencia,
         servicoId
       },
-      orderBy: [{ item: { ordem: "asc" } }, { item: { nome: "asc" } }]
+      orderBy: [{ itemExtra: "asc" }, { createdAt: "asc" }, { id: "asc" }]
     })
   ]);
 
@@ -126,22 +134,103 @@ export default async function ExecucaoServicoBuffetPage({
   const fechamentoAssinado = fechamento?.status === StatusFechamentoBuffetAmostra.ASSINADO;
 
   const registrosByItemId = new Map<number, (typeof registros)[number]>();
+  const registrosExtras = registros.filter((registro) => registro.itemExtra);
   for (const registro of registros) {
-    registrosByItemId.set(registro.itemId, registro);
+    if (registro.itemId !== null) {
+      registrosByItemId.set(registro.itemId, registro);
+    }
   }
 
-  const itensPendentes = servico.itens.filter((vinculo) => {
+  const itensFixosPendentes = servico.itens.filter((vinculo) => {
     const registro = registrosByItemId.get(vinculo.itemId);
     return !registro || registro.status === StatusItemBuffetAmostra.PENDENTE;
   }).length;
+  const itensExtrasPendentes = registrosExtras.filter(
+    (registro) => registro.status === StatusItemBuffetAmostra.PENDENTE
+  ).length;
+  const itensPendentes = itensFixosPendentes + itensExtrasPendentes;
   const itensPreenchidos = registros.filter(
     (registro) => registro.status === StatusItemBuffetAmostra.PREENCHIDO
   ).length;
   const itensAssinados = registros.filter(
     (registro) => registro.status === StatusItemBuffetAmostra.ASSINADO
   ).length;
-  const totalItensServico = servico.itens.length;
+  const totalItensServico = servico.itens.length + registrosExtras.length;
   const todosItensPreenchidos = totalItensServico > 0 && itensPendentes === 0;
+  const formatTemperatureInput = (value: number | null): string =>
+    value !== null && value !== undefined ? String(value).replace(".", ",") : "";
+  const itemRows: ServiceItemFormRow[] = [
+    ...servico.itens.map((vinculo) => {
+      const item = vinculo.item;
+      const registro = registrosByItemId.get(item.id) ?? null;
+      const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
+      const avaliacao =
+        registro?.segundaTc !== null && registro?.segundaTc !== undefined
+          ? avaliarTemperaturaBuffet(item.classificacao, registro.segundaTc)
+          : null;
+
+      return {
+        rowKey: `item-${item.id}`,
+        nome: item.nome,
+        classificacao: item.classificacao,
+        isExtra: false,
+        guideline: getGuidelineByClassificacao(item.classificacao),
+        status: registro?.status ?? StatusItemBuffetAmostra.PENDENTE,
+        statusTemperatura: registro?.statusTemperatura ?? null,
+        avaliacaoOrientacao: avaliacao?.orientacao ?? null,
+        tcEquipamento: formatTemperatureInput(registro?.tcEquipamento ?? null),
+        primeiraTc: formatTemperatureInput(registro?.primeiraTc ?? null),
+        segundaTc: formatTemperatureInput(registro?.segundaTc ?? null),
+        acaoCorretiva: registro?.acaoCorretiva?.trim() ?? "",
+        observacao: registro?.observacao ?? "",
+        responsavelNome: registro?.responsavelNome ?? null,
+        dataHoraRegistro: registro?.dataHoraRegistro
+          ? formatDateTimeDisplay(registro.dataHoraRegistro)
+          : null,
+        assinaturaResumo: registro?.assinaturaNome
+          ? `${registro.assinaturaNome}${
+              registro.assinaturaDataHora
+                ? ` em ${formatDateTimeDisplay(registro.assinaturaDataHora)}`
+                : ""
+            }`
+          : null,
+        bloqueado
+      };
+    }),
+    ...registrosExtras.map((registro) => {
+      const avaliacao =
+        registro.segundaTc !== null && registro.segundaTc !== undefined
+          ? avaliarTemperaturaBuffet(registro.classificacao, registro.segundaTc)
+          : null;
+
+      return {
+        rowKey: `extra-${registro.id}`,
+        nome: registro.itemNome,
+        classificacao: registro.classificacao,
+        isExtra: true,
+        guideline: getGuidelineByClassificacao(registro.classificacao),
+        status: registro.status,
+        statusTemperatura: registro.statusTemperatura,
+        avaliacaoOrientacao: avaliacao?.orientacao ?? null,
+        tcEquipamento: formatTemperatureInput(registro.tcEquipamento),
+        primeiraTc: formatTemperatureInput(registro.primeiraTc),
+        segundaTc: formatTemperatureInput(registro.segundaTc),
+        acaoCorretiva: registro.acaoCorretiva?.trim() ?? "",
+        observacao: registro.observacao ?? "",
+        responsavelNome: registro.responsavelNome,
+        dataHoraRegistro: formatDateTimeDisplay(registro.dataHoraRegistro),
+        assinaturaResumo: registro.assinaturaNome
+          ? `${registro.assinaturaNome}${
+              registro.assinaturaDataHora
+                ? ` em ${formatDateTimeDisplay(registro.assinaturaDataHora)}`
+                : ""
+            }`
+          : null,
+        bloqueado:
+          fechamentoAssinado || registro.status === StatusItemBuffetAmostra.ASSINADO
+      };
+    })
+  ];
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -159,9 +248,11 @@ export default async function ExecucaoServicoBuffetPage({
             <Link href={MODULE_PATH} className="btn-secondary">
               Voltar
             </Link>
-            <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
-              Histórico Completo
-            </Link>
+            {podeVerGestao ? (
+              <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
+                Histórico Completo
+              </Link>
+            ) : null}
             <ThemeToggleButton />
           </div>
         </div>
@@ -189,17 +280,28 @@ export default async function ExecucaoServicoBuffetPage({
       <section className={CARD_CLASS}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Itens Configurados do Serviço
+            Itens do Serviço
           </h2>
-          <form method="get" className="flex flex-wrap items-end gap-2">
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Data
-              <input type="date" name="data" defaultValue={dataReferenciaInput} className={INPUT_CLASS} />
-            </label>
-            <button type="submit" className="btn-secondary">
-              Carregar Data
-            </button>
-          </form>
+          {isFuncionario ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Serviço do dia em foco operacional.
+            </p>
+          ) : (
+            <form method="get" className="flex flex-wrap items-end gap-2">
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Data
+                <input
+                  type="date"
+                  name="data"
+                  defaultValue={dataReferenciaInput}
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <button type="submit" className="btn-secondary">
+                Carregar Data
+              </button>
+            </form>
+          )}
         </div>
 
         <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -209,227 +311,22 @@ export default async function ExecucaoServicoBuffetPage({
           </p>
         </div>
 
-        {servico.itens.length === 0 ? (
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Nenhum item ativo está vinculado a este serviço. Configure em Gerenciar Opções.
-          </p>
-        ) : acoesCorretivasAtivas.length === 0 ? (
+        {acoesCorretivasAtivas.length === 0 ? (
           <p className="text-sm text-amber-700 dark:text-amber-300">
             Nenhuma ação corretiva ativa disponível. Cadastre opções antes de preencher os itens.
           </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[980px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Item/Produto</th>
-                  <th className="px-3 py-2">Classificação</th>
-                  <th className="px-3 py-2">Registro Operacional</th>
-                  <th className="px-3 py-2">Responsável</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {servico.itens.map((vinculo) => {
-                  const item = vinculo.item;
-                  const registro = registrosByItemId.get(item.id) ?? null;
-                  const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
-                  const statusItem = registro?.status ?? StatusItemBuffetAmostra.PENDENTE;
-                  const avaliacao =
-                    registro?.segundaTc !== null && registro?.segundaTc !== undefined
-                      ? avaliarTemperaturaBuffet(item.classificacao, registro.segundaTc)
-                      : null;
-                  const acaoAtual = registro?.acaoCorretiva?.trim() ?? "";
-                  const acaoEstaAtiva = acoesCorretivasAtivas.some(
-                    (option) => option.nome === acaoAtual
-                  );
-                  return (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2 align-top">
-                        <p className="font-medium text-slate-900 dark:text-slate-100">{item.nome}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {getGuidelineByClassificacao(item.classificacao)}
-                        </p>
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <p>{getClassificacaoLabel(item.classificacao)}</p>
-                        <div className="mt-1">
-                          <TemperatureStatusBadge status={registro?.statusTemperatura ?? null} />
-                        </div>
-                        {avaliacao ? (
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {avaliacao.orientacao}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 align-top min-w-[340px]">
-                        <form action={saveRegistroItemAction} className="space-y-2">
-                          <input type="hidden" name="servicoId" value={String(servico.id)} />
-                          <input type="hidden" name="itemId" value={String(item.id)} />
-                          <input type="hidden" name="data" value={dataReferenciaInput} />
-                          <input type="hidden" name="returnTo" value={returnTo} />
+        ) : null}
 
-                          <label className="block text-xs text-slate-600 dark:text-slate-300">
-                            TC Equipamento
-                          </label>
-                          <input
-                            type="text"
-                            name="tcEquipamento"
-                            inputMode="decimal"
-                            placeholder="Ex.: 62,5"
-                            defaultValue={
-                              registro?.tcEquipamento !== null && registro?.tcEquipamento !== undefined
-                                ? String(registro.tcEquipamento).replace(".", ",")
-                                : ""
-                            }
-                            className={INPUT_CLASS}
-                            disabled={bloqueado}
-                          />
-                          <label className="block text-xs text-slate-600 dark:text-slate-300">
-                            1ª TC
-                          </label>
-                          <input
-                            type="text"
-                            name="primeiraTc"
-                            inputMode="decimal"
-                            placeholder="Ex.: 58"
-                            defaultValue={
-                              registro?.primeiraTc !== null && registro?.primeiraTc !== undefined
-                                ? String(registro.primeiraTc).replace(".", ",")
-                                : ""
-                            }
-                            className={INPUT_CLASS}
-                            disabled={bloqueado}
-                          />
-                          <label className="block text-xs text-slate-600 dark:text-slate-300">
-                            2ª TC
-                          </label>
-                          <input
-                            type="text"
-                            name="segundaTc"
-                            inputMode="decimal"
-                            placeholder="Ex.: 55"
-                            defaultValue={
-                              registro?.segundaTc !== null && registro?.segundaTc !== undefined
-                                ? String(registro.segundaTc).replace(".", ",")
-                                : ""
-                            }
-                            className={INPUT_CLASS}
-                            disabled={bloqueado}
-                          />
-                          <label className="block text-xs text-slate-600 dark:text-slate-300">
-                            Ação Corretiva
-                          </label>
-                          <select
-                            name="acaoCorretiva"
-                            defaultValue={acaoAtual}
-                            className={INPUT_CLASS}
-                            disabled={bloqueado}
-                          >
-                            <option value="">Selecione</option>
-                            {!acaoEstaAtiva && acaoAtual ? (
-                              <option value={acaoAtual}>{acaoAtual} (Inativa)</option>
-                            ) : null}
-                            {acoesCorretivasAtivas.map((option) => (
-                              <option key={option.id} value={option.nome}>
-                                {option.nome}
-                              </option>
-                            ))}
-                          </select>
-                          <label className="block text-xs text-slate-600 dark:text-slate-300">
-                            Observação
-                          </label>
-                          <textarea
-                            name="observacao"
-                            rows={2}
-                            defaultValue={registro?.observacao ?? ""}
-                            className={INPUT_CLASS}
-                            disabled={bloqueado}
-                          />
-                          <div className="grid grid-cols-1 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-800">
-                            <p>
-                              TC Equip.:{" "}
-                              <strong>
-                                {registro?.tcEquipamento !== null &&
-                                registro?.tcEquipamento !== undefined
-                                  ? `${registro.tcEquipamento}°C`
-                                  : "-"}
-                              </strong>
-                            </p>
-                            <p>
-                              1ª TC:{" "}
-                              <strong>
-                                {registro?.primeiraTc !== null &&
-                                registro?.primeiraTc !== undefined
-                                  ? `${registro.primeiraTc}°C`
-                                  : "-"}
-                              </strong>
-                            </p>
-                            <p>
-                              2ª TC:{" "}
-                              <strong>
-                                {registro?.segundaTc !== null &&
-                                registro?.segundaTc !== undefined
-                                  ? `${registro.segundaTc}°C`
-                                  : "-"}
-                              </strong>
-                            </p>
-                            <p>
-                              Ação: <strong>{registro?.acaoCorretiva ?? "-"}</strong>
-                            </p>
-                            <p>
-                              Observação: <strong>{registro?.observacao ?? "-"}</strong>
-                            </p>
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Responsável automático:{" "}
-                            <strong>{registro?.responsavelNome ?? usuarioLogado}</strong>
-                          </div>
-                          <div className="btn-group">
-                            <button type="submit" className="btn-primary" disabled={bloqueado}>
-                              Salvar Item
-                            </button>
-                          </div>
-                        </form>
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {registro?.responsavelNome ?? "-"}
-                        {registro?.dataHoraRegistro ? (
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {formatDateTimeDisplay(registro.dataHoraRegistro)}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <ItemStatusBadge status={statusItem} />
-                        {registro?.assinaturaNome ? (
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Assinado por {registro.assinaturaNome}
-                            {registro.assinaturaDataHora
-                              ? ` em ${formatDateTimeDisplay(registro.assinaturaDataHora)}`
-                              : ""}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {bloqueado ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {fechamentoAssinado ? "Mês fechado" : "Item assinado"}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Salve o item e assine em seguida.
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <ServiceItemsForm
+          servicoId={servico.id}
+          dataInput={dataReferenciaInput}
+          returnTo={returnTo}
+          usuarioLogado={usuarioLogado}
+          fechamentoAssinado={fechamentoAssinado}
+          rows={itemRows}
+          acoesCorretivas={acoesCorretivasAtivas}
+          inputClassName={INPUT_CLASS}
+        />
       </section>
 
       <section className={CARD_CLASS}>
@@ -440,7 +337,7 @@ export default async function ExecucaoServicoBuffetPage({
         <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Itens Configurados
+              Itens do Serviço
             </p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{totalItensServico}</p>
           </div>

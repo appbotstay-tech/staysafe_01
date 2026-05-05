@@ -45,6 +45,7 @@ import {
 const MODULE_PATH = "/rastreabilidade-recebimento";
 const DUPLICATE_NFE_MESSAGE =
   "Esta nota fiscal já foi importada anteriormente e não pode ser cadastrada novamente.";
+const SIF_NA_VALUE = "NA";
 
 function canImportXmlAsAdmin(role: UserRole): boolean {
   return role === "DEV" || role === "GESTOR";
@@ -54,7 +55,21 @@ function canEditImportedXmlFields(role: UserRole): boolean {
   return role === "DEV" || role === "GESTOR";
 }
 
+function canCreateManualReceiving(role: UserRole): boolean {
+  return role !== "FUNCIONARIO";
+}
+
 type FeedbackType = "success" | "error";
+type FormActionState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  invalidRowKey?: string;
+};
+
+const FORM_ACTION_INITIAL_STATE: FormActionState = {
+  status: "idle",
+  message: ""
+};
 
 type CategoryItem = {
   id: number;
@@ -275,6 +290,22 @@ function parseRequiredTemperature(value: string): number {
   return parsed;
 }
 
+function normalizeSifValue(value: string): string {
+  const sifNormalizado = value.trim();
+  const sifLower = sifNormalizado.toLocaleLowerCase("pt-BR");
+
+  if (
+    sifNormalizado === "__NAO_APLICA__" ||
+    sifLower === "na" ||
+    sifLower === "não se aplica" ||
+    sifLower === "nao se aplica"
+  ) {
+    return SIF_NA_VALUE;
+  }
+
+  return sifNormalizado;
+}
+
 function validateAndBuildItemPayload(
   input: ItemInputValues,
   categories: CategoryItem[],
@@ -290,14 +321,9 @@ function validateAndBuildItemPayload(
 
   const sifNormalizado = input.sif.trim();
   if (!sifNormalizado) {
-    throw new Error("O campo SIF é obrigatório. Se não se aplicar, selecione \"Não se aplica\".");
+    throw new Error("O campo SIF é obrigatório. Se não se aplicar, informe NA.");
   }
-  const sifValue =
-    sifNormalizado === "__NAO_APLICA__" ||
-    sifNormalizado.toLocaleLowerCase("pt-BR") === "não se aplica" ||
-    sifNormalizado.toLocaleLowerCase("pt-BR") === "nao se aplica"
-      ? "Não se aplica"
-      : sifNormalizado;
+  const sifValue = normalizeSifValue(sifNormalizado);
 
   if (!responsavelLogado.trim()) {
     throw new Error("Não foi possível identificar o usuário logado para o campo Responsável.");
@@ -508,6 +534,9 @@ export async function createManualNoteAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
+    if (!canCreateManualReceiving(actor.perfil)) {
+      throw new Error("Seu perfil não possui permissão para criar recebimento manual.");
+    }
 
     const fornecedor = getInputValue(formData, "fornecedor");
     const notaFiscal = getInputValue(formData, "notaFiscal");
@@ -599,33 +628,20 @@ export async function saveNotaItemsAction(formData: FormData) {
     }
 
     const categories = await getActiveCategories();
-    const xmlFieldsLocked =
+    const xmlProductLocked =
       note.origemXml && !canEditImportedXmlFields(actor.perfil);
 
     const updates = note.itens.map((item) => {
-      const produtoInput = xmlFieldsLocked
+      const produtoInput = xmlProductLocked
         ? item.produto
         : getItemInputValue(formData, item.id, "produto");
-      const loteInput = xmlFieldsLocked
-        ? item.lote ?? ""
-        : getItemInputValue(formData, item.id, "lote");
-      const dataFabricacaoInput = xmlFieldsLocked
-        ? item.dataFabricacao
-          ? formatDateInput(item.dataFabricacao)
-          : ""
-        : getItemInputValue(formData, item.id, "dataFabricacao");
-      const dataValidadeInput = xmlFieldsLocked
-        ? item.dataValidade
-          ? formatDateInput(item.dataValidade)
-          : ""
-        : getItemInputValue(formData, item.id, "dataValidade");
 
       const payload = validateAndBuildItemPayload(
         {
           produto: produtoInput,
-          lote: loteInput,
-          dataFabricacao: dataFabricacaoInput,
-          dataValidade: dataValidadeInput,
+          lote: getItemInputValue(formData, item.id, "lote"),
+          dataFabricacao: getItemInputValue(formData, item.id, "dataFabricacao"),
+          dataValidade: getItemInputValue(formData, item.id, "dataValidade"),
           sif: getItemInputValue(formData, item.id, "sif"),
           temperatura: getItemInputValue(formData, item.id, "temperatura"),
           transporteEntregador: getItemInputValue(formData, item.id, "transporteEntregador"),
@@ -672,6 +688,116 @@ export async function saveNotaItemsAction(formData: FormData) {
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function saveNotaItemsStateAction(
+  _previousState: FormActionState = FORM_ACTION_INITIAL_STATE,
+  formData: FormData
+): Promise<FormActionState> {
+  try {
+    const actor = await getCurrentUserForAction();
+
+    const notaId = parsePositiveInt(getInputValue(formData, "notaId"));
+    if (!notaId) {
+      throw new Error("Nota inválida para atualização.");
+    }
+
+    const note = await prisma.rastreabilidadeRecebimentoNota.findUnique({
+      where: { id: notaId },
+      include: { itens: true }
+    });
+
+    if (!note) {
+      throw new Error("Nota não encontrada.");
+    }
+
+    const period = getMonthYear(note.data);
+    if (await isMonthSigned(period.mes, period.ano)) {
+      throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
+    }
+
+    const categories = await getActiveCategories();
+    const xmlProductLocked =
+      note.origemXml && !canEditImportedXmlFields(actor.perfil);
+
+    const updates: Array<{
+      id: number;
+      data: ValidatedItemPayload & {
+        fornecedor: string;
+        notaFiscal: string;
+      };
+    }> = [];
+
+    for (const item of note.itens) {
+      const rowKey = `item-${item.id}`;
+      try {
+        const produtoInput = xmlProductLocked
+          ? item.produto
+          : getItemInputValue(formData, item.id, "produto");
+
+        const payload = validateAndBuildItemPayload(
+          {
+            produto: produtoInput,
+            lote: getItemInputValue(formData, item.id, "lote"),
+            dataFabricacao: getItemInputValue(formData, item.id, "dataFabricacao"),
+            dataValidade: getItemInputValue(formData, item.id, "dataValidade"),
+            sif: getItemInputValue(formData, item.id, "sif"),
+            temperatura: getItemInputValue(formData, item.id, "temperatura"),
+            transporteEntregador: getItemInputValue(formData, item.id, "transporteEntregador"),
+            aspectoSensorial: getItemInputValue(formData, item.id, "aspectoSensorial"),
+            embalagem: getItemInputValue(formData, item.id, "embalagem"),
+            acaoCorretiva: getItemInputValue(formData, item.id, "acaoCorretiva"),
+            observacoes: getItemInputValue(formData, item.id, "observacoes")
+          },
+          categories,
+          actor.nomeCompleto
+        );
+
+        updates.push({
+          id: item.id,
+          data: {
+            ...payload,
+            fornecedor: note.fornecedor,
+            notaFiscal: note.notaFiscal
+          }
+        });
+      } catch (error) {
+        return {
+          status: "error",
+          message: getErrorMessage(error),
+          invalidRowKey: rowKey
+        };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const update of updates) {
+        await tx.rastreabilidadeRecebimentoRegistro.update({
+          where: { id: update.id },
+          data: update.data
+        });
+      }
+
+      await tx.rastreabilidadeRecebimentoNota.update({
+        where: { id: note.id },
+        data: {
+          statusNota: StatusNotaRecebimento.EM_CONFERENCIA,
+          responsavelGeral: actor.nomeCompleto
+        }
+      });
+    });
+
+    revalidateModulePaths();
+    return {
+      status: "success",
+      message: "Itens da Nota Atualizados com Sucesso."
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error)
+    };
   }
 }
 
@@ -765,7 +891,10 @@ export async function deleteItemAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await getCurrentUserForAction();
+    const actor = await getCurrentUserForAction();
+    if (!canImportXmlAsAdmin(actor.perfil)) {
+      throw new Error("Seu perfil não pode excluir itens de recebimento.");
+    }
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -813,7 +942,10 @@ export async function deleteNoteAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await getCurrentUserForAction();
+    const actor = await getCurrentUserForAction();
+    if (!canImportXmlAsAdmin(actor.perfil)) {
+      throw new Error("Seu perfil não pode excluir notas de recebimento.");
+    }
 
     const notaId = parsePositiveInt(getInputValue(formData, "notaId"));
     if (!notaId) {

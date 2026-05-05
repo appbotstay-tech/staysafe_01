@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth-session";
 
@@ -12,6 +13,10 @@ const INPUT_CLASS =
 
 export default async function NovaNotaRecebimentoPage() {
   const authUser = await getCurrentUser();
+  if (authUser?.perfil === "FUNCIONARIO") {
+    redirect("/acesso-negado");
+  }
+
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
 
   return (
@@ -71,13 +76,13 @@ export default async function NovaNotaRecebimentoPage() {
               name="sif"
               required
               list="sif-opcoes"
-              defaultValue="Não se aplica"
+              defaultValue="NA"
               className={INPUT_CLASS}
             />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Temperatura (°C) *
-            <input type="text" name="temperatura" required inputMode="decimal" className={INPUT_CLASS} />
+            <input type="text" name="temperatura" required inputMode="text" className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Transporte / Entregador *
@@ -130,7 +135,7 @@ export default async function NovaNotaRecebimentoPage() {
           </div>
         </form>
         <datalist id="sif-opcoes">
-          <option value="Não se aplica" />
+          <option value="NA" />
         </datalist>
       </section>
     </div>

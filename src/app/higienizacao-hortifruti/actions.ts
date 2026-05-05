@@ -9,6 +9,7 @@ import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
   ensureCanCloseMonth,
+  ensureCanDeleteOperationalRecords,
   ensureCanManageOptions,
   ensureCanReopenMonth,
   validateSignaturePassword
@@ -221,7 +222,8 @@ export async function deleteRegistroAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await getCurrentUserForAction();
+    const actor = await getCurrentUserForAction();
+    ensureCanDeleteOperationalRecords(actor.perfil);
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {

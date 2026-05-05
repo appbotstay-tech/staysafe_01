@@ -87,6 +87,14 @@ export function canViewFullHistory(role: UserRole): boolean {
   return role !== "FUNCIONARIO";
 }
 
+export function canViewManagementSections(role: UserRole): boolean {
+  return role !== "FUNCIONARIO";
+}
+
+export function canDeleteOperationalRecords(role: UserRole): boolean {
+  return role !== "FUNCIONARIO";
+}
+
 export function canCloseMonth(role: UserRole): boolean {
   return role === "DEV" || role === "GESTOR" || role === "RESPONSAVEL_TECNICO";
 }

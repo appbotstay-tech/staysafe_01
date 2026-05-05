@@ -80,7 +80,7 @@ export default async function RastreabilidadeRecebimentoOpcoesPage({
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Temperatura Máxima (°C) *
-            <input type="text" name="temperaturaMaxima" required inputMode="decimal" className={INPUT_CLASS} />
+            <input type="text" name="temperaturaMaxima" required inputMode="text" className={INPUT_CLASS} />
           </label>
           <div className="md:flex md:items-end">
             <button type="submit" className="btn-primary">Adicionar</button>
@@ -113,7 +113,7 @@ export default async function RastreabilidadeRecebimentoOpcoesPage({
                         type="text"
                         name="temperaturaMaxima"
                         required
-                        inputMode="decimal"
+                        inputMode="text"
                         defaultValue={String(categoria.temperaturaMaxima).replace(".", ",")}
                         className={INPUT_CLASS}
                       />

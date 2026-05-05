@@ -103,6 +103,9 @@ export default async function ChamadoManutencaoDetalhePage({
   if (!chamado) {
     notFound();
   }
+  if (authUser?.perfil === "FUNCIONARIO" && chamado.criadoPorId !== authUser.id) {
+    notFound();
+  }
 
   const query = await searchParams;
   const feedback = firstParam(query.feedback).trim();
