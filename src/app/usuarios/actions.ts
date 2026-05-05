@@ -66,6 +66,32 @@ function redirectWithFeedback(path: string, type: "success" | "error", feedback:
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
 }
 
+type UpdateDraft = {
+  userId: number;
+  nomeCompleto: string;
+  nomeUsuario: string;
+  perfil: string;
+  status: string;
+  dataAdmissao: string;
+  observacoesInternas: string;
+  obrigarTrocaSenha: boolean;
+};
+
+function redirectWithUpdateDraftError(feedback: string, draft: UpdateDraft): never {
+  const url = new URL(USERS_PATH, "http://localhost");
+  url.searchParams.set("editId", String(draft.userId));
+  url.searchParams.set("editError", feedback);
+  url.searchParams.set("editNomeCompleto", draft.nomeCompleto);
+  url.searchParams.set("editNomeUsuario", draft.nomeUsuario);
+  url.searchParams.set("editPerfil", draft.perfil);
+  url.searchParams.set("editStatus", draft.status);
+  url.searchParams.set("editDataAdmissao", draft.dataAdmissao);
+  url.searchParams.set("editObservacoesInternas", draft.observacoesInternas);
+  url.searchParams.set("editObrigarTrocaSenha", draft.obrigarTrocaSenha ? "1" : "0");
+
+  redirect(`${url.pathname}?${url.searchParams.toString()}`);
+}
+
 async function getTargetUserForManagement(userId: number) {
   return prisma.usuario.findUnique({
     where: { id: userId },
@@ -135,22 +161,26 @@ export async function createUserAction(formData: FormData) {
 }
 
 export async function updateUserAction(formData: FormData) {
+  const userId = Number(getInputValue(formData, "userId"));
+  const nomeCompleto = getInputValue(formData, "nomeCompleto");
+  const nomeUsuario = getInputValue(formData, "nomeUsuario");
+  const perfilInput = getInputValue(formData, "perfil");
+  const statusInput = getInputValue(formData, "status");
+  const dataAdmissaoInput = getInputValue(formData, "dataAdmissao");
+  const observacoesInternas = getInputValue(formData, "observacoesInternas") || "";
+  const obrigarTrocaSenha = formData.get("obrigarTrocaSenha") === "on";
+
   try {
     const actor = await getCurrentUserForAction();
     ensureCanManageUsers(actor.perfil);
 
-    const userId = Number(getInputValue(formData, "userId"));
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new Error("Usuário inválido para edição.");
     }
 
-    const nomeCompleto = getInputValue(formData, "nomeCompleto");
-    const nomeUsuario = getInputValue(formData, "nomeUsuario");
-    const perfil = parseRole(getInputValue(formData, "perfil"));
-    const status = parseStatus(getInputValue(formData, "status"));
-    const dataAdmissao = parseDateOnly(getInputValue(formData, "dataAdmissao"));
-    const observacoesInternas = getInputValue(formData, "observacoesInternas") || null;
-    const obrigarTrocaSenha = formData.get("obrigarTrocaSenha") === "on";
+    const perfil = parseRole(perfilInput);
+    const status = parseStatus(statusInput);
+    const dataAdmissao = parseDateOnly(dataAdmissaoInput);
 
     if (!nomeCompleto || !nomeUsuario || !perfil || !status) {
       throw new Error("Preencha todos os campos obrigatórios.");
@@ -192,7 +222,7 @@ export async function updateUserAction(formData: FormData) {
         perfil,
         status,
         dataAdmissao,
-        observacoesInternas,
+        observacoesInternas: observacoesInternas || null,
         obrigarTrocaSenha
       }
     });
@@ -204,6 +234,20 @@ export async function updateUserAction(formData: FormData) {
       error instanceof Error && error.message
         ? error.message
         : "Não foi possível atualizar o usuário.";
+
+    if (Number.isInteger(userId) && userId > 0) {
+      redirectWithUpdateDraftError(message, {
+        userId,
+        nomeCompleto,
+        nomeUsuario,
+        perfil: perfilInput,
+        status: statusInput,
+        dataAdmissao: dataAdmissaoInput,
+        observacoesInternas,
+        obrigarTrocaSenha
+      });
+    }
+
     redirectWithFeedback(USERS_PATH, "error", message);
   }
 }

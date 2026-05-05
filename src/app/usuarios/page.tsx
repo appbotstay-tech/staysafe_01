@@ -38,6 +38,14 @@ function formatDateInput(date: Date | null): string {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeRoleInput(value: string, fallback: UserRole): UserRole {
+  return USER_ROLE_VALUES.includes(value as UserRole) ? (value as UserRole) : fallback;
+}
+
+function normalizeStatusInput(value: string, fallback: "ATIVO" | "INATIVO"): "ATIVO" | "INATIVO" {
+  return value === "INATIVO" || value === "ATIVO" ? value : fallback;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function UsuariosPage({ searchParams }: UsuariosPageProps) {
@@ -49,6 +57,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
+  const editError = firstParam(params.editError).trim();
   const editId = Number(firstParam(params.editId));
 
   const usuarios = await prisma.usuario.findMany({
@@ -56,6 +65,36 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
   });
   const usuarioEdicao =
     Number.isInteger(editId) && editId > 0 ? usuarios.find((item) => item.id === editId) : null;
+  const hasEditDraft = Boolean(usuarioEdicao && editError);
+
+  const editNomeCompleto = hasEditDraft
+    ? firstParam(params.editNomeCompleto)
+    : usuarioEdicao?.nomeCompleto ?? "";
+  const editNomeUsuario = hasEditDraft
+    ? firstParam(params.editNomeUsuario)
+    : usuarioEdicao?.nomeUsuario ?? "";
+  const editPerfil = usuarioEdicao
+    ? hasEditDraft
+      ? normalizeRoleInput(firstParam(params.editPerfil), usuarioEdicao.perfil as UserRole)
+      : (usuarioEdicao.perfil as UserRole)
+    : "FUNCIONARIO";
+  const editStatus = usuarioEdicao
+    ? hasEditDraft
+      ? normalizeStatusInput(
+          firstParam(params.editStatus),
+          usuarioEdicao.status === "INATIVO" ? "INATIVO" : "ATIVO"
+        )
+      : (usuarioEdicao.status === "INATIVO" ? "INATIVO" : "ATIVO")
+    : "ATIVO";
+  const editDataAdmissao = hasEditDraft
+    ? firstParam(params.editDataAdmissao)
+    : formatDateInput(usuarioEdicao?.dataAdmissao ?? null);
+  const editObservacoesInternas = hasEditDraft
+    ? firstParam(params.editObservacoesInternas)
+    : usuarioEdicao?.observacoesInternas ?? "";
+  const editObrigarTrocaSenha = hasEditDraft
+    ? firstParam(params.editObrigarTrocaSenha) !== "0"
+    : usuarioEdicao?.obrigarTrocaSenha ?? false;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -144,96 +183,89 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
       </section>
 
       {usuarioEdicao ? (
-        <section className={CARD_CLASS}>
-          <div className="mb-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-4">
+          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:p-6">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Editar Usuário
             </h2>
-            <Link href="/usuarios" className="btn-secondary">
-              Cancelar Edição
-            </Link>
-          </div>
-          {usuarioEdicao.isDevDefinitivo ? (
-            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              Este usuário é o DEV definitivo e não pode ter login/perfil/status alterados para
-              garantir administração contínua do sistema.
-            </p>
-          ) : null}
-          <form action={updateUserAction} className="grid gap-3 md:grid-cols-2">
-            <input type="hidden" name="userId" value={String(usuarioEdicao.id)} />
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Nome Completo *
-              <input
-                name="nomeCompleto"
-                defaultValue={usuarioEdicao.nomeCompleto}
-                required
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Nome de Usuário *
-              <input
-                name="nomeUsuario"
-                defaultValue={usuarioEdicao.nomeUsuario}
-                required
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Perfil *
-              <select
-                name="perfil"
-                defaultValue={usuarioEdicao.perfil}
-                required
-                className={INPUT_CLASS}
-              >
-                {USER_ROLE_VALUES.map((role) => (
-                  <option key={role} value={role}>
-                    {getRoleLabel(role)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Status
-              <select name="status" defaultValue={usuarioEdicao.status} className={INPUT_CLASS}>
-                <option value="ATIVO">Ativo</option>
-                <option value="INATIVO">Inativo</option>
-              </select>
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Data de Admissão
-              <input
-                type="date"
-                name="dataAdmissao"
-                defaultValue={formatDateInput(usuarioEdicao.dataAdmissao)}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-              Observações Internas
-              <textarea
-                name="observacoesInternas"
-                rows={2}
-                defaultValue={usuarioEdicao.observacoesInternas ?? ""}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-              <input
-                type="checkbox"
-                name="obrigarTrocaSenha"
-                defaultChecked={usuarioEdicao.obrigarTrocaSenha}
-              />
-              Obrigar troca no próximo acesso
-            </label>
-            <div className="md:col-span-2">
-              <button type="submit" className="btn-primary">
-                Salvar Alterações
-              </button>
-            </div>
-          </form>
-        </section>
+
+            {editError ? (
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                {editError}
+              </p>
+            ) : null}
+
+            {usuarioEdicao.isDevDefinitivo ? (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                Este usuário é o DEV definitivo e não pode ter login/perfil/status alterados para
+                garantir administração contínua do sistema.
+              </p>
+            ) : null}
+
+            <form action={updateUserAction} className="mt-4 grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="userId" value={String(usuarioEdicao.id)} />
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Nome Completo *
+                <input name="nomeCompleto" defaultValue={editNomeCompleto} required className={INPUT_CLASS} />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Nome de Usuário *
+                <input name="nomeUsuario" defaultValue={editNomeUsuario} required className={INPUT_CLASS} />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Perfil *
+                <select name="perfil" defaultValue={editPerfil} required className={INPUT_CLASS}>
+                  {USER_ROLE_VALUES.map((role) => (
+                    <option key={role} value={role}>
+                      {getRoleLabel(role)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Status
+                <select name="status" defaultValue={editStatus} className={INPUT_CLASS}>
+                  <option value="ATIVO">Ativo</option>
+                  <option value="INATIVO">Inativo</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Data de Admissão
+                <input
+                  type="date"
+                  name="dataAdmissao"
+                  defaultValue={editDataAdmissao}
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                Observações Internas
+                <textarea
+                  name="observacoesInternas"
+                  rows={2}
+                  defaultValue={editObservacoesInternas}
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                <input
+                  type="checkbox"
+                  name="obrigarTrocaSenha"
+                  defaultChecked={editObrigarTrocaSenha}
+                />
+                Obrigar troca no próximo acesso
+              </label>
+              <div className="mt-1 flex flex-col-reverse gap-2 md:col-span-2 sm:flex-row sm:justify-end">
+                <Link href="/usuarios" className="btn-secondary text-center">
+                  Cancelar
+                </Link>
+                <button type="submit" className="btn-primary">
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
       ) : null}
 
       <section className={CARD_CLASS}>
