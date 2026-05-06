@@ -11,9 +11,9 @@ import { ThemeToggleButton } from "../theme-toggle-button";
 
 const PAGE_PATH = "/higienizacao-hortifruti/opcoes";
 const CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900";
+  "bpma-card";
 const INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };

@@ -3,7 +3,7 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { changeOwnPasswordAction } from "@/app/login/actions";
 
 const INPUT_CLASS =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type TrocarSenhaPageProps = {
@@ -23,7 +23,7 @@ export default async function TrocarSenhaPage({ searchParams }: TrocarSenhaPageP
 
   return (
     <section className="mx-auto w-full max-w-xl space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="bpma-card">
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
           Troca Obrigatória de Senha
         </h1>
@@ -44,7 +44,7 @@ export default async function TrocarSenhaPage({ searchParams }: TrocarSenhaPageP
         </section>
       ) : null}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <section className="bpma-card">
         <form action={changeOwnPasswordAction} className="space-y-4">
           <PasswordInput
             name="senhaAtual"

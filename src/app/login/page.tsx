@@ -5,7 +5,7 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { loginAction } from "./actions";
 
 const INPUT_CLASS =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type LoginPageProps = {
@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <section className="flex min-h-screen items-center justify-center py-8 dark:text-slate-100">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="w-full max-w-md bpma-card">
         <div className="mb-6 flex items-start justify-between gap-2">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">BPMA App</h1>

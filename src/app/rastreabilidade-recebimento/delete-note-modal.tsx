@@ -16,8 +16,8 @@ export function DeleteNoteModal({ formId }: DeleteNoteModalProps) {
       </button>
 
       {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="bpma-modal-backdrop">
+          <div className="bpma-modal-panel max-w-md">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Confirmar Exclusão
             </h3>

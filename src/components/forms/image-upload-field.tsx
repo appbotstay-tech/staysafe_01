@@ -16,7 +16,7 @@ type ImageUploadFieldProps = {
 };
 
 const DEFAULT_INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 export function ImageUploadField({
   name,
@@ -154,7 +154,7 @@ export function ImageUploadField({
           <img
             src={previewUrl}
             alt="Pré-visualização da imagem"
-            className="max-h-44 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+            className="max-h-44 max-w-full rounded-lg border border-slate-200 object-contain dark:border-slate-700"
           />
         </div>
       ) : null}

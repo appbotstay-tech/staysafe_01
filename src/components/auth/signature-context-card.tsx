@@ -10,7 +10,7 @@ export function SignatureContextCard({
   perfil
 }: SignatureContextCardProps) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
+    <div className="bpma-readonly-field">
       <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Assinatura
       </p>

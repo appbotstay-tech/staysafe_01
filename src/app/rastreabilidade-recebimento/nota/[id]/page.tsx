@@ -21,9 +21,9 @@ import {
 import { NoteItemsForm, type NoteItemFormRow } from "./note-items-form";
 
 const CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-5 lg:p-6 dark:border-slate-700 dark:bg-slate-900";
+  "bpma-card";
 const INPUT_CLASS =
-  "h-10 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900";
+  "bpma-input";
 const MODULE_PATH = "/rastreabilidade-recebimento";
 
 type SearchParams = Record<string, string | string[] | undefined>;

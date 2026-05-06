@@ -14,9 +14,9 @@ import {
 } from "./actions";
 
 const CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900";
+  "bpma-card";
 const INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type UsuariosPageProps = {
@@ -183,8 +183,8 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
       </section>
 
       {usuarioEdicao ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-4">
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:p-6">
+        <div className="bpma-modal-backdrop">
+          <section className="bpma-modal-panel max-w-3xl">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Editar Usuário
             </h2>

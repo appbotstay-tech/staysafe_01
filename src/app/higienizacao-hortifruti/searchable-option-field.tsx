@@ -57,7 +57,7 @@ export function SearchableOptionField({
         disabled={disabled}
         autoComplete="off"
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+        className="bpma-input"
         onFocus={() => setIsOpen(true)}
         onBlur={() => {
           window.setTimeout(() => {

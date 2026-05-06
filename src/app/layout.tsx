@@ -42,7 +42,9 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       </head>
       <body className="bg-[var(--background-page)] text-[var(--text-default)]">
         {!user ? (
-          <main className="mx-auto min-h-screen w-full max-w-md p-4 md:p-8">{children}</main>
+          <main className="mx-auto min-h-screen w-full max-w-md p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-8">
+            {children}
+          </main>
         ) : (
           <div className="min-h-screen md:flex">
             <Sidebar
@@ -53,7 +55,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
               canViewResetRequests={canViewResetRequests(user.perfil)}
               onLogout={logoutAction}
             />
-            <main className="flex-1 p-3 sm:p-4 md:p-8">
+            <main className="flex-1 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-8">
               <div className="mx-auto w-full max-w-7xl">{children}</div>
             </main>
           </div>

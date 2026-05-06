@@ -27,9 +27,9 @@ import { ServiceItemsForm, type ServiceItemFormRow } from "./service-items-form"
 
 const MODULE_PATH = "/controle-buffet-amostras";
 const CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900";
+  "bpma-card";
 const INPUT_CLASS =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900";
+  "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = {

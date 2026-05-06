@@ -47,8 +47,8 @@ export function WeeklySignChecklistModal({
   items
 }: WeeklySignChecklistModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+    <div className="bpma-modal-backdrop">
+      <div className="bpma-modal-panel max-w-6xl">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Execução Semanal da Área
         </h3>
@@ -153,13 +153,13 @@ export function WeeklySignChecklistModal({
                               name="senhaConfirmacao"
                               required
                               placeholder="Confirme sua senha"
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="bpma-input text-xs"
                             />
                             <input
                               type="text"
                               name="observacaoAssinatura"
                               placeholder="Observação (Opcional)"
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="bpma-input text-xs"
                             />
                             <button type="submit" className="btn-primary whitespace-nowrap">
                               Assinar
@@ -175,13 +175,13 @@ export function WeeklySignChecklistModal({
                               name="senhaConfirmacao"
                               required
                               placeholder="Confirme sua senha"
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="bpma-input text-xs"
                             />
                             <input
                               type="text"
                               name="observacaoAssinatura"
                               placeholder="Observação (Opcional)"
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="bpma-input text-xs"
                             />
                             <button type="submit" className="btn-primary whitespace-nowrap">
                               Assinar

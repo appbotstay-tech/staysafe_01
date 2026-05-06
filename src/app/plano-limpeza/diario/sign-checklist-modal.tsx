@@ -5,7 +5,7 @@ import { updateDailyRecordAction } from "../actions";
 import { getStatusLabel, getTurnoLabel, formatDateDisplay } from "../utils";
 
 const INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  "bpma-input";
 
 type DailySignChecklistModalProps = {
   closeHref: string;
@@ -33,8 +33,8 @@ export function DailySignChecklistModal({
   etapa
 }: DailySignChecklistModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+    <div className="bpma-modal-backdrop">
+      <div className="bpma-modal-panel max-w-xl">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Assinar Checklist Diário
         </h3>
