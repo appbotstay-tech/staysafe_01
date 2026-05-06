@@ -48,11 +48,20 @@ const INITIAL_STATE: ActionState = {
 };
 
 const TABLE_HEAD_CLASS =
-  "px-2 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200";
-const TABLE_CELL_CLASS = "block min-w-0 px-0 py-0 align-top lg:table-cell lg:px-2 lg:py-1.5";
-const TABLE_CELL_FULL_CLASS = `${TABLE_CELL_CLASS} sm:col-span-2 lg:col-span-1`;
-const MOBILE_FIELD_LABEL_CLASS =
-  "mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400 lg:hidden";
+  "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-200";
+const TABLE_CELL_CLASS = "px-2 py-1.5 align-top";
+const PRODUCT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[13rem]`;
+const LOTE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[7rem]`;
+const DATE_TABLE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.75rem] max-w-[8.75rem]`;
+const SIF_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[5.5rem]`;
+const TEMPERATURE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[6.75rem]`;
+const SELECT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.5rem]`;
+const TEXT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[10rem]`;
+const READONLY_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.5rem]`;
+const STATUS_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[7rem] whitespace-nowrap`;
+const ACTION_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[6.5rem]`;
+const MOBILE_FIELD_LABEL_CLASS = "sr-only";
+const DATE_INPUT_CLASS = "bpma-date-input";
 
 function SaveButton() {
   const { pending } = useFormStatus();
@@ -113,9 +122,9 @@ export function NoteItemsForm({
         <input type="hidden" name="notaId" value={String(notaId)} />
         <input type="hidden" name="returnTo" value={returnTo} />
 
-        <div className="lg:overflow-x-auto lg:rounded-lg lg:border lg:border-slate-200 lg:dark:border-slate-700">
-          <table className="block w-full text-sm lg:table lg:min-w-[1240px] lg:divide-y lg:divide-slate-200 lg:dark:divide-slate-700">
-            <thead className="hidden bg-slate-50 text-left dark:bg-slate-800 lg:table-header-group">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+          <table className="min-w-[1240px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            <thead className="bg-slate-50 text-left dark:bg-slate-800">
               <tr>
                 <th className={TABLE_HEAD_CLASS}>Produto</th>
                 <th className={TABLE_HEAD_CLASS}>Lote *</th>
@@ -133,7 +142,7 @@ export function NoteItemsForm({
                 <th className={TABLE_HEAD_CLASS}>Ação</th>
               </tr>
             </thead>
-            <tbody className="block space-y-3 lg:table-row-group lg:divide-y lg:divide-slate-100 lg:space-y-0 lg:dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.map((item) => {
                 const rowKey = `item-${item.id}`;
                 const invalid = state.invalidRowKey === rowKey;
@@ -141,13 +150,9 @@ export function NoteItemsForm({
                 return (
                   <tr
                     key={item.id}
-                    className={`grid grid-cols-1 gap-3 rounded-lg border bg-white p-3 dark:bg-slate-900 sm:grid-cols-2 lg:table-row lg:border-0 lg:bg-transparent lg:p-0 lg:dark:bg-transparent ${
-                      invalid
-                        ? "border-red-300 dark:border-red-800"
-                        : "border-slate-200 dark:border-slate-700"
-                    }`}
+                    className={invalid ? "bg-red-50 dark:bg-red-950/30" : undefined}
                   >
-                    <td className={TABLE_CELL_FULL_CLASS}>
+                    <td className={PRODUCT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Produto</span>
                       <input
                         type="text"
@@ -155,10 +160,10 @@ export function NoteItemsForm({
                         defaultValue={item.produto}
                         required
                         disabled={readOnlyMode || xmlProductLocked}
-                        className={`${inputClassName} lg:min-w-[11rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={LOTE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Lote *</span>
                       <input
                         type="text"
@@ -166,10 +171,10 @@ export function NoteItemsForm({
                         defaultValue={item.lote}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[6.5rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Data de Fabricação *</span>
                       <input
                         type="date"
@@ -177,10 +182,10 @@ export function NoteItemsForm({
                         defaultValue={item.dataFabricacao}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[7.5rem]`}
+                        className={`${inputClassName} ${DATE_INPUT_CLASS}`}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Validade *</span>
                       <input
                         type="date"
@@ -188,10 +193,10 @@ export function NoteItemsForm({
                         defaultValue={item.dataValidade}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[7.5rem]`}
+                        className={`${inputClassName} ${DATE_INPUT_CLASS}`}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={SIF_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>SIF *</span>
                       <input
                         type="text"
@@ -200,10 +205,10 @@ export function NoteItemsForm({
                         list="sif-opcoes"
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[5rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={TEMPERATURE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Temperatura *</span>
                       <input
                         type="text"
@@ -212,82 +217,82 @@ export function NoteItemsForm({
                         defaultValue={item.temperatura}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[5.5rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={SELECT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Transporte *</span>
                       <select
                         name={`${rowKey}-transporteEntregador`}
                         defaultValue={item.transporteEntregador}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[6.5rem]`}
+                        className={inputClassName}
                       >
                         <option value="">Selecione</option>
                         <option value="CONFORME">Conforme</option>
                         <option value="NAO_CONFORME">Não Conforme</option>
                       </select>
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={SELECT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Aspecto *</span>
                       <select
                         name={`${rowKey}-aspectoSensorial`}
                         defaultValue={item.aspectoSensorial}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[6.5rem]`}
+                        className={inputClassName}
                       >
                         <option value="">Selecione</option>
                         <option value="CONFORME">Conforme</option>
                         <option value="NAO_CONFORME">Não Conforme</option>
                       </select>
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={SELECT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Embalagem *</span>
                       <select
                         name={`${rowKey}-embalagem`}
                         defaultValue={item.embalagem}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[6.5rem]`}
+                        className={inputClassName}
                       >
                         <option value="">Selecione</option>
                         <option value="CONFORME">Conforme</option>
                         <option value="NAO_CONFORME">Não Conforme</option>
                       </select>
                     </td>
-                    <td className={TABLE_CELL_FULL_CLASS}>
+                    <td className={TEXT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Ação Corretiva</span>
                       <input
                         type="text"
                         name={`${rowKey}-acaoCorretiva`}
                         defaultValue={item.acaoCorretiva}
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[9rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={READONLY_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Responsável automático</span>
-                      <div className="bpma-readonly-field lg:min-w-[7.5rem]">
+                      <div className="bpma-readonly-field">
                         {readOnlyMode ? (item.responsavelRecebimento ?? "-") : responsavelLogado}
                       </div>
                     </td>
-                    <td className={TABLE_CELL_FULL_CLASS}>
+                    <td className={TEXT_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Observações</span>
                       <input
                         type="text"
                         name={`${rowKey}-observacoes`}
                         defaultValue={item.observacoes}
                         disabled={readOnlyMode}
-                        className={`${inputClassName} lg:min-w-[9rem]`}
+                        className={inputClassName}
                       />
                     </td>
-                    <td className={`${TABLE_CELL_CLASS} whitespace-nowrap`}>
+                    <td className={STATUS_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Status</span>
                       <ConformidadeBadge value={getConformidadeBadgeValue(item.statusGeral)} />
                     </td>
-                    <td className={TABLE_CELL_CLASS}>
+                    <td className={ACTION_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Ação</span>
                       {!canDeleteItems ? (
                         <span className="text-xs text-slate-500 dark:text-slate-400">

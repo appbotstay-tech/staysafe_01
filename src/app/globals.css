@@ -188,6 +188,21 @@ body {
     appearance: auto;
   }
 
+  input[type="date"] {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+  }
+
   textarea {
     min-height: 6rem;
     resize: vertical;
@@ -239,6 +254,16 @@ body {
     background-color: var(--field-bg) !important;
     border-color: var(--field-border) !important;
     color: var(--app-text) !important;
+  }
+
+  .bpma-date-input {
+    width: 100% !important;
+    min-width: 0;
+    max-width: 100% !important;
+    min-inline-size: 0;
+    max-inline-size: 100% !important;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .bpma-field {
@@ -360,7 +385,29 @@ body {
 
   input[type="date"],
   input[type="time"] {
+    width: 100% !important;
+    max-width: 100% !important;
     min-width: 0 !important;
+    min-inline-size: 0 !important;
+    max-inline-size: 100% !important;
+  }
+
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 0.5rem;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    max-width: 1.25rem;
+    margin-inline-start: 0.25rem;
+    padding: 0;
   }
 
   form label > input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
