@@ -27,7 +27,8 @@ const MODULE_ACCESS: Record<UserRole, string[]> = {
     "/rastreabilidade-recebimento",
     "/controle-buffet-amostras",
     "/plano-limpeza",
-    "/chamados-manutencao"
+    "/chamados-manutencao",
+    "/relatorios"
   ],
   GESTOR: [
     "/higienizacao-hortifruti",
@@ -36,7 +37,8 @@ const MODULE_ACCESS: Record<UserRole, string[]> = {
     "/rastreabilidade-recebimento",
     "/controle-buffet-amostras",
     "/plano-limpeza",
-    "/chamados-manutencao"
+    "/chamados-manutencao",
+    "/relatorios"
   ],
   SUPERVISOR: [
     "/higienizacao-hortifruti",
@@ -45,7 +47,8 @@ const MODULE_ACCESS: Record<UserRole, string[]> = {
     "/rastreabilidade-recebimento",
     "/controle-buffet-amostras",
     "/plano-limpeza",
-    "/chamados-manutencao"
+    "/chamados-manutencao",
+    "/relatorios"
   ],
   RESPONSAVEL_TECNICO: [
     "/higienizacao-hortifruti",
@@ -54,7 +57,8 @@ const MODULE_ACCESS: Record<UserRole, string[]> = {
     "/rastreabilidade-recebimento",
     "/controle-buffet-amostras",
     "/plano-limpeza",
-    "/chamados-manutencao"
+    "/chamados-manutencao",
+    "/relatorios"
   ],
   FUNCIONARIO: [
     "/higienizacao-hortifruti",
@@ -89,6 +93,10 @@ export function canViewFullHistory(role: UserRole): boolean {
 
 export function canViewManagementSections(role: UserRole): boolean {
   return role !== "FUNCIONARIO";
+}
+
+export function canAccessReports(role: UserRole): boolean {
+  return role === "DEV" || role === "GESTOR" || role === "SUPERVISOR" || role === "RESPONSAVEL_TECNICO";
 }
 
 export function canDeleteOperationalRecords(role: UserRole): boolean {
@@ -158,6 +166,10 @@ export function canAccessPath(role: UserRole, pathname: string): boolean {
 
   if (pathname.startsWith("/usuarios")) {
     return canManageUsers(role);
+  }
+
+  if (pathname.startsWith("/relatorios")) {
+    return canAccessReports(role);
   }
 
   if (pathname.includes("/opcoes")) {

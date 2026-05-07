@@ -5,6 +5,7 @@ import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
   canCloseMonth,
+  canAccessReports,
   canDeleteOperationalRecords,
   canManageModuleOptions,
   canManageUsers,
@@ -28,6 +29,12 @@ export function ensureCanManageUsers(role: UserRole) {
 export function ensureCanViewResetRequests(role: UserRole) {
   if (!canViewResetRequests(role)) {
     throw new Error("Você não tem permissão para visualizar solicitações.");
+  }
+}
+
+export function ensureCanAccessReports(role: UserRole) {
+  if (!canAccessReports(role)) {
+    throw new Error("Você não tem permissão para acessar relatórios.");
   }
 }
 
