@@ -81,6 +81,7 @@ function redirectWithFeedback(
     url.searchParams.delete("new");
     url.searchParams.delete("editId");
     url.searchParams.delete("editOptionId");
+    url.searchParams.delete("deleteId");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);

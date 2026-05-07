@@ -2,6 +2,7 @@ import { StatusNotaRecebimento } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 
@@ -146,6 +147,9 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const query = await searchParams;
   const feedback = firstParam(query.feedback).trim();
   const feedbackType = firstParam(query.feedbackType) === "error" ? "error" : "success";
+  const finalizarSelecionado = firstParam(query.finalizar) === "1";
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
+  const finalizarReturnTo = `${returnTo}?finalizar=1`;
   const identificadoresFiscais = [
     { label: "Número da Nota", value: note.notaFiscal },
     note.serieNota ? { label: "Série da Nota", value: note.serieNota } : null,
@@ -307,17 +311,49 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
               : null}
 
             {!readOnlyMode ? (
-              <form action={finalizeNotaAction} className="mt-4">
-                <input type="hidden" name="notaId" value={note.id} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-                <button type="submit" className="btn-primary">
+              <div className="mt-4">
+                <Link href={finalizarReturnTo} className="btn-primary">
                   Finalizar Nota
-                </button>
-              </form>
+                </Link>
+              </div>
             ) : null}
           </>
         )}
       </section>
+
+      {!readOnlyMode && finalizarSelecionado ? (
+        <ActionModal
+          title="Finalizar Conferência"
+          cancelHref={returnTo}
+          description={
+            <p>
+              Nota <strong>{note.notaFiscal}</strong> com {note.itens.length} item(ns).
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          <form action={finalizeNotaAction}>
+            <input type="hidden" name="notaId" value={note.id} />
+            <input type="hidden" name="returnTo" value={finalizarReturnTo} />
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Confirme a finalização após revisar todos os itens da nota. A conferência completa
+              permanece na tela própria; este modal apenas confirma a ação pontual.
+            </p>
+            <ModalActions>
+              <Link href={returnTo} className="btn-secondary text-center">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-primary">
+                Confirmar Finalização
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
     </div>
   );
 }

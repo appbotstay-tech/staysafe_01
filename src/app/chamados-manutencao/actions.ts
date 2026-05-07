@@ -84,6 +84,10 @@ function redirectWithFeedback(
   extraParams?: Record<string, string>
 ): never {
   const url = new URL(returnTo, "http://localhost");
+  if (feedbackType === "success") {
+    url.searchParams.delete("abrir");
+    url.searchParams.delete("statusModal");
+  }
   if (extraParams) {
     for (const [key, value] of Object.entries(extraParams)) {
       if (value) {

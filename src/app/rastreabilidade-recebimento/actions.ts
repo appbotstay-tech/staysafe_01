@@ -176,6 +176,8 @@ function redirectWithFeedback(
     url.searchParams.delete("new");
     url.searchParams.delete("editId");
     url.searchParams.delete("editCategoriaId");
+    url.searchParams.delete("importXml");
+    url.searchParams.delete("finalizar");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);

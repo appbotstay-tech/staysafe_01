@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { ImageUploadField } from "@/components/forms/image-upload-field";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
@@ -208,9 +209,13 @@ export default async function ControleTemperaturaEquipamentosPage({
     equipamentoOptionsAtivas.length > 0 && regrasCategoriaForm.length > 0;
 
   const editId = parsePositiveInt(firstParam(params.editId));
+  const deleteId = parsePositiveInt(firstParam(params.deleteId));
   const novoRegistroSelecionado = firstParam(params.new) === "1";
   const registroEmEdicao = editId
     ? await prisma.controleTemperaturaEquipamento.findUnique({ where: { id: editId } })
+    : null;
+  const registroParaExcluir = deleteId
+    ? await prisma.controleTemperaturaEquipamento.findUnique({ where: { id: deleteId } })
     : null;
   const fotoRegistroEmEdicao = registroEmEdicao
     ? getImageDataUrl(registroEmEdicao.fotoMimeType, registroEmEdicao.fotoBase64)
@@ -237,6 +242,10 @@ export default async function ControleTemperaturaEquipamentosPage({
     const periodo = getMonthYear(registroEmEdicao.data);
     periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
   }
+  if (registroParaExcluir) {
+    const periodo = getMonthYear(registroParaExcluir.data);
+    periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
+  }
   periodos.set(periodKey(fechamentoMes, fechamentoAno), {
     mes: fechamentoMes,
     ano: fechamentoAno
@@ -260,6 +269,10 @@ export default async function ControleTemperaturaEquipamentosPage({
   const periodoEdicao = registroEmEdicao ? getMonthYear(registroEmEdicao.data) : null;
   const registroEmEdicaoBloqueado = periodoEdicao
     ? assinadosSet.has(periodKey(periodoEdicao.mes, periodoEdicao.ano))
+    : false;
+  const periodoExclusao = registroParaExcluir ? getMonthYear(registroParaExcluir.data) : null;
+  const registroParaExcluirBloqueado = periodoExclusao
+    ? assinadosSet.has(periodKey(periodoExclusao.mes, periodoExclusao.ano))
     : false;
 
   const parametrosRetorno = new URLSearchParams();
@@ -289,6 +302,14 @@ export default async function ControleTemperaturaEquipamentosPage({
   })();
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
   const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
+  const deleteReturnTo = (() => {
+    const query = new URLSearchParams(parametrosRetorno);
+    if (registroParaExcluir) {
+      query.set("deleteId", String(registroParaExcluir.id));
+    }
+    return buildPathWithParams(query);
+  })();
 
   const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
   const [registrosFechamento, fechamentoAtual] = await Promise.all([
@@ -351,45 +372,53 @@ export default async function ControleTemperaturaEquipamentosPage({
         </section>
       ) : null}
 
-      <section className={CARD_CLASS}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {registroEmEdicao ? "Editar Registro" : "Cadastro de Registro"}
-          </h2>
-          {mostrarFormulario ? (
-            <Link href={hrefCancelarFormulario} className="btn-secondary">
-              Cancelar
-            </Link>
-          ) : null}
-        </div>
+      <div className={registroEmEdicao ? "bpma-modal-backdrop" : ""}>
+        <section className={registroEmEdicao ? "bpma-modal-panel max-w-3xl" : CARD_CLASS}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {registroEmEdicao ? "Editar Registro" : "Cadastro de Registro"}
+            </h2>
+            {mostrarFormulario ? (
+              <Link href={hrefCancelarFormulario} className="btn-secondary">
+                Cancelar
+              </Link>
+            ) : null}
+          </div>
 
-        {!mostrarFormulario ? (
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Clique em <strong>Novo Registro</strong> ou <strong>Editar</strong> para abrir o formulário.
-          </p>
-        ) : !configuracaoDisponivel ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-            O módulo ainda não possui equipamentos ou regras de temperatura suficientes para cadastro.
-            {podeGerenciarOpcoes ? (
-              <>
-                {" "}
-                Use <strong>Gerenciar Opções</strong> para concluir a configuração inicial.
-              </>
-            ) : (
-              " Solicite à gestão a configuração inicial do módulo."
-            )}
-          </p>
-        ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-            Este registro pertence a um mês fechado e não pode ser alterado.
-          </p>
-        ) : (
-          <form
-            action={registroEmEdicao ? updateRegistroAction : createRegistroAction}
-            className="grid gap-4 md:grid-cols-2"
-          >
-            <input type="hidden" name="returnTo" value={formReturnTo} />
-            {registroEmEdicao ? <input type="hidden" name="id" value={registroEmEdicao.id} /> : null}
+          {registroEmEdicao && modalError ? (
+            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+
+          {!mostrarFormulario ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Clique em <strong>Novo Registro</strong> para abrir o formulário. A ação de edição
+              abre em modal sobreposto a partir da lista.
+            </p>
+          ) : !configuracaoDisponivel ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              O módulo ainda não possui equipamentos ou regras de temperatura suficientes para cadastro.
+              {podeGerenciarOpcoes ? (
+                <>
+                  {" "}
+                  Use <strong>Gerenciar Opções</strong> para concluir a configuração inicial.
+                </>
+              ) : (
+                " Solicite à gestão a configuração inicial do módulo."
+              )}
+            </p>
+          ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Este registro pertence a um mês fechado e não pode ser alterado.
+            </p>
+          ) : (
+            <form
+              action={registroEmEdicao ? updateRegistroAction : createRegistroAction}
+              className="grid gap-4 md:grid-cols-2"
+            >
+              <input type="hidden" name="returnTo" value={formReturnTo} />
+              {registroEmEdicao ? <input type="hidden" name="id" value={registroEmEdicao.id} /> : null}
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
               <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -468,9 +497,10 @@ export default async function ControleTemperaturaEquipamentosPage({
                 {registroEmEdicao ? "Salvar Alterações" : "Salvar Registro"}
               </button>
             </div>
-          </form>
-        )}
-      </section>
+            </form>
+          )}
+        </section>
+      </div>
 
       <section className={CARD_CLASS}>
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -651,13 +681,22 @@ export default async function ControleTemperaturaEquipamentosPage({
                             Editar
                           </Link>
                           {podeExcluirRegistros ? (
-                            <form action={deleteRegistroAction} className="m-0">
-                              <input type="hidden" name="id" value={registro.id} />
-                              <input type="hidden" name="returnTo" value={returnTo} />
-                              <button type="submit" disabled={bloqueado} className="btn-danger">
+                            bloqueado ? (
+                              <button type="button" disabled className="btn-danger">
                                 Excluir
                               </button>
-                            </form>
+                            ) : (
+                              <Link
+                                href={(() => {
+                                  const query = new URLSearchParams(parametrosRetorno);
+                                  query.set("deleteId", String(registro.id));
+                                  return buildPathWithParams(query);
+                                })()}
+                                className="btn-danger"
+                              >
+                                Excluir
+                              </Link>
+                            )
                           ) : null}
                         </div>
                       </td>
@@ -669,6 +708,46 @@ export default async function ControleTemperaturaEquipamentosPage({
           </table>
         </div>
       </section>
+
+      {registroParaExcluir ? (
+        <ActionModal
+          title="Excluir Registro"
+          cancelHref={hrefCancelarFormulario}
+          description={
+            <p>
+              Equipamento: <strong>{registroParaExcluir.equipamento}</strong> em{" "}
+              {formatDateDisplay(registroParaExcluir.data)}.
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          {registroParaExcluirBloqueado ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              Este registro pertence a um mês fechado e não pode ser excluído.
+            </p>
+          ) : (
+            <form action={deleteRegistroAction}>
+              <input type="hidden" name="id" value={registroParaExcluir.id} />
+              <input type="hidden" name="returnTo" value={deleteReturnTo} />
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Confirme a exclusão deste registro. A permissão também será validada no servidor.
+              </p>
+              <ModalActions>
+                <Link href={hrefCancelarFormulario} className="btn-secondary text-center">
+                  Cancelar
+                </Link>
+                <button type="submit" className="btn-danger">
+                  Excluir Registro
+                </button>
+              </ModalActions>
+            </form>
+          )}
+        </ActionModal>
+      ) : null}
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>

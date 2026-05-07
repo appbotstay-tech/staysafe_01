@@ -66,6 +66,21 @@ function redirectWithFeedback(path: string, type: "success" | "error", feedback:
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
 }
 
+function getUsersReturnToPath(formData: FormData, fallback: string): string {
+  const value = getInputValue(formData, "returnTo");
+
+  if (
+    value === USERS_PATH ||
+    value.startsWith(`${USERS_PATH}?`) ||
+    value === REQUESTS_PATH ||
+    value.startsWith(`${REQUESTS_PATH}?`)
+  ) {
+    return value;
+  }
+
+  return fallback;
+}
+
 type UpdateDraft = {
   userId: number;
   nomeCompleto: string;
@@ -253,6 +268,8 @@ export async function updateUserAction(formData: FormData) {
 }
 
 export async function toggleUserStatusAction(formData: FormData) {
+  const returnTo = getUsersReturnToPath(formData, USERS_PATH);
+
   try {
     const actor = await getCurrentUserForAction();
     ensureCanManageUsers(actor.perfil);
@@ -290,11 +307,13 @@ export async function toggleUserStatusAction(formData: FormData) {
     rethrowIfRedirectError(error);
     const message =
       error instanceof Error && error.message ? error.message : "Não foi possível alterar o status.";
-    redirectWithFeedback(USERS_PATH, "error", message);
+    redirectWithFeedback(returnTo, "error", message);
   }
 }
 
 export async function resetUserPasswordAction(formData: FormData) {
+  const returnTo = getUsersReturnToPath(formData, USERS_PATH);
+
   try {
     const actor = await getCurrentUserForAction();
 
@@ -340,11 +359,13 @@ export async function resetUserPasswordAction(formData: FormData) {
       error instanceof Error && error.message
         ? error.message
         : "Não foi possível redefinir a senha.";
-    redirectWithFeedback(USERS_PATH, "error", message);
+    redirectWithFeedback(returnTo, "error", message);
   }
 }
 
 export async function deleteUserAction(formData: FormData) {
+  const returnTo = getUsersReturnToPath(formData, USERS_PATH);
+
   try {
     const actor = await getCurrentUserForAction();
     ensureCanManageUsers(actor.perfil);
@@ -376,7 +397,7 @@ export async function deleteUserAction(formData: FormData) {
     rethrowIfRedirectError(error);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       redirectWithFeedback(
-        USERS_PATH,
+        returnTo,
         "error",
         "Não foi possível remover o usuário porque ele possui histórico vinculado. Inative-o."
       );
@@ -384,11 +405,13 @@ export async function deleteUserAction(formData: FormData) {
 
     const message =
       error instanceof Error && error.message ? error.message : "Não foi possível remover o usuário.";
-    redirectWithFeedback(USERS_PATH, "error", message);
+    redirectWithFeedback(returnTo, "error", message);
   }
 }
 
 export async function handleResetRequestAction(formData: FormData) {
+  const returnTo = getUsersReturnToPath(formData, REQUESTS_PATH);
+
   try {
     const actor = await getCurrentUserForAction();
     ensureCanViewResetRequests(actor.perfil);
@@ -475,7 +498,7 @@ export async function handleResetRequestAction(formData: FormData) {
       error instanceof Error && error.message
         ? error.message
         : "Não foi possível tratar a solicitação.";
-    redirectWithFeedback(REQUESTS_PATH, "error", message);
+    redirectWithFeedback(returnTo, "error", message);
   }
 }
 

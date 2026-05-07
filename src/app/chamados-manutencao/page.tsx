@@ -100,11 +100,17 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
 
-  const origemPrefill = parseOrigem(firstParam(params.origem));
+  const origemRaw = firstParam(params.origem).trim();
+  const origemPrefill = parseOrigem(origemRaw);
   const descricaoPrefill = firstParam(params.descricao).trim();
   const tituloPrefill = firstParam(params.titulo).trim();
   const registroIdPrefill = firstParam(params.registroId).trim();
+  const abrirChamadoSelecionado =
+    firstParam(params.abrir) === "1" ||
+    Boolean(origemRaw || descricaoPrefill || tituloPrefill || registroIdPrefill);
+  const createReturnTo = `${PAGE_PATH}?abrir=1`;
 
   const filtroStatus = parseStatus(firstParam(params.filtroStatus));
   const filtroOrigem = firstParam(params.filtroOrigem).trim();
@@ -168,86 +174,117 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
         </section>
       ) : null}
 
-      <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Abrir Chamado de Manutenção
-        </h2>
-        <form action={createChamadoAction} className="grid gap-4 md:grid-cols-2">
-          <input type="hidden" name="returnTo" value={PAGE_PATH} />
-          <input type="hidden" name="contextoModulo" value={origemPrefill} />
-          <input type="hidden" name="contextoRegistroId" value={registroIdPrefill} />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Título
-            <input
-              type="text"
-              name="titulo"
-              defaultValue={tituloPrefill || (descricaoPrefill ? "Ocorrência Operacional" : "")}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Usuário
-            </p>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {usuarioLogado}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Preenchido automaticamente pelo usuário logado.
-            </p>
-          </div>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Origem *
-            <select name="origem" defaultValue={origemPrefill} className={INPUT_CLASS}>
-              <option value={OrigemChamadoManutencao.TEMPERATURA}>Temperatura</option>
-              <option value={OrigemChamadoManutencao.LIMPEZA}>Limpeza</option>
-              <option value={OrigemChamadoManutencao.OLEO}>Óleo</option>
-              <option value={OrigemChamadoManutencao.RECEBIMENTO}>Recebimento</option>
-              <option value={OrigemChamadoManutencao.HORTIFRUTI}>Hortifruti</option>
-              <option value={OrigemChamadoManutencao.BUFFET_AMOSTRAS}>Buffet / Amostras</option>
-              <option value={OrigemChamadoManutencao.MANUAL}>Outros</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
-            Observação *
-            <textarea
-              name="observacao"
-              rows={3}
-              required
-              defaultValue={descricaoPrefill}
-              className={INPUT_CLASS}
-            />
-          </label>
-
-          <ImageUploadField
-            name="fotoChamado"
-            label="Foto *"
-            helperText="Anexe uma foto para abrir o chamado."
-            required
-            inputClassName={INPUT_CLASS}
-          />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Confirme sua Senha *
-            <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-          </label>
-
-          <div className="md:col-span-2">
-            <SignatureContextCard
-              nomeUsuario={usuarioLogado}
-              perfil={perfilLogado}
-              dataHora={formatDateTimeDisplay(now)}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <button type="submit" className="btn-primary">
+      <div className={abrirChamadoSelecionado ? "bpma-modal-backdrop" : ""}>
+        <section className={abrirChamadoSelecionado ? "bpma-modal-panel max-w-3xl" : CARD_CLASS}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Abrir Chamado de Manutenção
-            </button>
+            </h2>
+            {abrirChamadoSelecionado ? (
+              <Link href={PAGE_PATH} className="btn-secondary">
+                Cancelar
+              </Link>
+            ) : null}
           </div>
-        </form>
-      </section>
+
+          {!abrirChamadoSelecionado ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Abra um chamado pontual sem sair da lista atual.
+              </p>
+              <Link href={`${PAGE_PATH}?abrir=1`} className="btn-primary">
+                Abrir Chamado de Manutenção
+              </Link>
+            </div>
+          ) : (
+            <>
+              {modalError ? (
+                <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                  {modalError}
+                </p>
+              ) : null}
+              <form action={createChamadoAction} className="grid gap-4 md:grid-cols-2">
+                <input type="hidden" name="returnTo" value={createReturnTo} />
+                <input type="hidden" name="contextoModulo" value={origemPrefill} />
+                <input type="hidden" name="contextoRegistroId" value={registroIdPrefill} />
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Título
+                <input
+                  type="text"
+                  name="titulo"
+                  defaultValue={tituloPrefill || (descricaoPrefill ? "Ocorrência Operacional" : "")}
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Usuário
+                </p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {usuarioLogado}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Preenchido automaticamente pelo usuário logado.
+                </p>
+              </div>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Origem *
+                <select name="origem" defaultValue={origemPrefill} className={INPUT_CLASS}>
+                  <option value={OrigemChamadoManutencao.TEMPERATURA}>Temperatura</option>
+                  <option value={OrigemChamadoManutencao.LIMPEZA}>Limpeza</option>
+                  <option value={OrigemChamadoManutencao.OLEO}>Óleo</option>
+                  <option value={OrigemChamadoManutencao.RECEBIMENTO}>Recebimento</option>
+                  <option value={OrigemChamadoManutencao.HORTIFRUTI}>Hortifruti</option>
+                  <option value={OrigemChamadoManutencao.BUFFET_AMOSTRAS}>Buffet / Amostras</option>
+                  <option value={OrigemChamadoManutencao.MANUAL}>Outros</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+                Observação *
+                <textarea
+                  name="observacao"
+                  rows={3}
+                  required
+                  defaultValue={descricaoPrefill}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <ImageUploadField
+                name="fotoChamado"
+                label="Foto *"
+                helperText="Anexe uma foto para abrir o chamado."
+                required
+                inputClassName={INPUT_CLASS}
+              />
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Confirme sua Senha *
+                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
+              </label>
+
+              <div className="md:col-span-2">
+                <SignatureContextCard
+                  nomeUsuario={usuarioLogado}
+                  perfil={perfilLogado}
+                  dataHora={formatDateTimeDisplay(now)}
+                />
+              </div>
+
+                <div className="flex flex-col-reverse gap-2 md:col-span-2 sm:flex-row sm:justify-end">
+                  <Link href={PAGE_PATH} className="btn-secondary text-center">
+                    Cancelar
+                  </Link>
+                  <button type="submit" className="btn-primary">
+                    Abrir Chamado de Manutenção
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+        </section>
+      </div>
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -350,7 +387,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
                           Detalhar
                         </Link>
                         {podeAtualizar ? (
-                          <Link href={`${PAGE_PATH}/${chamado.id}`} className="btn-secondary">
+                          <Link href={`${PAGE_PATH}/${chamado.id}?statusModal=1`} className="btn-secondary">
                             Atualizar Status
                           </Link>
                         ) : null}

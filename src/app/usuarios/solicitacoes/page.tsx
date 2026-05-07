@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { canViewResetRequests, getRoleLabel, type UserRole } from "@/lib/rbac";
@@ -43,6 +44,8 @@ export default async function SolicitacoesRedefinicaoPage({
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
+  const requestId = Number(firstParam(params.requestId));
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const solicitacoes = await prisma.solicitacaoRedefinicaoSenha.findMany({
     include: {
@@ -55,6 +58,10 @@ export default async function SolicitacoesRedefinicaoPage({
     },
     orderBy: [{ createdAt: "desc" }]
   });
+  const solicitacaoSelecionada =
+    Number.isInteger(requestId) && requestId > 0
+      ? solicitacoes.find((item) => item.id === requestId)
+      : null;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -136,24 +143,18 @@ export default async function SolicitacoesRedefinicaoPage({
                   ) : null}
                 </div>
 
-                {solicitacao.status === "PENDENTE" ? (
-                  <form action={handleResetRequestAction} className="mt-3 grid gap-3 md:grid-cols-3">
-                    <input type="hidden" name="requestId" value={String(solicitacao.id)} />
-                    <label className="text-sm text-slate-700 dark:text-slate-200">
-                      Senha Temporária (Opcional)
-                      <input name="senhaTemporaria" className={INPUT_CLASS} />
-                    </label>
-                    <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-                      Observação Interna (Opcional)
-                      <input name="observacaoInterna" className={INPUT_CLASS} />
-                    </label>
-                    <div className="md:col-span-3">
-                      <button type="submit" className="btn-primary">
-                        Tratar Solicitação
-                      </button>
-                    </div>
-                  </form>
-                ) : solicitacao.observacaoInterna ? (
+                <div className="mt-3 btn-group">
+                  <Link
+                    href={`/usuarios/solicitacoes?requestId=${solicitacao.id}`}
+                    className={solicitacao.status === "PENDENTE" ? "btn-primary" : "btn-secondary"}
+                  >
+                    {solicitacao.status === "PENDENTE"
+                      ? "Responder Solicitação"
+                      : "Visualizar Detalhes"}
+                  </Link>
+                </div>
+
+                {solicitacao.status !== "PENDENTE" && solicitacao.observacaoInterna ? (
                   <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
                     <strong>Observação:</strong> {solicitacao.observacaoInterna}
                   </p>
@@ -163,6 +164,91 @@ export default async function SolicitacoesRedefinicaoPage({
           )}
         </div>
       </section>
+
+      {solicitacaoSelecionada ? (
+        <ActionModal
+          title={
+            solicitacaoSelecionada.status === "PENDENTE"
+              ? "Responder Solicitação"
+              : "Detalhes da Solicitação"
+          }
+          cancelHref="/usuarios/solicitacoes"
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Usuário informado: <strong>{solicitacaoSelecionada.nomeUsuarioInformado}</strong>.
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+
+          <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-2">
+            <p>
+              <strong>Nome informado:</strong> {solicitacaoSelecionada.nomeCompletoInformado}
+            </p>
+            <p>
+              <strong>Status:</strong> {solicitacaoSelecionada.status}
+            </p>
+            <p>
+              <strong>Cadastro encontrado:</strong>{" "}
+              {solicitacaoSelecionada.usuario
+                ? `${solicitacaoSelecionada.usuario.nomeCompleto} (${solicitacaoSelecionada.usuario.nomeUsuario})`
+                : "Não localizado"}
+            </p>
+            <p>
+              <strong>Perfil alvo:</strong>{" "}
+              {solicitacaoSelecionada.usuario
+                ? getRoleLabel(solicitacaoSelecionada.usuario.perfil as UserRole)
+                : "-"}
+            </p>
+            <p>
+              <strong>Criada em:</strong> {formatDateTime(solicitacaoSelecionada.createdAt)}
+            </p>
+            {solicitacaoSelecionada.tratadoPor ? (
+              <p>
+                <strong>Tratada por:</strong> {solicitacaoSelecionada.tratadoPor.nomeCompleto}
+              </p>
+            ) : null}
+          </div>
+
+          {solicitacaoSelecionada.status === "PENDENTE" ? (
+            <form action={handleResetRequestAction} className="mt-4 grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="requestId" value={String(solicitacaoSelecionada.id)} />
+              <input
+                type="hidden"
+                name="returnTo"
+                value={`/usuarios/solicitacoes?requestId=${solicitacaoSelecionada.id}`}
+              />
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Senha Temporária (Opcional)
+                <input name="senhaTemporaria" className={INPUT_CLASS} />
+              </label>
+              <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+                Observação Interna (Opcional)
+                <input name="observacaoInterna" className={INPUT_CLASS} />
+              </label>
+              <div className="md:col-span-2">
+                <ModalActions>
+                  <Link href="/usuarios/solicitacoes" className="btn-secondary text-center">
+                    Cancelar
+                  </Link>
+                  <button type="submit" className="btn-primary">
+                    Redefinir Senha
+                  </button>
+                </ModalActions>
+              </div>
+            </form>
+          ) : solicitacaoSelecionada.observacaoInterna ? (
+            <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+              <strong>Observação:</strong> {solicitacaoSelecionada.observacaoInterna}
+            </p>
+          ) : null}
+        </ActionModal>
+      ) : null}
     </div>
   );
 }

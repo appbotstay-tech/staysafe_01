@@ -110,6 +110,9 @@ export default async function ChamadoManutencaoDetalhePage({
   const query = await searchParams;
   const feedback = firstParam(query.feedback).trim();
   const feedbackType = firstParam(query.feedbackType) === "error" ? "error" : "success";
+  const statusModalOpen = firstParam(query.statusModal) === "1";
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
+  const statusReturnTo = `${PAGE_PATH}/${chamado.id}?statusModal=1`;
   const fotoDataUrl = getImageDataUrl(chamado.fotoMimeType, chamado.fotoBase64);
 
   return (
@@ -202,41 +205,71 @@ export default async function ChamadoManutencaoDetalhePage({
       </section>
 
       {canUpdate ? (
-        <section className={CARD_CLASS}>
-          <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Atualizar Status
-          </h2>
-          <form action={updateChamadoStatusAction} className="grid gap-4 md:grid-cols-2">
-            <input type="hidden" name="chamadoId" value={String(chamado.id)} />
-            <input type="hidden" name="returnTo" value={`${PAGE_PATH}/${chamado.id}`} />
-
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Status *
-              <select name="status" defaultValue={chamado.status} className={INPUT_CLASS}>
-                <option value={StatusChamadoManutencao.ABERTO}>Aberto</option>
-                <option value={StatusChamadoManutencao.EM_ANDAMENTO}>Em Andamento</option>
-                <option value={StatusChamadoManutencao.CONCLUIDO}>Concluído</option>
-                <option value={StatusChamadoManutencao.CANCELADO}>Cancelado</option>
-              </select>
-            </label>
-
-            <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
-              Observação de Conclusão (Opcional)
-              <textarea
-                name="observacaoConclusao"
-                rows={3}
-                defaultValue={chamado.observacaoConclusao ?? ""}
-                className={INPUT_CLASS}
-              />
-            </label>
-
-            <div className="md:col-span-2">
-              <button type="submit" className="btn-primary">
-                Salvar Status
-              </button>
+        <div className={statusModalOpen ? "bpma-modal-backdrop" : ""}>
+          <section className={statusModalOpen ? "bpma-modal-panel max-w-2xl" : CARD_CLASS}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Atualizar Status
+              </h2>
+              {statusModalOpen ? (
+                <Link href={`${PAGE_PATH}/${chamado.id}`} className="btn-secondary">
+                  Cancelar
+                </Link>
+              ) : null}
             </div>
-          </form>
-        </section>
+
+            {!statusModalOpen ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Altere o status deste chamado sem sair do contexto do detalhe.
+                </p>
+                <Link href={statusReturnTo} className="btn-primary">
+                  Alterar Status
+                </Link>
+              </div>
+            ) : (
+              <form action={updateChamadoStatusAction} className="grid gap-4 md:grid-cols-2">
+                <input type="hidden" name="chamadoId" value={String(chamado.id)} />
+                <input type="hidden" name="returnTo" value={statusReturnTo} />
+
+                {modalError ? (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200 md:col-span-2">
+                    {modalError}
+                  </p>
+                ) : null}
+
+                <label className="text-sm text-slate-700 dark:text-slate-200">
+                  Status *
+                  <select name="status" defaultValue={chamado.status} className={INPUT_CLASS}>
+                    <option value={StatusChamadoManutencao.ABERTO}>Aberto</option>
+                    <option value={StatusChamadoManutencao.EM_ANDAMENTO}>Em Andamento</option>
+                    <option value={StatusChamadoManutencao.CONCLUIDO}>Concluído</option>
+                    <option value={StatusChamadoManutencao.CANCELADO}>Cancelado</option>
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+                  Observação de Conclusão (Opcional)
+                  <textarea
+                    name="observacaoConclusao"
+                    rows={3}
+                    defaultValue={chamado.observacaoConclusao ?? ""}
+                    className={INPUT_CLASS}
+                  />
+                </label>
+
+                <div className="flex flex-col-reverse gap-2 md:col-span-2 sm:flex-row sm:justify-end">
+                  <Link href={`${PAGE_PATH}/${chamado.id}`} className="btn-secondary text-center">
+                    Cancelar
+                  </Link>
+                  <button type="submit" className="btn-primary">
+                    Salvar Status
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
       ) : null}
     </div>
   );

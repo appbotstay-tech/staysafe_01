@@ -92,6 +92,7 @@ function redirectWithFeedback(
     url.searchParams.delete("editCategoriaId");
     url.searchParams.delete("editRegraId");
     url.searchParams.delete("novaRegraCategoriaId");
+    url.searchParams.delete("deleteId");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);

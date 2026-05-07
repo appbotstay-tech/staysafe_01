@@ -6,6 +6,7 @@ import {
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -117,6 +118,8 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
+  const importarXmlSelecionado = firstParam(params.importXml) === "1";
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const now = getCurrentSystemDateTime();
   const todaySystemDate = getTodaySystemDate();
@@ -209,6 +212,11 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   paramsRetorno.set("fechamentoAno", String(fechamentoAno));
 
   const returnTo = buildPathWithParams(paramsRetorno);
+  const importXmlHref = (() => {
+    const query = new URLSearchParams(paramsRetorno);
+    query.set("importXml", "1");
+    return buildPathWithParams(query);
+  })();
   const limparFiltrosHref = buildPathWithParams(
     new URLSearchParams({
       fechamentoMes: String(fechamentoMes),
@@ -277,33 +285,53 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           </div>
 
           {permitirImportacao ? (
-            <form
-              action={importXmlAction}
-              className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-[1fr_auto] dark:bg-slate-800"
-            >
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Importar XML da Nota Fiscal (ADM)
-                <input
-                  type="file"
-                  name="xmlFile"
-                  accept=".xml,text/xml,application/xml"
-                  required
-                  className={`${INPUT_CLASS} file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 dark:file:bg-slate-700 dark:file:text-slate-100`}
-                />
-              </label>
-              <div className="md:flex md:items-end">
-                <button type="submit" className="btn-secondary w-full md:w-auto">
-                  Importar XML
-                </button>
-              </div>
-            </form>
+            <div className="btn-group rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+              <Link href={importXmlHref} className="btn-secondary">
+                Importar XML
+              </Link>
+            </div>
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
               A importação de XML está disponível para perfis administrativos.
             </div>
           )}
         </section>
+      ) : null}
+
+      {permitirImportacao && importarXmlSelecionado ? (
+        <ActionModal
+          title="Importar XML"
+          cancelHref={returnTo}
+          maxWidthClassName="max-w-2xl"
+          description="Importe uma nota fiscal sem sair da listagem de recebimentos."
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          <form action={importXmlAction} className="mt-4 grid gap-4">
+            <input type="hidden" name="returnTo" value={importXmlHref} />
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              XML da Nota Fiscal (ADM)
+              <input
+                type="file"
+                name="xmlFile"
+                accept=".xml,text/xml,application/xml"
+                required
+                className={`${INPUT_CLASS} file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 dark:file:bg-slate-700 dark:file:text-slate-100`}
+              />
+            </label>
+            <ModalActions>
+              <Link href={returnTo} className="btn-secondary text-center">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-primary">
+                Importar XML
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
       ) : null}
 
       <section className={CARD_CLASS}>

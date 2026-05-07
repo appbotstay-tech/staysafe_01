@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers, getRoleLabel, USER_ROLE_VALUES, type UserRole } from "@/lib/rbac";
@@ -59,13 +60,23 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const editError = firstParam(params.editError).trim();
   const editId = Number(firstParam(params.editId));
+  const resetId = Number(firstParam(params.resetId));
+  const statusId = Number(firstParam(params.statusId));
+  const deleteId = Number(firstParam(params.deleteId));
 
   const usuarios = await prisma.usuario.findMany({
     orderBy: [{ createdAt: "desc" }]
   });
   const usuarioEdicao =
     Number.isInteger(editId) && editId > 0 ? usuarios.find((item) => item.id === editId) : null;
+  const usuarioResetSenha =
+    Number.isInteger(resetId) && resetId > 0 ? usuarios.find((item) => item.id === resetId) : null;
+  const usuarioStatus =
+    Number.isInteger(statusId) && statusId > 0 ? usuarios.find((item) => item.id === statusId) : null;
+  const usuarioRemocao =
+    Number.isInteger(deleteId) && deleteId > 0 ? usuarios.find((item) => item.id === deleteId) : null;
   const hasEditDraft = Boolean(usuarioEdicao && editError);
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const editNomeCompleto = hasEditDraft
     ? firstParam(params.editNomeCompleto)
@@ -268,6 +279,140 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
         </div>
       ) : null}
 
+      {usuarioResetSenha ? (
+        <ActionModal
+          title="Redefinir Senha"
+          cancelHref="/usuarios"
+          description={
+            <p>
+              Usuário selecionado: <strong>{usuarioResetSenha.nomeCompleto}</strong> (
+              {usuarioResetSenha.nomeUsuario}).
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          <form action={resetUserPasswordAction} className="mt-4 grid gap-3">
+            <input type="hidden" name="userId" value={String(usuarioResetSenha.id)} />
+            <input type="hidden" name="returnTo" value={`/usuarios?resetId=${usuarioResetSenha.id}`} />
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Senha Temporária (Opcional)
+              <input
+                type="text"
+                name="senhaTemporaria"
+                placeholder="Deixe em branco para gerar automaticamente"
+                className={INPUT_CLASS}
+              />
+            </label>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              O usuário será obrigado a trocar a senha no próximo acesso.
+            </p>
+            <ModalActions>
+              <Link href="/usuarios" className="btn-secondary text-center">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-primary">
+                Redefinir Senha
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
+
+      {usuarioStatus ? (
+        <ActionModal
+          title={usuarioStatus.status === "ATIVO" ? "Inativar Usuário" : "Reativar Usuário"}
+          cancelHref="/usuarios"
+          description={
+            <p>
+              Usuário selecionado: <strong>{usuarioStatus.nomeCompleto}</strong> (
+              {usuarioStatus.nomeUsuario}).
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          {usuarioStatus.isDevDefinitivo || usuarioStatus.id === authUser.id ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              Esta ação está protegida para evitar perda de acesso administrativo.
+            </p>
+          ) : (
+            <form action={toggleUserStatusAction} className="mt-4">
+              <input type="hidden" name="userId" value={String(usuarioStatus.id)} />
+              <input
+                type="hidden"
+                name="status"
+                value={usuarioStatus.status === "ATIVO" ? "INATIVO" : "ATIVO"}
+              />
+              <input type="hidden" name="returnTo" value={`/usuarios?statusId=${usuarioStatus.id}`} />
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {usuarioStatus.status === "ATIVO"
+                  ? "Confirme para bloquear novos acessos deste usuário."
+                  : "Confirme para liberar o acesso deste usuário novamente."}
+              </p>
+              <ModalActions>
+                <Link href="/usuarios" className="btn-secondary text-center">
+                  Cancelar
+                </Link>
+                <button
+                  type="submit"
+                  className={usuarioStatus.status === "ATIVO" ? "btn-danger" : "btn-primary"}
+                >
+                  {usuarioStatus.status === "ATIVO" ? "Inativar" : "Reativar"}
+                </button>
+              </ModalActions>
+            </form>
+          )}
+        </ActionModal>
+      ) : null}
+
+      {usuarioRemocao ? (
+        <ActionModal
+          title="Remover Usuário"
+          cancelHref="/usuarios"
+          description={
+            <p>
+              Usuário selecionado: <strong>{usuarioRemocao.nomeCompleto}</strong> (
+              {usuarioRemocao.nomeUsuario}).
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          {usuarioRemocao.isDevDefinitivo || usuarioRemocao.id === authUser.id ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              Este usuário não pode ser removido por proteção de acesso.
+            </p>
+          ) : (
+            <form action={deleteUserAction} className="mt-4">
+              <input type="hidden" name="userId" value={String(usuarioRemocao.id)} />
+              <input type="hidden" name="returnTo" value={`/usuarios?deleteId=${usuarioRemocao.id}`} />
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Esta ação remove o cadastro quando não há histórico vinculado. Se houver vínculos,
+                o sistema bloqueará a remoção e manterá este modal aberto.
+              </p>
+              <ModalActions>
+                <Link href="/usuarios" className="btn-secondary text-center">
+                  Cancelar
+                </Link>
+                <button type="submit" className="btn-danger">
+                  Remover Usuário
+                </button>
+              </ModalActions>
+            </form>
+          )}
+        </ActionModal>
+      ) : null}
+
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Usuários Cadastrados ({usuarios.length})
@@ -314,43 +459,38 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
                         >
                           Editar
                         </Link>
-                        <form action={toggleUserStatusAction} className="inline-flex">
-                          <input type="hidden" name="userId" value={String(usuario.id)} />
-                          <input
-                            type="hidden"
-                            name="status"
-                            value={usuario.status === "ATIVO" ? "INATIVO" : "ATIVO"}
-                          />
+                        {usuario.isDevDefinitivo || usuario.id === authUser.id ? (
                           <button
-                            type="submit"
-                            disabled={usuario.isDevDefinitivo || usuario.id === authUser.id}
+                            type="button"
+                            disabled
                             className={usuario.status === "ATIVO" ? "btn-danger" : "btn-secondary"}
                           >
                             {usuario.status === "ATIVO" ? "Inativar" : "Ativar"}
                           </button>
-                        </form>
-                        <form action={resetUserPasswordAction} className="inline-flex items-center gap-2">
-                          <input type="hidden" name="userId" value={String(usuario.id)} />
-                          <input
-                            type="text"
-                            name="senhaTemporaria"
-                            placeholder="Senha temporária (opcional)"
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                          />
-                          <button type="submit" className="btn-secondary">
-                            Redefinir Senha
-                          </button>
-                        </form>
-                        <form action={deleteUserAction} className="inline-flex">
-                          <input type="hidden" name="userId" value={String(usuario.id)} />
+                        ) : (
+                          <Link
+                            href={`/usuarios?statusId=${usuario.id}`}
+                            className={usuario.status === "ATIVO" ? "btn-danger" : "btn-secondary"}
+                          >
+                            {usuario.status === "ATIVO" ? "Inativar" : "Ativar"}
+                          </Link>
+                        )}
+                        <Link href={`/usuarios?resetId=${usuario.id}`} className="btn-secondary">
+                          Redefinir Senha
+                        </Link>
+                        {usuario.isDevDefinitivo || usuario.id === authUser.id ? (
                           <button
-                            type="submit"
+                            type="button"
                             className="btn-danger"
-                            disabled={usuario.isDevDefinitivo || usuario.id === authUser.id}
+                            disabled
                           >
                             Remover
                           </button>
-                        </form>
+                        ) : (
+                          <Link href={`/usuarios?deleteId=${usuario.id}`} className="btn-danger">
+                            Remover
+                          </Link>
+                        )}
                       </div>
                     </td>
                   </tr>
