@@ -25,7 +25,7 @@ export default function PlanoLimpezaPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <Link
           href="/plano-limpeza/diario"
-          className="bpma-card transition hover:border-slate-300 hover:shadow dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
+          className="bpma-clickable-card"
         >
           <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
             Plano de Limpeza Diário
@@ -37,7 +37,7 @@ export default function PlanoLimpezaPage() {
 
         <Link
           href="/plano-limpeza/semanal"
-          className="bpma-card transition hover:border-slate-300 hover:shadow dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
+          className="bpma-clickable-card"
         >
           <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
             Plano de Limpeza Semanal

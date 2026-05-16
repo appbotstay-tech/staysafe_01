@@ -50,11 +50,7 @@ export function Sidebar({
       <li key={module.href}>
         <Link
           href={module.href}
-          className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-            isActive
-              ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-              : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
-          }`}
+          className={`bpma-sidebar-link ${isActive ? "bpma-sidebar-link-active" : ""}`}
         >
           {module.name}
         </Link>
@@ -66,10 +62,10 @@ export function Sidebar({
     <li>
       <Link
         href="/usuarios"
-        className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
+        className={`bpma-sidebar-link ${
           pathname.startsWith("/usuarios") && !pathname.startsWith("/usuarios/solicitacoes")
-            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-            : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+            ? "bpma-sidebar-link-active"
+            : ""
         }`}
       >
         Gestão de Usuários
@@ -81,10 +77,10 @@ export function Sidebar({
     <li>
       <Link
         href="/usuarios/solicitacoes"
-        className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
+        className={`bpma-sidebar-link ${
           pathname.startsWith("/usuarios/solicitacoes")
-            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-            : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+            ? "bpma-sidebar-link-active"
+            : ""
         }`}
       >
         Solicitações de Senha
@@ -94,7 +90,7 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="w-full shrink-0 border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 md:hidden">
+      <aside className="bpma-sidebar w-full shrink-0 border-b md:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <Link href="/" className="block truncate text-base font-bold text-slate-900 dark:text-slate-100">
@@ -107,7 +103,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setMobileMenuOpen((current) => !current)}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-medium text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            className="btn-secondary min-h-11 min-w-11 px-3"
             aria-expanded={mobileMenuOpen}
             aria-controls="bpma-mobile-sidebar-drawer"
           >
@@ -126,7 +122,7 @@ export function Sidebar({
           />
           <aside
             id="bpma-mobile-sidebar-drawer"
-            className="absolute inset-y-0 left-0 w-[86%] max-w-xs overflow-y-auto border-r border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+            className="bpma-sidebar absolute inset-y-0 left-0 w-[86%] max-w-xs overflow-y-auto border-r shadow-xl"
           >
             <div className="p-4">
               <Link href="/" className="block text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -135,7 +131,7 @@ export function Sidebar({
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
                 Boas práticas em manipulação de alimentos
               </p>
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800">
+              <div className="bpma-sidebar-user mt-3 rounded-lg px-3 py-2 text-xs">
                 <p className="font-semibold text-slate-800 dark:text-slate-100">{userName}</p>
                 <p className="text-slate-600 dark:text-slate-300">{userRoleLabel}</p>
               </div>
@@ -157,7 +153,7 @@ export function Sidebar({
         </div>
       ) : null}
 
-      <aside className="hidden w-80 shrink-0 border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 md:min-h-screen md:block">
+      <aside className="bpma-sidebar hidden w-80 shrink-0 border-r md:min-h-screen md:block">
         <div className="p-6">
           <Link href="/" className="block text-xl font-bold text-slate-900 dark:text-slate-100">
             BPMA App
@@ -165,7 +161,7 @@ export function Sidebar({
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
             Boas práticas em manipulação de alimentos
           </p>
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800">
+          <div className="bpma-sidebar-user mt-4 rounded-lg px-3 py-2 text-xs">
             <p className="font-semibold text-slate-800 dark:text-slate-100">{userName}</p>
             <p className="text-slate-600 dark:text-slate-300">{userRoleLabel}</p>
           </div>

@@ -72,7 +72,7 @@ export default async function HomePage() {
             <Link
               key={card.href}
               href={card.href}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              className="bpma-clickable-card"
             >
               <h2 className="font-semibold text-slate-900 dark:text-slate-100">{card.title}</h2>
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
@@ -99,7 +99,7 @@ export default async function HomePage() {
           <Link
             key={module.href}
             href={module.href}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+            className="bpma-clickable-card"
           >
             <h2 className="font-semibold text-slate-900 dark:text-slate-100">{module.name}</h2>
           </Link>
