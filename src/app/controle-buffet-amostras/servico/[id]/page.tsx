@@ -66,7 +66,7 @@ function getGuidelineByClassificacao(
     return "Regra: até 10°C (até 4h) | entre 10°C e 21°C (até 2h).";
   }
 
-  return "Regra: até 5°C (até 2h) para preparações cruas.";
+  return "Regra: temperatura ambiente registrada para rastreabilidade, sem regra automática de frio ou quente.";
 }
 
 export default async function ExecucaoServicoBuffetPage({

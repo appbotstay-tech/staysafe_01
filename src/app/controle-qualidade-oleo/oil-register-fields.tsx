@@ -2,9 +2,15 @@
 
 import { StatusQualidadeOleo } from "@prisma/client";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getStatusLabel, isTemperatureCritical, parseTemperatureInput } from "./utils";
+import {
+  getStatusLabel,
+  isTemperatureBelowOilStripMinimum,
+  isTemperatureCritical,
+  OIL_STRIP_TEMPERATURE_FIELD_MESSAGE,
+  parseTemperatureInput
+} from "./utils";
 import {
   findCanonicalOilStripRuleByLabel,
   getOilStripImageByLabel
@@ -34,6 +40,7 @@ export function OilRegisterFields({
   const [fitaSelecionada, setFitaSelecionada] = useState(defaultFita);
   const [temperaturaInput, setTemperaturaInput] = useState(defaultTemperatura);
   const [semUtilizacao, setSemUtilizacao] = useState(defaultSemUtilizacao);
+  const temperaturaInputRef = useRef<HTMLInputElement | null>(null);
 
   const optionMap = useMemo(() => {
     return new Map(options.map((option) => [option.rotulo, option]));
@@ -56,7 +63,15 @@ export function OilRegisterFields({
       : regraCanonicaSelecionada?.descricao ?? optionSelecionada?.descricao ?? "";
 
   const temperatura = semUtilizacao ? null : parseTemperatureInput(temperaturaInput);
+  const temperaturaAbaixoMinima =
+    temperatura !== null && isTemperatureBelowOilStripMinimum(temperatura);
   const temperaturaCritica = temperatura !== null && isTemperatureCritical(temperatura);
+
+  useEffect(() => {
+    temperaturaInputRef.current?.setCustomValidity(
+      temperaturaAbaixoMinima ? OIL_STRIP_TEMPERATURE_FIELD_MESSAGE : ""
+    );
+  }, [temperaturaAbaixoMinima]);
 
   return (
     <>
@@ -145,14 +160,17 @@ export function OilRegisterFields({
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Temperatura (°C) *
         <input
+          ref={temperaturaInputRef}
           type="text"
           name="temperatura"
           required={!semUtilizacao}
           inputMode="text"
           placeholder="Ex.: 175"
           value={temperaturaInput}
+          aria-invalid={temperaturaAbaixoMinima}
+          aria-describedby={temperaturaAbaixoMinima ? "temperatura-oleo-minima-error" : undefined}
           className={`${inputClassName} ${
-            temperaturaCritica
+            temperaturaAbaixoMinima || temperaturaCritica
               ? "border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
               : ""
           }`}
@@ -164,6 +182,14 @@ export function OilRegisterFields({
         {semUtilizacao ? (
           <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
             Temperatura não é exigida quando o equipamento não foi utilizado no período.
+          </span>
+        ) : null}
+        {temperaturaAbaixoMinima ? (
+          <span
+            id="temperatura-oleo-minima-error"
+            className="mt-1 block text-xs font-medium text-red-600 dark:text-red-300"
+          >
+            {OIL_STRIP_TEMPERATURE_FIELD_MESSAGE}
           </span>
         ) : null}
         {temperaturaCritica ? (

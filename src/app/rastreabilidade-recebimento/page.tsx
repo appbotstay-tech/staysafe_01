@@ -32,7 +32,7 @@ import {
   formatDateTimeDisplay,
   getCurrentSystemDateTime,
   getMonthDateRange,
-  getTodaySystemDate,
+  parseDateInput,
   parsePositiveInt
 } from "./utils";
 
@@ -55,6 +55,11 @@ const MONTH_OPTIONS = [
   { value: 10, label: "Outubro" },
   { value: 11, label: "Novembro" },
   { value: 12, label: "Dezembro" }
+];
+const PENDING_NOTE_STATUSES = [
+  StatusNotaRecebimento.PENDENTE,
+  StatusNotaRecebimento.IMPORTADA,
+  StatusNotaRecebimento.EM_CONFERENCIA
 ];
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -103,6 +108,16 @@ function canImportXml(role: string | null): boolean {
   return role === "DEV" || role === "GESTOR";
 }
 
+function parsePendingStatusFilter(value: string): StatusNotaRecebimento | null {
+  if (value === StatusNotaRecebimento.PENDENTE) return StatusNotaRecebimento.PENDENTE;
+  if (value === StatusNotaRecebimento.IMPORTADA) return StatusNotaRecebimento.IMPORTADA;
+  if (value === StatusNotaRecebimento.EM_CONFERENCIA) {
+    return StatusNotaRecebimento.EM_CONFERENCIA;
+  }
+
+  return null;
+}
+
 export default async function RastreabilidadeRecebimentoPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
@@ -122,11 +137,13 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const now = getCurrentSystemDateTime();
-  const todaySystemDate = getTodaySystemDate();
 
+  const filtroDataInicial = firstParam(params.filtroDataInicial).trim();
+  const filtroDataFinal = firstParam(params.filtroDataFinal).trim();
   const filtroFornecedor = firstParam(params.filtroFornecedor).trim();
   const filtroNotaFiscal = firstParam(params.filtroNotaFiscal).trim();
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
+  const filtroStatus = parsePendingStatusFilter(firstParam(params.filtroStatus).trim());
 
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
@@ -136,36 +153,40 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
       : now.getMonth() + 1;
   const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
 
-  const wherePendentesHoje: Prisma.RastreabilidadeRecebimentoNotaWhereInput = {
-    data: todaySystemDate,
-    statusNota: {
-      in: [
-        StatusNotaRecebimento.PENDENTE,
-        StatusNotaRecebimento.IMPORTADA,
-        StatusNotaRecebimento.EM_CONFERENCIA
-      ]
-    }
+  const whereNotasPendentes: Prisma.RastreabilidadeRecebimentoNotaWhereInput = {
+    statusNota: filtroStatus ?? { in: PENDING_NOTE_STATUSES }
   };
 
+  const dataInicialFiltro = parseDateInput(filtroDataInicial);
+  const dataFinalFiltro = parseDateInput(filtroDataFinal);
+
+  if (dataInicialFiltro && dataFinalFiltro) {
+    whereNotasPendentes.data = { gte: dataInicialFiltro, lte: dataFinalFiltro };
+  } else if (dataInicialFiltro) {
+    whereNotasPendentes.data = { gte: dataInicialFiltro };
+  } else if (dataFinalFiltro) {
+    whereNotasPendentes.data = { lte: dataFinalFiltro };
+  }
+
   if (filtroFornecedor) {
-    wherePendentesHoje.fornecedor = { contains: filtroFornecedor, mode: "insensitive" };
+    whereNotasPendentes.fornecedor = { contains: filtroFornecedor, mode: "insensitive" };
   }
 
   if (filtroNotaFiscal) {
-    wherePendentesHoje.notaFiscal = { contains: filtroNotaFiscal, mode: "insensitive" };
+    whereNotasPendentes.notaFiscal = { contains: filtroNotaFiscal, mode: "insensitive" };
   }
 
   if (filtroResponsavel) {
-    wherePendentesHoje.responsavelGeral = {
+    whereNotasPendentes.responsavelGeral = {
       contains: filtroResponsavel,
       mode: "insensitive"
     };
   }
 
   const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const [notasPendentesHoje, notasFechamento, fechamentoAtual] = await Promise.all([
+  const [notasPendentesConferencia, notasFechamento, fechamentoAtual] = await Promise.all([
     prisma.rastreabilidadeRecebimentoNota.findMany({
-      where: wherePendentesHoje,
+      where: whereNotasPendentes,
       include: {
         _count: {
           select: {
@@ -173,7 +194,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           }
         }
       },
-      orderBy: [{ createdAt: "desc" }]
+      orderBy: [{ data: "asc" }, { createdAt: "asc" }]
     }),
     prisma.rastreabilidadeRecebimentoNota.findMany({
       where: {
@@ -205,9 +226,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     fechamentoAtual?.status === StatusFechamentoRastreabilidadeRecebimento.ASSINADO;
 
   const paramsRetorno = new URLSearchParams();
+  if (filtroDataInicial) paramsRetorno.set("filtroDataInicial", filtroDataInicial);
+  if (filtroDataFinal) paramsRetorno.set("filtroDataFinal", filtroDataFinal);
   if (filtroFornecedor) paramsRetorno.set("filtroFornecedor", filtroFornecedor);
   if (filtroNotaFiscal) paramsRetorno.set("filtroNotaFiscal", filtroNotaFiscal);
   if (filtroResponsavel) paramsRetorno.set("filtroResponsavel", filtroResponsavel);
+  if (filtroStatus) paramsRetorno.set("filtroStatus", filtroStatus);
   paramsRetorno.set("fechamentoMes", String(fechamentoMes));
   paramsRetorno.set("fechamentoAno", String(fechamentoAno));
 
@@ -336,24 +360,42 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
 
       <section className={CARD_CLASS}>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Recebimentos do Dia
+          Notas Pendentes de Conferência
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Exibe apenas notas pendentes de {formatDateDisplay(todaySystemDate)}.
+          Exibindo notas pendentes de conferência, independentemente da data de importação.
         </p>
 
         {isFuncionario ? (
           <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            Exibindo somente as notas de hoje que aguardam conferência operacional.
+            Exibindo notas aguardando conferência operacional.
           </p>
         ) : (
           <form
             method="get"
-            className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800"
+            className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800"
           >
             <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
             <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
 
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Data Inicial
+              <input
+                type="date"
+                name="filtroDataInicial"
+                defaultValue={filtroDataInicial}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Data Final
+              <input
+                type="date"
+                name="filtroDataFinal"
+                defaultValue={filtroDataFinal}
+                className={INPUT_CLASS}
+              />
+            </label>
             <label className="text-sm text-slate-700 dark:text-slate-200">
               Fornecedor
               <input
@@ -381,8 +423,17 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                 className={INPUT_CLASS}
               />
             </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Status
+              <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
+                <option value="">Todos pendentes</option>
+                <option value={StatusNotaRecebimento.PENDENTE}>Pendente</option>
+                <option value={StatusNotaRecebimento.IMPORTADA}>Importada</option>
+                <option value={StatusNotaRecebimento.EM_CONFERENCIA}>Em Conferência</option>
+              </select>
+            </label>
 
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-wrap items-end gap-2 md:col-span-6">
               <button type="submit" className="btn-primary">
                 Aplicar Filtros
               </button>
@@ -407,14 +458,14 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {notasPendentesHoje.length === 0 ? (
+              {notasPendentesConferencia.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhuma nota pendente encontrada para hoje.
+                    Não há notas pendentes de conferência.
                   </td>
                 </tr>
               ) : (
-                notasPendentesHoje.map((nota) => (
+                notasPendentesConferencia.map((nota) => (
                   <tr key={nota.id}>
                     <td className="px-3 py-2">{formatDateDisplay(nota.data)}</td>
                     <td className="px-3 py-2">{nota.fornecedor}</td>
@@ -475,9 +526,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
         </h2>
 
         <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
+          <input type="hidden" name="filtroDataInicial" value={filtroDataInicial} />
+          <input type="hidden" name="filtroDataFinal" value={filtroDataFinal} />
           <input type="hidden" name="filtroFornecedor" value={filtroFornecedor} />
           <input type="hidden" name="filtroNotaFiscal" value={filtroNotaFiscal} />
           <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
+          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
 
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Mês

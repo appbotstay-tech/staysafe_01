@@ -25,6 +25,10 @@ import {
   getReportModule,
   type ReportModuleId
 } from "./report-definitions";
+import {
+  formatSifDisplayValue,
+  isSifNaValue
+} from "../rastreabilidade-recebimento/sif";
 
 export type ReportSearchParams = Record<string, string | string[] | undefined>;
 export type ReportColumn = { key: string; label: string };
@@ -136,6 +140,22 @@ function formatTemperature(value: number | null | undefined): string {
   return value === null || value === undefined ? "-" : `${String(value).replace(".", ",")} °C`;
 }
 
+function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4
+  });
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  });
+}
+
 function labelConformidade(value: ConformidadeRecebimento | null | undefined): string {
   if (value === ConformidadeRecebimento.NAO_CONFORME) return "Não conforme";
   if (value === ConformidadeRecebimento.CONFORME) return "Conforme";
@@ -186,9 +206,9 @@ function labelStatusRecebimento(value: StatusRecebimento): string {
 }
 
 function labelClassificacao(value: ClassificacaoItemBuffetAmostra): string {
-  if (value === ClassificacaoItemBuffetAmostra.FRIO) return "Frio";
-  if (value === ClassificacaoItemBuffetAmostra.FRIO_CRU) return "Frio cru";
-  return "Quente";
+  if (value === ClassificacaoItemBuffetAmostra.FRIO) return "Frios";
+  if (value === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE) return "Temperatura Ambiente";
+  return "Quentes";
 }
 
 function labelStatusBuffet(value: StatusItemBuffetAmostra): string {
@@ -382,8 +402,7 @@ async function generateRecebimentoReport(moduleId: ReportModuleId, reportId: str
   const temperaturaFiltro = parseNumber(getParam(params, "temperatura"));
   const filtered = records.filter((item) => {
     const statusNota = item.nota?.statusNota ?? StatusNotaRecebimento.PENDENTE;
-    const sifNormalized = normalize(item.sif);
-    const sifIsNa = sifNormalized === "na" || sifNormalized === "n/a" || sifNormalized.includes("não se aplica") || sifNormalized.includes("nao se aplica");
+    const sifIsNa = isSifNaValue(item.sif);
     if (reportId === "notas-pendentes" && statusNota === StatusNotaRecebimento.FINALIZADA) return false;
     if (reportId === "produtos-nao-conformes" && item.statusGeral !== StatusRecebimento.NAO_CONFORME) return false;
     if (reportId === "produtos-sif-na" && !hasText(item.sif) && !sifIsNa) return false;
@@ -391,7 +410,7 @@ async function generateRecebimentoReport(moduleId: ReportModuleId, reportId: str
     if (!includesText(item.notaFiscal, getParam(params, "notaFiscal"))) return false;
     if (!includesText(item.produto, getParam(params, "produto"))) return false;
     if (!includesText(item.lote, getParam(params, "lote"))) return false;
-    if (!includesText(item.sif, getParam(params, "sif"))) return false;
+    if (!includesText(formatSifDisplayValue(item.sif, ""), getParam(params, "sif"))) return false;
     if (!sameNumber(item.temperatura, temperaturaFiltro)) return false;
     if (!matchesYesNo(sifIsNa, getParam(params, "sifNa"))) return false;
     const transporte = getParam(params, "transporte");
@@ -414,8 +433,8 @@ async function generateRecebimentoReport(moduleId: ReportModuleId, reportId: str
       { label: "Não conformes", value: filtered.filter((item) => item.statusGeral === StatusRecebimento.NAO_CONFORME).length },
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length }
     ],
-    columns: columns([["dataNota", "Data da nota"], ["fornecedor", "Fornecedor"], ["notaFiscal", "Número da nota"], ["produto", "Produto"], ["lote", "Lote"], ["fabricacao", "Fabricação"], ["validade", "Validade"], ["sif", "SIF"], ["temperatura", "Temperatura"], ["transporte", "Transporte"], ["aspecto", "Aspecto"], ["embalagem", "Embalagem"], ["acaoCorretiva", "Ação corretiva"], ["responsavel", "Responsável"], ["status", "Status"]]),
-    rows: filtered.map((item) => ({ dataNota: formatDateDisplay(item.data), fornecedor: item.fornecedor, notaFiscal: item.notaFiscal, produto: item.produto, lote: valueOrDash(item.lote), fabricacao: formatDateDisplay(item.dataFabricacao), validade: formatDateDisplay(item.dataValidade), sif: valueOrDash(item.sif), temperatura: formatTemperature(item.temperatura), transporte: labelConformidade(item.transporteEntregador), aspecto: labelConformidade(item.aspectoSensorial), embalagem: labelConformidade(item.embalagem), acaoCorretiva: valueOrDash(item.acaoCorretiva), responsavel: valueOrDash(item.responsavelRecebimento), status: `${labelStatusRecebimento(item.statusGeral)} / Nota ${labelStatusNota(item.nota?.statusNota)}` }))
+    columns: columns([["dataNota", "Data da nota"], ["fornecedor", "Fornecedor"], ["notaFiscal", "Número da nota"], ["produto", "Produto"], ["codigoProduto", "Código produto"], ["ncm", "NCM"], ["cfop", "CFOP"], ["quantidadeComprada", "Quantidade comprada"], ["unidadeMedidaCompra", "Unidade"], ["valorUnitario", "Valor unitário"], ["valorTotalItem", "Valor total item"], ["lote", "Lote"], ["fabricacao", "Fabricação"], ["validade", "Validade"], ["sif", "SIF"], ["temperatura", "Temperatura"], ["transporte", "Transporte"], ["aspecto", "Aspecto"], ["embalagem", "Embalagem"], ["acaoCorretiva", "Ação corretiva"], ["responsavel", "Responsável"], ["status", "Status"]]),
+    rows: filtered.map((item) => ({ dataNota: formatDateDisplay(item.data), fornecedor: item.fornecedor, notaFiscal: item.notaFiscal, produto: item.produto, codigoProduto: valueOrDash(item.codigoProdutoXml), ncm: valueOrDash(item.ncm), cfop: valueOrDash(item.cfop), quantidadeComprada: formatNumber(item.quantidadeComprada), unidadeMedidaCompra: valueOrDash(item.unidadeMedidaCompra), valorUnitario: formatCurrency(item.valorUnitario), valorTotalItem: formatCurrency(item.valorTotalItem), lote: valueOrDash(item.lote), fabricacao: formatDateDisplay(item.dataFabricacao), validade: formatDateDisplay(item.dataValidade), sif: formatSifDisplayValue(item.sif), temperatura: formatTemperature(item.temperatura), transporte: labelConformidade(item.transporteEntregador), aspecto: labelConformidade(item.aspectoSensorial), embalagem: labelConformidade(item.embalagem), acaoCorretiva: valueOrDash(item.acaoCorretiva), responsavel: valueOrDash(item.responsavelRecebimento), status: `${labelStatusRecebimento(item.statusGeral)} / Nota ${labelStatusNota(item.nota?.statusNota)}` }))
   });
 }
 

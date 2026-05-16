@@ -26,6 +26,7 @@ import {
   hasAcaoCorretivaWithSameName,
   hasItemWithSameName,
   hasServicoWithSameName,
+  INVALID_ITEM_CLASSIFICATION_MESSAGE,
   parseItemClassification,
   sanitizeCatalogValue
 } from "./catalog";
@@ -563,7 +564,7 @@ export async function createExtraItemStateAction(
     }
 
     if (!nome || !classificacao) {
-      throw new Error("Informe nome e classificação válidos para o item extra.");
+      throw new Error(!nome ? "Informe o nome do item extra." : INVALID_ITEM_CLASSIFICATION_MESSAGE);
     }
 
     await ensurePeriodIsOpen(data);
@@ -1079,7 +1080,7 @@ export async function createItemAction(formData: FormData) {
     const servicoIds = getInputNumberList(formData, "servicoIds");
 
     if (!nome || !classificacao) {
-      throw new Error("Informe nome e classificação válidos para o item.");
+      throw new Error(!nome ? "Informe o nome do item." : INVALID_ITEM_CLASSIFICATION_MESSAGE);
     }
 
     if (servicoIds.length === 0) {
@@ -1156,7 +1157,7 @@ export async function updateItemAction(formData: FormData) {
     const servicoIds = getInputNumberList(formData, "servicoIds");
 
     if (!nome || !classificacao) {
-      throw new Error("Informe nome e classificação válidos para o item.");
+      throw new Error(!nome ? "Informe o nome do item." : INVALID_ITEM_CLASSIFICATION_MESSAGE);
     }
 
     if (servicoIds.length === 0) {

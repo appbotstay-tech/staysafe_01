@@ -32,7 +32,9 @@ import {
   getMonthDateRange,
   getMonthYear,
   getTodaySystemDate,
+  isTemperatureBelowOilStripMinimum,
   isTemperatureCritical,
+  OIL_STRIP_TEMPERATURE_SAVE_MESSAGE,
   parsePositiveInt,
   parseTemperatureInput
 } from "./utils";
@@ -40,6 +42,12 @@ import {
 const MODULE_PATH = "/controle-qualidade-oleo";
 const HISTORY_PATH = "/controle-qualidade-oleo/historico";
 const OPTIONS_PATH = "/controle-qualidade-oleo/opcoes";
+const REGISTRO_FORM_PARAM_KEYS = [
+  "formFita",
+  "formTemperatura",
+  "formSemUtilizacao",
+  "formObservacao"
+] as const;
 
 type FeedbackType = "success" | "error";
 
@@ -74,19 +82,41 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function redirectWithFeedback(
   returnTo: string,
   feedbackType: FeedbackType,
-  feedback: string
+  feedback: string,
+  formState?: Record<(typeof REGISTRO_FORM_PARAM_KEYS)[number], string>
 ): never {
   const url = new URL(returnTo, "http://localhost");
+
+  for (const key of REGISTRO_FORM_PARAM_KEYS) {
+    url.searchParams.delete(key);
+  }
+
   if (feedbackType === "success") {
     url.searchParams.delete("new");
     url.searchParams.delete("editId");
     url.searchParams.delete("editOptionId");
     url.searchParams.delete("deleteId");
+  } else if (formState) {
+    for (const key of REGISTRO_FORM_PARAM_KEYS) {
+      url.searchParams.set(key, formState[key]);
+    }
   }
+
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);
 
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
+}
+
+function getRegistroFormState(
+  formData: FormData
+): Record<(typeof REGISTRO_FORM_PARAM_KEYS)[number], string> {
+  return {
+    formFita: getInputValue(formData, "fitaOleo"),
+    formTemperatura: getInputValue(formData, "temperatura"),
+    formSemUtilizacao: getInputValue(formData, "semUtilizacao") === "true" ? "true" : "false",
+    formObservacao: getInputValue(formData, "observacao")
+  };
 }
 
 function revalidateModulePaths() {
@@ -141,6 +171,9 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
   if (temperatura === null) {
     throw new Error("Informe uma temperatura válida.");
   }
+  if (isTemperatureBelowOilStripMinimum(temperatura)) {
+    throw new Error(OIL_STRIP_TEMPERATURE_SAVE_MESSAGE);
+  }
 
   return {
     fitaOleo: fitaOption.rotulo,
@@ -184,7 +217,8 @@ export async function createRegistroAction(formData: FormData) {
     redirectWithFeedback(
       returnTo,
       "error",
-      getErrorMessage(error, "Não foi possível salvar o registro. Verifique os campos obrigatórios.")
+      getErrorMessage(error, "Não foi possível salvar o registro. Verifique os campos obrigatórios."),
+      getRegistroFormState(formData)
     );
   }
 }
@@ -227,7 +261,8 @@ export async function updateRegistroAction(formData: FormData) {
     redirectWithFeedback(
       returnTo,
       "error",
-      getErrorMessage(error, "Não foi possível salvar o registro. Verifique os campos obrigatórios.")
+      getErrorMessage(error, "Não foi possível salvar o registro. Verifique os campos obrigatórios."),
+      getRegistroFormState(formData)
     );
   }
 }

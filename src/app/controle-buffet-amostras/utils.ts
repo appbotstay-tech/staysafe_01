@@ -166,14 +166,14 @@ export function getClassificacaoLabel(
   classificacao: ClassificacaoItemBuffetAmostra
 ): string {
   if (classificacao === "QUENTE") {
-    return "Quente";
+    return "Quentes";
   }
 
   if (classificacao === "FRIO") {
-    return "Frio";
+    return "Frios";
   }
 
-  return "Frio Cru";
+  return "Temperatura Ambiente";
 }
 
 export function getStatusItemLabel(status: StatusItemBuffetAmostra): string {
@@ -258,18 +258,11 @@ export function avaliarTemperaturaBuffet(
     };
   }
 
-  if (temperaturaReferencia <= 5) {
-    return {
-      status: "CONFORME",
-      orientacao: "Até 5°C: exposição permitida por no máximo 2 horas para alimento cru.",
-      exigeAcaoCorretiva: false
-    };
-  }
-
   return {
-    status: "CRITICO",
-    orientacao: "Acima de 5°C: fora do padrão para preparações com carnes e pescados crus.",
-    exigeAcaoCorretiva: true
+    status: "CONFORME",
+    orientacao:
+      "Temperatura ambiente: registro realizado para rastreabilidade, sem regra automática de frio ou quente.",
+    exigeAcaoCorretiva: false
   };
 }
 

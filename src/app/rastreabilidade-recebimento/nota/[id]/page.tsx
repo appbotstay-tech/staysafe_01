@@ -2,14 +2,12 @@ import { StatusNotaRecebimento } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 
 import {
   deleteNoteAction,
-  deleteItemAction,
-  finalizeNotaAction
+  deleteItemAction
 } from "../../actions";
 import { DeleteNoteModal } from "../../delete-note-modal";
 import { ThemeToggleButton } from "../../theme-toggle-button";
@@ -19,6 +17,7 @@ import {
   getMonthYear,
   parsePositiveInt
 } from "../../utils";
+import { formatSifDisplayValue } from "../../sif";
 import { NoteItemsForm, type NoteItemFormRow } from "./note-items-form";
 
 const CARD_CLASS =
@@ -75,19 +74,6 @@ function canDeleteRecebimentoNote(role: string | undefined): boolean {
   return role === "DEV" || role === "GESTOR";
 }
 
-function formatSifInputValue(value: string | null): string {
-  if (!value) {
-    return "NA";
-  }
-
-  const normalized = value.trim().toLocaleLowerCase("pt-BR");
-  if (normalized === "não se aplica" || normalized === "nao se aplica") {
-    return "NA";
-  }
-
-  return value;
-}
-
 function formatCnpj(value: string): string {
   const digits = value.replace(/\D/g, "");
   if (digits.length !== 14) {
@@ -104,6 +90,17 @@ function formatChaveNfe(value: string): string {
   }
 
   return digits.match(/.{1,4}/g)?.join(" ") ?? value;
+}
+
+function formatXmlNumber(value: number | null): string {
+  if (value === null) {
+    return "";
+  }
+
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4
+  });
 }
 
 export default async function NotaRecebimentoPage({ params, searchParams }: PageProps) {
@@ -148,8 +145,8 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const feedback = firstParam(query.feedback).trim();
   const feedbackType = firstParam(query.feedbackType) === "error" ? "error" : "success";
   const finalizarSelecionado = firstParam(query.finalizar) === "1";
-  const modalError = feedback && feedbackType === "error" ? feedback : "";
   const finalizarReturnTo = `${returnTo}?finalizar=1`;
+  const noteItemsFormId = `note-items-form-${note.id}`;
   const identificadoresFiscais = [
     { label: "Número da Nota", value: note.notaFiscal },
     note.serieNota ? { label: "Série da Nota", value: note.serieNota } : null,
@@ -161,10 +158,15 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const noteItemRows: NoteItemFormRow[] = note.itens.map((item) => ({
     id: item.id,
     produto: item.produto,
+    codigoProdutoXml: item.codigoProdutoXml ?? "",
+    ncm: item.ncm ?? "",
+    cfop: item.cfop ?? "",
+    quantidadeComprada: formatXmlNumber(item.quantidadeComprada),
+    unidadeMedidaCompra: item.unidadeMedidaCompra ?? "",
     lote: item.lote ?? "",
     dataFabricacao: item.dataFabricacao ? formatDateInput(item.dataFabricacao) : "",
     dataValidade: item.dataValidade ? formatDateInput(item.dataValidade) : "",
-    sif: formatSifInputValue(item.sif),
+    sif: formatSifDisplayValue(item.sif, ""),
     temperatura:
       item.temperatura !== null ? String(item.temperatura).replace(".", ",") : "",
     transporteEntregador: item.transporteEntregador ?? "",
@@ -294,6 +296,10 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
               canDeleteItems={canDeleteItems}
               responsavelLogado={responsavelLogado}
               inputClassName={INPUT_CLASS}
+              formId={noteItemsFormId}
+              finalizarSelecionado={finalizarSelecionado}
+              noteNumber={note.notaFiscal}
+              itemCount={note.itens.length}
             />
 
             {canDeleteItems
@@ -321,39 +327,6 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
         )}
       </section>
 
-      {!readOnlyMode && finalizarSelecionado ? (
-        <ActionModal
-          title="Finalizar Conferência"
-          cancelHref={returnTo}
-          description={
-            <p>
-              Nota <strong>{note.notaFiscal}</strong> com {note.itens.length} item(ns).
-            </p>
-          }
-        >
-          {modalError ? (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-              {modalError}
-            </p>
-          ) : null}
-          <form action={finalizeNotaAction}>
-            <input type="hidden" name="notaId" value={note.id} />
-            <input type="hidden" name="returnTo" value={finalizarReturnTo} />
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Confirme a finalização após revisar todos os itens da nota. A conferência completa
-              permanece na tela própria; este modal apenas confirma a ação pontual.
-            </p>
-            <ModalActions>
-              <Link href={returnTo} className="btn-secondary text-center">
-                Cancelar
-              </Link>
-              <button type="submit" className="btn-primary">
-                Confirmar Finalização
-              </button>
-            </ModalActions>
-          </form>
-        </ActionModal>
-      ) : null}
     </div>
   );
 }

@@ -126,7 +126,7 @@ export const FILTER_DEFINITIONS: Record<ReportFilterKey, ReportFilterDefinition>
   servico: { key: "servico", label: "Serviço", type: "text" },
   item: { key: "item", label: "Item / produto", type: "text" },
   classificacao: { key: "classificacao", label: "Classificação", type: "select", options: [
-    { value: "", label: "Todas" }, { value: "QUENTE", label: "Quente" }, { value: "FRIO", label: "Frio" }, { value: "FRIO_CRU", label: "Frio cru" }
+    { value: "", label: "Todas" }, { value: "QUENTE", label: "Quentes" }, { value: "FRIO", label: "Frios" }, { value: "TEMPERATURA_AMBIENTE", label: "Temperatura Ambiente" }
   ] },
   itemExtra: { key: "itemExtra", label: "Tipo de item", type: "select", options: [
     { value: "", label: "Todos" }, { value: "PADRAO", label: "Item padrão" }, { value: "EXTRA", label: "Item extra" }

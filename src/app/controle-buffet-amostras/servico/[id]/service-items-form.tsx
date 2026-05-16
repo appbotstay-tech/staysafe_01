@@ -139,9 +139,9 @@ function AddExtraItemModal({
               <label className="text-sm text-slate-700 dark:text-slate-200">
                 Classificação *
                 <select name="classificacao" required className="bpma-input">
-                  <option value="QUENTE">Quente</option>
-                  <option value="FRIO">Frio</option>
-                  <option value="FRIO_CRU">Frio Cru</option>
+                  <option value="QUENTE">Quentes</option>
+                  <option value="FRIO">Frios</option>
+                  <option value="TEMPERATURA_AMBIENTE">Temperatura Ambiente</option>
                 </select>
               </label>
 

@@ -2,21 +2,30 @@
 
 import { useActionState, useEffect } from "react";
 import { useFormStatus } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { StatusRecebimento } from "@prisma/client";
 
 import { saveNotaItemsStateAction } from "../../actions";
+import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
+import { SifInput } from "../../sif-input";
 import { ConformidadeBadge } from "../../status-badges";
 
 type ActionState = {
   status: "idle" | "success" | "error";
   message: string;
   invalidRowKey?: string;
+  invalidField?: string;
 };
 
 export type NoteItemFormRow = {
   id: number;
   produto: string;
+  codigoProdutoXml: string;
+  ncm: string;
+  cfop: string;
+  quantidadeComprada: string;
+  unidadeMedidaCompra: string;
   lote: string;
   dataFabricacao: string;
   dataValidade: string;
@@ -40,6 +49,10 @@ type NoteItemsFormProps = {
   canDeleteItems: boolean;
   responsavelLogado: string;
   inputClassName: string;
+  formId: string;
+  finalizarSelecionado: boolean;
+  noteNumber: string;
+  itemCount: number;
 };
 
 const INITIAL_STATE: ActionState = {
@@ -51,9 +64,10 @@ const TABLE_HEAD_CLASS =
   "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-200";
 const TABLE_CELL_CLASS = "px-2 py-1.5 align-top";
 const PRODUCT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[13rem]`;
+const INFO_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[5.5rem]`;
 const LOTE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[7rem]`;
 const DATE_TABLE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.75rem] max-w-[8.75rem]`;
-const SIF_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[5.5rem]`;
+const SIF_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[11rem]`;
 const TEMPERATURE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[6.75rem]`;
 const SELECT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.5rem]`;
 const TEXT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[10rem]`;
@@ -62,13 +76,26 @@ const STATUS_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[7rem] whitespace-nowrap`;
 const ACTION_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[6.5rem]`;
 const MOBILE_FIELD_LABEL_CLASS = "sr-only";
 const DATE_INPUT_CLASS = "bpma-date-input";
+const FIELD_ERROR_CLASS =
+  "border-red-400 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-500 dark:border-red-700 dark:bg-red-950 dark:text-red-200";
+const LOTE_REQUIRED_MESSAGE = "O campo Lote é obrigatório.";
 
 function SaveButton() {
   const { pending } = useFormStatus();
 
   return (
-    <button type="submit" className="btn-primary" disabled={pending}>
+    <button type="submit" name="intent" value="save" className="btn-primary" disabled={pending}>
       {pending ? "Salvando..." : "Salvar Itens da Nota"}
+    </button>
+  );
+}
+
+function FinalizeButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button type="submit" name="intent" value="finalize" className="btn-primary" disabled={pending}>
+      {pending ? "Finalizando..." : "Confirmar Finalização"}
     </button>
   );
 }
@@ -93,7 +120,11 @@ export function NoteItemsForm({
   xmlProductLocked,
   canDeleteItems,
   responsavelLogado,
-  inputClassName
+  inputClassName,
+  formId,
+  finalizarSelecionado,
+  noteNumber,
+  itemCount
 }: NoteItemsFormProps) {
   const router = useRouter();
   const [state, formAction] = useActionState(saveNotaItemsStateAction, INITIAL_STATE);
@@ -118,19 +149,21 @@ export function NoteItemsForm({
         </div>
       ) : null}
 
-      <form action={formAction}>
+      <form id={formId} action={formAction}>
         <input type="hidden" name="notaId" value={String(notaId)} />
         <input type="hidden" name="returnTo" value={returnTo} />
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-          <table className="min-w-[1240px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+          <table className="min-w-[1420px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-left dark:bg-slate-800">
               <tr>
                 <th className={TABLE_HEAD_CLASS}>Produto</th>
+                <th className={TABLE_HEAD_CLASS}>Qtd.</th>
+                <th className={TABLE_HEAD_CLASS}>Unid.</th>
                 <th className={TABLE_HEAD_CLASS}>Lote *</th>
                 <th className={TABLE_HEAD_CLASS}>Data de Fabricação *</th>
                 <th className={TABLE_HEAD_CLASS}>Validade *</th>
-                <th className={TABLE_HEAD_CLASS}>SIF</th>
+                <th className={TABLE_HEAD_CLASS}>SIF *</th>
                 <th className={TABLE_HEAD_CLASS}>Temperatura *</th>
                 <th className={TABLE_HEAD_CLASS}>Transporte *</th>
                 <th className={TABLE_HEAD_CLASS}>Aspecto *</th>
@@ -146,6 +179,9 @@ export function NoteItemsForm({
               {rows.map((item) => {
                 const rowKey = `item-${item.id}`;
                 const invalid = state.invalidRowKey === rowKey;
+                const invalidLote = invalid && state.invalidField === "lote";
+                const invalidSif = invalid && state.invalidField === "sif";
+                const loteErrorId = `${rowKey}-lote-error`;
 
                 return (
                   <tr
@@ -162,6 +198,30 @@ export function NoteItemsForm({
                         disabled={readOnlyMode || xmlProductLocked}
                         className={inputClassName}
                       />
+                      {item.codigoProdutoXml || item.ncm || item.cfop ? (
+                        <div className="mt-1 space-y-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                          {item.codigoProdutoXml ? <p>Cód.: {item.codigoProdutoXml}</p> : null}
+                          {item.ncm || item.cfop ? (
+                            <p>
+                              {item.ncm ? `NCM: ${item.ncm}` : ""}
+                              {item.ncm && item.cfop ? " | " : ""}
+                              {item.cfop ? `CFOP: ${item.cfop}` : ""}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className={INFO_CELL_CLASS}>
+                      <span className={MOBILE_FIELD_LABEL_CLASS}>Quantidade comprada</span>
+                      <div className="bpma-readonly-field">
+                        {item.quantidadeComprada || "-"}
+                      </div>
+                    </td>
+                    <td className={INFO_CELL_CLASS}>
+                      <span className={MOBILE_FIELD_LABEL_CLASS}>Unidade de medida</span>
+                      <div className="bpma-readonly-field">
+                        {item.unidadeMedidaCompra || "-"}
+                      </div>
                     </td>
                     <td className={LOTE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Lote *</span>
@@ -170,9 +230,30 @@ export function NoteItemsForm({
                         name={`${rowKey}-lote`}
                         defaultValue={item.lote}
                         required
+                        pattern=".*\S.*"
+                        title={LOTE_REQUIRED_MESSAGE}
+                        aria-invalid={invalidLote}
+                        aria-describedby={invalidLote ? loteErrorId : undefined}
                         disabled={readOnlyMode}
-                        className={inputClassName}
+                        className={`${inputClassName} ${invalidLote ? FIELD_ERROR_CLASS : ""}`}
+                        onInvalid={(event) => {
+                          event.currentTarget.setCustomValidity(LOTE_REQUIRED_MESSAGE);
+                        }}
+                        onInput={(event) => {
+                          event.currentTarget.setCustomValidity("");
+                        }}
+                        onBlur={(event) => {
+                          event.currentTarget.value = event.currentTarget.value.trim();
+                        }}
                       />
+                      {invalidLote ? (
+                        <span
+                          id={loteErrorId}
+                          className="mt-1 block text-xs font-medium text-red-600 dark:text-red-300"
+                        >
+                          {LOTE_REQUIRED_MESSAGE}
+                        </span>
+                      ) : null}
                     </td>
                     <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Data de Fabricação *</span>
@@ -198,14 +279,14 @@ export function NoteItemsForm({
                     </td>
                     <td className={SIF_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>SIF *</span>
-                      <input
-                        type="text"
+                      <SifInput
                         name={`${rowKey}-sif`}
                         defaultValue={item.sif}
                         list="sif-opcoes"
-                        required
                         disabled={readOnlyMode}
                         className={inputClassName}
+                        ariaLabel={`SIF do item ${item.produto}`}
+                        serverError={invalidSif ? SIF_INPUT_REQUIRED_MESSAGE : ""}
                       />
                     </td>
                     <td className={TEMPERATURE_CELL_CLASS}>
@@ -321,6 +402,54 @@ export function NoteItemsForm({
         {!readOnlyMode ? (
           <div className="mt-4 btn-group">
             <SaveButton />
+          </div>
+        ) : null}
+
+        {!readOnlyMode && finalizarSelecionado ? (
+          <div
+            className="bpma-modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Finalizar Conferência"
+          >
+            <section className="bpma-modal-panel max-w-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    Finalizar Conferência
+                  </h2>
+                  <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    <p>
+                      Nota <strong>{noteNumber}</strong> com {itemCount} item(ns).
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={returnTo}
+                  className="btn-secondary shrink-0"
+                  aria-label="Fechar Finalizar Conferência"
+                >
+                  Fechar
+                </Link>
+              </div>
+              <div className="mt-4">
+                {state.status === "error" && state.message ? (
+                  <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                    {state.message}
+                  </p>
+                ) : null}
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Confirme a finalização após revisar todos os itens da nota. Os campos preenchidos
+                  nesta tela serão salvos junto com a finalização.
+                </p>
+                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Link href={returnTo} className="btn-secondary text-center">
+                    Cancelar
+                  </Link>
+                  <FinalizeButton />
+                </div>
+              </div>
+            </section>
           </div>
         ) : null}
       </form>

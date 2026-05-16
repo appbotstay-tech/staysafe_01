@@ -1,4 +1,9 @@
 const MINUTE_IN_MS = 60 * 1000;
+export const MIN_OIL_STRIP_TEMPERATURE_CELSIUS = 120;
+export const OIL_STRIP_TEMPERATURE_FIELD_MESSAGE =
+  "Temperatura mínima para leitura da fita: 120°C.";
+export const OIL_STRIP_TEMPERATURE_SAVE_MESSAGE =
+  "Não foi possível salvar. A temperatura informada está abaixo de 120°C, valor mínimo para leitura da fita.";
 
 export type StatusOleo =
   | "ADEQUADO"
@@ -180,4 +185,8 @@ export function getStatusLabel(status: StatusOleo): string {
 
 export function isTemperatureCritical(temperatura: number): boolean {
   return temperatura > 180;
+}
+
+export function isTemperatureBelowOilStripMinimum(temperatura: number): boolean {
+  return temperatura < MIN_OIL_STRIP_TEMPERATURE_CELSIUS;
 }

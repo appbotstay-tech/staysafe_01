@@ -41,11 +41,14 @@ import {
   parsePositiveInt,
   parseTemperatureInput
 } from "./utils";
+import {
+  normalizeSifValue,
+  SIF_BACKEND_REQUIRED_MESSAGE
+} from "./sif";
 
 const MODULE_PATH = "/rastreabilidade-recebimento";
 const DUPLICATE_NFE_MESSAGE =
   "Esta nota fiscal já foi importada anteriormente e não pode ser cadastrada novamente.";
-const SIF_NA_VALUE = "NA";
 
 function canImportXmlAsAdmin(role: UserRole): boolean {
   return role === "DEV" || role === "GESTOR";
@@ -64,6 +67,7 @@ type FormActionState = {
   status: "idle" | "success" | "error";
   message: string;
   invalidRowKey?: string;
+  invalidField?: string;
 };
 
 const FORM_ACTION_INITIAL_STATE: FormActionState = {
@@ -110,6 +114,16 @@ type ValidatedItemPayload = {
   statusGeral: StatusRecebimento;
 };
 
+class FieldValidationError extends Error {
+  invalidField: string;
+
+  constructor(message: string, invalidField: string) {
+    super(message);
+    this.name = "FieldValidationError";
+    this.invalidField = invalidField;
+  }
+}
+
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -140,6 +154,19 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "Não foi possível processar a operação.";
+}
+
+function getInvalidField(error: unknown): string | undefined {
+  if (error instanceof FieldValidationError) {
+    return error.invalidField;
+  }
+
+  const message = getErrorMessage(error).toLocaleLowerCase("pt-BR");
+  if (message.includes("sif")) {
+    return "sif";
+  }
+
+  return undefined;
 }
 
 function buildFiscalIdentifier(params: {
@@ -292,22 +319,6 @@ function parseRequiredTemperature(value: string): number {
   return parsed;
 }
 
-function normalizeSifValue(value: string): string {
-  const sifNormalizado = value.trim();
-  const sifLower = sifNormalizado.toLocaleLowerCase("pt-BR");
-
-  if (
-    sifNormalizado === "__NAO_APLICA__" ||
-    sifLower === "na" ||
-    sifLower === "não se aplica" ||
-    sifLower === "nao se aplica"
-  ) {
-    return SIF_NA_VALUE;
-  }
-
-  return sifNormalizado;
-}
-
 function validateAndBuildItemPayload(
   input: ItemInputValues,
   categories: CategoryItem[],
@@ -318,12 +329,12 @@ function validateAndBuildItemPayload(
   }
 
   if (!input.lote) {
-    throw new Error("O campo Lote é obrigatório.");
+    throw new FieldValidationError("O campo Lote é obrigatório.", "lote");
   }
 
   const sifNormalizado = input.sif.trim();
   if (!sifNormalizado) {
-    throw new Error("O campo SIF é obrigatório. Se não se aplicar, informe NA.");
+    throw new FieldValidationError(SIF_BACKEND_REQUIRED_MESSAGE, "sif");
   }
   const sifValue = normalizeSifValue(sifNormalizado);
 
@@ -500,6 +511,16 @@ export async function importXmlAction(formData: FormData) {
             notaId: note.id,
             data,
             produto: item.produto,
+            codigoProdutoXml: item.codigoProdutoXml,
+            ncm: item.ncm,
+            cfop: item.cfop,
+            quantidadeComprada: item.quantidadeComprada,
+            unidadeMedidaCompra: item.unidadeMedidaCompra,
+            valorUnitario: item.valorUnitario,
+            valorTotalItem: item.valorTotalItem,
+            quantidadeTributavel: item.quantidadeTributavel,
+            unidadeMedidaTributavel: item.unidadeMedidaTributavel,
+            valorUnitarioTributavel: item.valorUnitarioTributavel,
             fornecedor: parsed.fornecedor,
             notaFiscal: parsed.notaFiscal,
             lote: item.lote,
@@ -531,76 +552,99 @@ export async function importXmlAction(formData: FormData) {
   }
 }
 
+async function createManualNoteFromForm(formData: FormData): Promise<number> {
+  const actor = await getCurrentUserForAction();
+  if (!canCreateManualReceiving(actor.perfil)) {
+    throw new Error("Seu perfil não possui permissão para criar recebimento manual.");
+  }
+
+  const fornecedor = getInputValue(formData, "fornecedor");
+  const notaFiscal = getInputValue(formData, "notaFiscal");
+
+  if (!fornecedor || !notaFiscal) {
+    throw new Error("Fornecedor e Nota Fiscal são obrigatórios.");
+  }
+
+  const data = getTodaySystemDate();
+  const { mes, ano } = getMonthYear(data);
+  if (await isMonthSigned(mes, ano)) {
+    throw new Error(
+      `O mês ${String(mes).padStart(2, "0")}/${ano} já está fechado e não aceita novos registros.`
+    );
+  }
+
+  const categories = await getActiveCategories();
+  const itemPayload = validateAndBuildItemPayload(
+    {
+      produto: getInputValue(formData, "produto"),
+      lote: getInputValue(formData, "lote"),
+      dataFabricacao: getInputValue(formData, "dataFabricacao"),
+      dataValidade: getInputValue(formData, "dataValidade"),
+      sif: getInputValue(formData, "sif"),
+      temperatura: getInputValue(formData, "temperatura"),
+      transporteEntregador: getInputValue(formData, "transporteEntregador"),
+      aspectoSensorial: getInputValue(formData, "aspectoSensorial"),
+      embalagem: getInputValue(formData, "embalagem"),
+      acaoCorretiva: getInputValue(formData, "acaoCorretiva"),
+      observacoes: getInputValue(formData, "observacoes")
+    },
+    categories,
+    actor.nomeCompleto
+  );
+
+  const note = await prisma.rastreabilidadeRecebimentoNota.create({
+    data: {
+      data,
+      fornecedor,
+      notaFiscal,
+      statusNota: StatusNotaRecebimento.EM_CONFERENCIA,
+      origemXml: false,
+      responsavelGeral: actor.nomeCompleto
+    }
+  });
+
+  await prisma.rastreabilidadeRecebimentoRegistro.create({
+    data: {
+      ...itemPayload,
+      notaId: note.id,
+      data,
+      fornecedor,
+      notaFiscal,
+      origemXml: false
+    }
+  });
+
+  return note.id;
+}
+
 export async function createManualNoteAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    const actor = await getCurrentUserForAction();
-    if (!canCreateManualReceiving(actor.perfil)) {
-      throw new Error("Seu perfil não possui permissão para criar recebimento manual.");
-    }
-
-    const fornecedor = getInputValue(formData, "fornecedor");
-    const notaFiscal = getInputValue(formData, "notaFiscal");
-
-    if (!fornecedor || !notaFiscal) {
-      throw new Error("Fornecedor e Nota Fiscal são obrigatórios.");
-    }
-
-    const data = getTodaySystemDate();
-    const { mes, ano } = getMonthYear(data);
-    if (await isMonthSigned(mes, ano)) {
-      throw new Error(
-        `O mês ${String(mes).padStart(2, "0")}/${ano} já está fechado e não aceita novos registros.`
-      );
-    }
-
-    const categories = await getActiveCategories();
-    const itemPayload = validateAndBuildItemPayload(
-      {
-        produto: getInputValue(formData, "produto"),
-        lote: getInputValue(formData, "lote"),
-        dataFabricacao: getInputValue(formData, "dataFabricacao"),
-        dataValidade: getInputValue(formData, "dataValidade"),
-        sif: getInputValue(formData, "sif"),
-        temperatura: getInputValue(formData, "temperatura"),
-        transporteEntregador: getInputValue(formData, "transporteEntregador"),
-        aspectoSensorial: getInputValue(formData, "aspectoSensorial"),
-        embalagem: getInputValue(formData, "embalagem"),
-        acaoCorretiva: getInputValue(formData, "acaoCorretiva"),
-        observacoes: getInputValue(formData, "observacoes")
-      },
-      categories,
-      actor.nomeCompleto
-    );
-
-    const note = await prisma.rastreabilidadeRecebimentoNota.create({
-      data: {
-        data,
-        fornecedor,
-        notaFiscal,
-        statusNota: StatusNotaRecebimento.EM_CONFERENCIA,
-        origemXml: false,
-        responsavelGeral: actor.nomeCompleto
-      }
-    });
-
-    await prisma.rastreabilidadeRecebimentoRegistro.create({
-      data: {
-        ...itemPayload,
-        notaId: note.id,
-        data,
-        fornecedor,
-        notaFiscal,
-        origemXml: false
-      }
-    });
-
+    const noteId = await createManualNoteFromForm(formData);
     revalidateModulePaths();
-    redirectToNoteWithFeedback(note.id, "success", "Nota Criada com Sucesso.");
+    redirectToNoteWithFeedback(noteId, "success", "Nota Criada com Sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function createManualNoteStateAction(
+  _previousState: FormActionState = FORM_ACTION_INITIAL_STATE,
+  formData: FormData
+): Promise<FormActionState> {
+  try {
+    const noteId = await createManualNoteFromForm(formData);
+    revalidateModulePaths();
+    redirectToNoteWithFeedback(noteId, "success", "Nota Criada com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    return {
+      status: "error",
+      message: getErrorMessage(error),
+      invalidField: getInvalidField(error)
+    };
   }
 }
 
@@ -698,6 +742,7 @@ export async function saveNotaItemsStateAction(
   formData: FormData
 ): Promise<FormActionState> {
   try {
+    const intent = getInputValue(formData, "intent") === "finalize" ? "finalize" : "save";
     const actor = await getCurrentUserForAction();
 
     const notaId = parsePositiveInt(getInputValue(formData, "notaId"));
@@ -768,7 +813,8 @@ export async function saveNotaItemsStateAction(
         return {
           status: "error",
           message: getErrorMessage(error),
-          invalidRowKey: rowKey
+          invalidRowKey: rowKey,
+          invalidField: getInvalidField(error)
         };
       }
     }
@@ -784,21 +830,35 @@ export async function saveNotaItemsStateAction(
       await tx.rastreabilidadeRecebimentoNota.update({
         where: { id: note.id },
         data: {
-          statusNota: StatusNotaRecebimento.EM_CONFERENCIA,
+          statusNota:
+            intent === "finalize"
+              ? StatusNotaRecebimento.FINALIZADA
+              : StatusNotaRecebimento.EM_CONFERENCIA,
           responsavelGeral: actor.nomeCompleto
         }
       });
     });
 
     revalidateModulePaths();
+
+    if (intent === "finalize") {
+      redirectWithFeedback(
+        MODULE_PATH,
+        "success",
+        `Nota ${note.notaFiscal} Finalizada com Sucesso.`
+      );
+    }
+
     return {
       status: "success",
       message: "Itens da Nota Atualizados com Sucesso."
     };
   } catch (error) {
+    rethrowIfRedirectError(error);
     return {
       status: "error",
-      message: getErrorMessage(error)
+      message: getErrorMessage(error),
+      invalidField: getInvalidField(error)
     };
   }
 }

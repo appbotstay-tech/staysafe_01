@@ -61,8 +61,8 @@ function parseClassificacao(
   if (value === ClassificacaoItemBuffetAmostra.FRIO) {
     return ClassificacaoItemBuffetAmostra.FRIO;
   }
-  if (value === ClassificacaoItemBuffetAmostra.FRIO_CRU) {
-    return ClassificacaoItemBuffetAmostra.FRIO_CRU;
+  if (value === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE) {
+    return ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
   }
   return null;
 }
@@ -254,9 +254,11 @@ export default async function ControleBuffetAmostrasHistoricoPage({
               className={INPUT_CLASS}
             >
               <option value="">Todas</option>
-              <option value={ClassificacaoItemBuffetAmostra.QUENTE}>Quente</option>
-              <option value={ClassificacaoItemBuffetAmostra.FRIO}>Frio</option>
-              <option value={ClassificacaoItemBuffetAmostra.FRIO_CRU}>Frio Cru</option>
+              <option value={ClassificacaoItemBuffetAmostra.QUENTE}>Quentes</option>
+              <option value={ClassificacaoItemBuffetAmostra.FRIO}>Frios</option>
+              <option value={ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE}>
+                Temperatura Ambiente
+              </option>
             </select>
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">

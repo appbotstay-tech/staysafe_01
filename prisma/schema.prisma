@@ -111,7 +111,7 @@ enum StatusFechamentoPlanoLimpeza {
 enum ClassificacaoItemBuffetAmostra {
   QUENTE
   FRIO
-  FRIO_CRU
+  TEMPERATURA_AMBIENTE
 }
 
 enum StatusItemBuffetAmostra {
@@ -493,6 +493,16 @@ model RastreabilidadeRecebimentoRegistro {
   nota                   RastreabilidadeRecebimentoNota?      @relation(fields: [notaId], references: [id], onDelete: Cascade)
   data                   DateTime                             @db.Date
   produto                String
+  codigoProdutoXml       String?
+  ncm                    String?
+  cfop                   String?
+  quantidadeComprada     Float?
+  unidadeMedidaCompra    String?
+  valorUnitario          Float?
+  valorTotalItem         Float?
+  quantidadeTributavel   Float?
+  unidadeMedidaTributavel String?
+  valorUnitarioTributavel Float?
   fornecedor             String
   notaFiscal             String
   lote                   String?

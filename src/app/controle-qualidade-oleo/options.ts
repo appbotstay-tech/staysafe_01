@@ -60,6 +60,7 @@ export const INITIAL_OIL_STRIP_OPTIONS = CANONICAL_OIL_STRIP_RULES.map(
 export const OIL_OPERATION_GUIDELINES = [
   "O óleo utilizado para fritura deve ser límpido, não viscoso e sem resíduos queimados.",
   "Não deve ser aquecido por mais de 180°C.",
+  "A fita só realiza medição adequada a partir de 120°C.",
   "Após a primeira utilização, antes de reutilizar o óleo, deve-se monitorar a qualidade com o uso da fita.",
   "Antes da troca do óleo, fazer a higienização da fritadeira.",
   "O controle da temperatura deve ser realizado todos os dias que a fritadeira for utilizada.",

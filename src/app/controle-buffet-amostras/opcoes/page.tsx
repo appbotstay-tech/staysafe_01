@@ -259,9 +259,11 @@ export default async function ControleBuffetAmostrasOpcoesPage({
               defaultValue={itemEdicao?.classificacao ?? ClassificacaoItemBuffetAmostra.QUENTE}
               className={INPUT_CLASS}
             >
-              <option value={ClassificacaoItemBuffetAmostra.QUENTE}>Quente</option>
-              <option value={ClassificacaoItemBuffetAmostra.FRIO}>Frio</option>
-              <option value={ClassificacaoItemBuffetAmostra.FRIO_CRU}>Frio Cru</option>
+              <option value={ClassificacaoItemBuffetAmostra.QUENTE}>Quentes</option>
+              <option value={ClassificacaoItemBuffetAmostra.FRIO}>Frios</option>
+              <option value={ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE}>
+                Temperatura Ambiente
+              </option>
             </select>
           </label>
 

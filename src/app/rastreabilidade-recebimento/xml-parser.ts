@@ -2,6 +2,16 @@ import { parseXmlDateToDatabase } from "./utils";
 
 export type ParsedRecebimentoXmlItem = {
   produto: string;
+  codigoProdutoXml: string | null;
+  ncm: string | null;
+  cfop: string | null;
+  quantidadeComprada: number | null;
+  unidadeMedidaCompra: string | null;
+  valorUnitario: number | null;
+  valorTotalItem: number | null;
+  quantidadeTributavel: number | null;
+  unidadeMedidaTributavel: string | null;
+  valorUnitarioTributavel: number | null;
   fornecedor: string;
   notaFiscal: string;
   lote: string | null;
@@ -80,6 +90,26 @@ function onlyDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+function nullIfEmpty(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function parseXmlNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized =
+    trimmed.includes(",") && trimmed.includes(".")
+      ? trimmed.replace(/\./g, "").replace(",", ".")
+      : trimmed.replace(",", ".");
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function extractNotaFiscal(xml: string): string {
   return (
     tryExtractValue(xml, ["nNF", "cNF"]) ||
@@ -154,6 +184,16 @@ function parseDetBlock(
 
   return {
     produto,
+    codigoProdutoXml: nullIfEmpty(tryExtractValue(prodBlock, ["cProd"])),
+    ncm: nullIfEmpty(tryExtractValue(prodBlock, ["NCM"])),
+    cfop: nullIfEmpty(tryExtractValue(prodBlock, ["CFOP"])),
+    quantidadeComprada: parseXmlNumber(tryExtractValue(prodBlock, ["qCom"])),
+    unidadeMedidaCompra: nullIfEmpty(tryExtractValue(prodBlock, ["uCom"])),
+    valorUnitario: parseXmlNumber(tryExtractValue(prodBlock, ["vUnCom"])),
+    valorTotalItem: parseXmlNumber(tryExtractValue(prodBlock, ["vProd"])),
+    quantidadeTributavel: parseXmlNumber(tryExtractValue(prodBlock, ["qTrib"])),
+    unidadeMedidaTributavel: nullIfEmpty(tryExtractValue(prodBlock, ["uTrib"])),
+    valorUnitarioTributavel: parseXmlNumber(tryExtractValue(prodBlock, ["vUnTrib"])),
     fornecedor,
     notaFiscal,
     lote: loteRaw || null,
@@ -190,6 +230,16 @@ export function parseRecebimentoXml(xmlContent: string): ParseXmlResult {
 
     items.push({
       produto: produtoUnico,
+      codigoProdutoXml: nullIfEmpty(tryExtractValue(xml, ["cProd"])),
+      ncm: nullIfEmpty(tryExtractValue(xml, ["NCM"])),
+      cfop: nullIfEmpty(tryExtractValue(xml, ["CFOP"])),
+      quantidadeComprada: parseXmlNumber(tryExtractValue(xml, ["qCom"])),
+      unidadeMedidaCompra: nullIfEmpty(tryExtractValue(xml, ["uCom"])),
+      valorUnitario: parseXmlNumber(tryExtractValue(xml, ["vUnCom"])),
+      valorTotalItem: parseXmlNumber(tryExtractValue(xml, ["vProd"])),
+      quantidadeTributavel: parseXmlNumber(tryExtractValue(xml, ["qTrib"])),
+      unidadeMedidaTributavel: nullIfEmpty(tryExtractValue(xml, ["uTrib"])),
+      valorUnitarioTributavel: parseXmlNumber(tryExtractValue(xml, ["vUnTrib"])),
       fornecedor,
       notaFiscal,
       lote: null,

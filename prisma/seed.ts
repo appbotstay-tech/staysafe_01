@@ -306,7 +306,7 @@ const BUFFET_ITENS = [
   },
   {
     nome: "Salmão Cru Temperado",
-    classificacao: ClassificacaoItemBuffetAmostra.FRIO_CRU,
+    classificacao: ClassificacaoItemBuffetAmostra.FRIO,
     servicos: ["Jantar"],
     ordem: 8
   }

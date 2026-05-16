@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 
 import { normalizeCatalogName, normalizeOption } from "./options";
 
+export const INVALID_ITEM_CLASSIFICATION_MESSAGE =
+  "Classificação inválida. Selecione Quentes, Frios ou Temperatura Ambiente.";
+
 export function parseItemClassification(
   value: string
 ): ClassificacaoItemBuffetAmostra | null {
@@ -15,8 +18,8 @@ export function parseItemClassification(
     return ClassificacaoItemBuffetAmostra.FRIO;
   }
 
-  if (value === ClassificacaoItemBuffetAmostra.FRIO_CRU) {
-    return ClassificacaoItemBuffetAmostra.FRIO_CRU;
+  if (value === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE) {
+    return ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
   }
 
   return null;

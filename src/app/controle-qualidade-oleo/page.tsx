@@ -288,6 +288,21 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
   const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
   const modalError = feedback && feedbackType === "error" ? feedback : "";
+  const shouldRestoreFormValues = Boolean(modalError) && mostrarFormulario;
+  const formFita = shouldRestoreFormValues
+    ? firstParam(params.formFita).trim()
+    : registroEmEdicao?.fitaOleo ?? "";
+  const formTemperatura = shouldRestoreFormValues
+    ? firstParam(params.formTemperatura).trim()
+    : registroEmEdicao?.temperatura !== null && registroEmEdicao?.temperatura !== undefined
+      ? String(registroEmEdicao.temperatura).replace(".", ",")
+      : "";
+  const formSemUtilizacao = shouldRestoreFormValues
+    ? firstParam(params.formSemUtilizacao).trim() === "true"
+    : registroEmEdicao?.semUtilizacao ?? false;
+  const formObservacao = shouldRestoreFormValues
+    ? firstParam(params.formObservacao)
+    : registroEmEdicao?.observacao ?? "";
   const deleteReturnTo = (() => {
     const query = new URLSearchParams(parametrosRetorno);
     if (registroParaExcluir) {
@@ -425,15 +440,9 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
                 descricao: item.descricao,
                 statusAssociado: item.statusAssociado
               }))}
-              defaultFita={registroEmEdicao?.fitaOleo ?? ""}
-              defaultTemperatura={
-                registroEmEdicao
-                  ? registroEmEdicao.temperatura !== null
-                    ? String(registroEmEdicao.temperatura).replace(".", ",")
-                    : ""
-                  : ""
-              }
-              defaultSemUtilizacao={registroEmEdicao?.semUtilizacao ?? false}
+              defaultFita={formFita}
+              defaultTemperatura={formTemperatura}
+              defaultSemUtilizacao={formSemUtilizacao}
               inputClassName={INPUT_CLASS}
             />
 
@@ -454,7 +463,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
               <textarea
                 name="observacao"
                 rows={3}
-                defaultValue={registroEmEdicao?.observacao ?? ""}
+                defaultValue={formObservacao}
                 className={INPUT_CLASS}
               />
             </label>

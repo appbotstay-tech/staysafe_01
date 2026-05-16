@@ -66,7 +66,7 @@ export const INITIAL_BUFFET_ITENS: readonly InitialItemConfig[] = [
   },
   {
     nome: "Salmão Cru Temperado",
-    classificacao: "FRIO_CRU",
+    classificacao: "FRIO",
     servicos: ["Jantar"],
     ordem: 8
   }

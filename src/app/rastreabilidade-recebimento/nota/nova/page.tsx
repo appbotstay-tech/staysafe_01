@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth-session";
 
-import { createManualNoteAction } from "../../actions";
 import { ThemeToggleButton } from "../../theme-toggle-button";
+import { ManualNoteForm } from "./manual-note-form";
 
 const CARD_CLASS =
   "bpma-card";
@@ -41,102 +41,10 @@ export default async function NovaNotaRecebimentoPage() {
       </section>
 
       <section className={CARD_CLASS}>
-        <form action={createManualNoteAction} className="grid gap-4 md:grid-cols-2">
-          <input type="hidden" name="returnTo" value="/rastreabilidade-recebimento" />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Fornecedor *
-            <input type="text" name="fornecedor" required className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Nota Fiscal *
-            <input type="text" name="notaFiscal" required className={INPUT_CLASS} />
-          </label>
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Produto *
-            <input type="text" name="produto" required className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Lote *
-            <input type="text" name="lote" required className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Data de Fabricação *
-            <input type="date" name="dataFabricacao" required className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Validade *
-            <input type="date" name="dataValidade" required className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            SIF *
-            <input
-              type="text"
-              name="sif"
-              required
-              list="sif-opcoes"
-              defaultValue="NA"
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Temperatura (°C) *
-            <input type="text" name="temperatura" required inputMode="text" className={INPUT_CLASS} />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Transporte / Entregador *
-            <select name="transporteEntregador" required className={INPUT_CLASS}>
-              <option value="">Selecione</option>
-              <option value="CONFORME">Conforme</option>
-              <option value="NAO_CONFORME">Não Conforme</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Aspecto Sensorial *
-            <select name="aspectoSensorial" required className={INPUT_CLASS}>
-              <option value="">Selecione</option>
-              <option value="CONFORME">Conforme</option>
-              <option value="NAO_CONFORME">Não Conforme</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Embalagem *
-            <select name="embalagem" required className={INPUT_CLASS}>
-              <option value="">Selecione</option>
-              <option value="CONFORME">Conforme</option>
-              <option value="NAO_CONFORME">Não Conforme</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ação Corretiva
-            <input type="text" name="acaoCorretiva" className={INPUT_CLASS} />
-          </label>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Responsável pelo Recebimento
-            </p>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {responsavelLogado}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Preenchido automaticamente pelo usuário logado.
-            </p>
-          </div>
-          <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
-            Observações
-            <textarea name="observacoes" rows={3} className={INPUT_CLASS} />
-          </label>
-
-          <div className="md:col-span-2">
-            <button type="submit" className="btn-primary">
-              Criar Nota
-            </button>
-          </div>
-        </form>
-        <datalist id="sif-opcoes">
-          <option value="NA" />
-        </datalist>
+        <ManualNoteForm
+          responsavelLogado={responsavelLogado}
+          inputClassName={INPUT_CLASS}
+        />
       </section>
     </div>
   );
