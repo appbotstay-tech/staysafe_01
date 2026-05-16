@@ -18,6 +18,7 @@ import {
 
 import type { AuthenticatedUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
+import { getRoleLabel } from "@/lib/rbac";
 
 import {
   getFiltersForReport,
@@ -42,6 +43,7 @@ export type GeneratedReport = {
   reportLabel: string;
   periodLabel: string;
   generatedBy: string;
+  generatedByRole: string;
   generatedAt: Date;
   appliedFilters: AppliedReportFilter[];
   summary: ReportSummaryItem[];
@@ -267,6 +269,7 @@ function finalizeReport(params: {
     reportLabel: reportDefinition.label,
     periodLabel: params.periodLabel,
     generatedBy: params.user.nomeCompleto,
+    generatedByRole: getRoleLabel(params.user.perfil),
     generatedAt: new Date(),
     appliedFilters: makeAppliedFilters(params.searchParams, params.moduleId, reportDefinition.id),
     summary: params.summary,
@@ -637,35 +640,4 @@ export async function generateReport(params: { moduleId: string; reportId: strin
   if (moduleDefinition.id === "plano-limpeza-diario") return generateDiarioReport(moduleDefinition.id, reportDefinition.id, params.searchParams, params.user);
   if (moduleDefinition.id === "plano-limpeza-semanal") return generateSemanalReport(moduleDefinition.id, reportDefinition.id, params.searchParams, params.user);
   return generateChamadosReport(moduleDefinition.id, reportDefinition.id, params.searchParams, params.user);
-}
-
-function escapeCsv(value: unknown): string {
-  const text = String(value ?? "");
-  if (/[";\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
-export function generateCsv(report: GeneratedReport): string {
-  const lines: string[] = [];
-  lines.push("BPMA App - Relatórios e Auditoria");
-  lines.push(`Relatório;${escapeCsv(report.reportLabel)}`);
-  lines.push(`Módulo;${escapeCsv(report.moduleLabel)}`);
-  lines.push(`Período;${escapeCsv(report.periodLabel)}`);
-  lines.push(`Emitido por;${escapeCsv(report.generatedBy)}`);
-  lines.push(`Emitido em;${escapeCsv(formatDateTimeDisplay(report.generatedAt))}`);
-  if (report.appliedFilters.length > 0) {
-    lines.push("Filtros aplicados");
-    for (const filter of report.appliedFilters) lines.push(`${escapeCsv(filter.label)};${escapeCsv(filter.value)}`);
-  }
-  lines.push("");
-  lines.push("Resumo");
-  for (const item of report.summary) lines.push(`${escapeCsv(item.label)};${escapeCsv(item.value)}`);
-  lines.push("");
-  lines.push(report.columns.map((column) => escapeCsv(column.label)).join(";"));
-  for (const row of report.rows) lines.push(report.columns.map((column) => escapeCsv(row[column.key])).join(";"));
-  return lines.join("\r\n");
-}
-
-export function buildExportFileName(report: GeneratedReport): string {
-  return `bpma-${report.moduleId}-${report.reportId}-${formatDateInput(report.generatedAt)}.csv`;
 }

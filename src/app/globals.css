@@ -683,3 +683,59 @@ body {
     width: 100%;
   }
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .bpma-sidebar,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  main > div {
+    max-width: none !important;
+  }
+
+  .bpma-card {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .bpma-table-scroll {
+    overflow: visible !important;
+  }
+
+  .bpma-data-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+
+  .bpma-data-table th,
+  .bpma-data-table td {
+    border: 1px solid #cbd5e1;
+    padding: 4px 6px !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+}

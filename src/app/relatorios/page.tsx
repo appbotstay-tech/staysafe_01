@@ -38,25 +38,13 @@ function buildInitialFilters(params: ReportSearchParams): Record<string, string>
   return result;
 }
 
-function buildExportHref(params: ReportSearchParams, selectedModuleId: string, selectedReportId: string): string {
-  const query = new URLSearchParams();
-  query.set("module", selectedModuleId);
-  query.set("report", selectedReportId);
-  for (const [key, value] of Object.entries(params)) {
-    if (key === "module" || key === "report" || key === "generated") continue;
-    const normalized = firstParam(value).trim();
-    if (normalized) query.set(key, normalized);
-  }
-  return `/relatorios/export?${query.toString()}`;
-}
-
-function ReportResult({ report, exportHref }: { report: GeneratedReport; exportHref: string }) {
+function ReportResult({ report }: { report: GeneratedReport }) {
   return (
-    <section className="bpma-card space-y-5">
+    <section className="bpma-card space-y-5 print:rounded-none print:border-0 print:shadow-none">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Resultado do relatório
+            BPMA App
           </p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
             {report.reportLabel}
@@ -65,11 +53,14 @@ function ReportResult({ report, exportHref }: { report: GeneratedReport; exportH
             {report.moduleLabel} • {report.periodLabel}
           </p>
         </div>
-        <ReportActions exportHref={exportHref} />
+        <ReportActions />
       </div>
 
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-2 xl:grid-cols-4">
-        <p><strong>Usuário que gerou:</strong> {report.generatedBy}</p>
+        <p><strong>Sistema:</strong> BPMA App</p>
+        <p><strong>Relatório:</strong> {report.reportLabel}</p>
+        <p><strong>Usuário que emitiu:</strong> {report.generatedBy}</p>
+        <p><strong>Perfil:</strong> {report.generatedByRole}</p>
         <p><strong>Emissão:</strong> {formatDateTimeDisplay(report.generatedAt)}</p>
         <p><strong>Módulo:</strong> {report.moduleLabel}</p>
         <p><strong>Período:</strong> {report.periodLabel}</p>
@@ -136,6 +127,10 @@ function ReportResult({ report, exportHref }: { report: GeneratedReport; exportH
           </tbody>
         </table>
       </div>
+
+      <footer className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        Relatório gerado automaticamente pelo BPMA App. Alterações manuais descaracterizam o documento.
+      </footer>
     </section>
   );
 }
@@ -153,7 +148,6 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const selectedReport = getReportDefinition(selectedModule.id, reportParam);
   const generated = firstParam(params.generated) === "1";
   const initialFilters = buildInitialFilters(params);
-  const exportHref = buildExportHref(params, selectedModule.id, selectedReport.id);
   const report = generated
     ? await generateReport({
         moduleId: selectedModule.id,
@@ -181,7 +175,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
       />
 
       {report ? (
-        <ReportResult report={report} exportHref={exportHref} />
+        <ReportResult report={report} />
       ) : (
         <section className="bpma-card print:hidden">
           <p className="text-sm text-slate-600 dark:text-slate-300">
