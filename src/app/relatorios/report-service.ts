@@ -43,6 +43,10 @@ import {
   formatSifDisplayValue,
   isSifNaValue
 } from "../rastreabilidade-recebimento/sif";
+import {
+  getServicoPeriodoLabel,
+  getTipoServicoLabel
+} from "../controle-buffet-amostras/utils";
 
 export type ReportSearchParams = Record<string, string | string[] | undefined>;
 export type ReportColumn = { key: string; label: string };
@@ -457,6 +461,8 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
     if (reportId === "acoes-corretivas" && !hasText(item.acaoCorretiva)) return false;
     if (reportId === "alimentos-descartados" && !descarte) return false;
     if (!includesText(item.servico.nome, getParam(params, "servico"))) return false;
+    const tipoServico = getParam(params, "tipoServicoBuffet");
+    if (tipoServico && item.servico.tipoServico !== tipoServico) return false;
     if (!includesText(item.itemNome, getParam(params, "item"))) return false;
     const classificacao = getParam(params, "classificacao");
     if (classificacao && item.classificacao !== classificacao) return false;
@@ -478,8 +484,8 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
       { label: "Temperatura fora da regra", value: filtered.filter((item) => item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO).length },
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length }
     ],
-    columns: columns([["data", "Data"], ["servico", "Serviço"], ["item", "Item"], ["classificacao", "Classificação"], ["tcEquipamento", "TC equipamento"], ["primeiraTc", "1ª TC"], ["segundaTc", "2ª TC"], ["acaoCorretiva", "Ação corretiva"], ["observacao", "Observação"], ["responsavel", "Responsável"], ["status", "Status"]]),
-    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), servico: item.servico.nome, item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: formatTemperature(item.tcEquipamento), primeiraTc: formatTemperature(item.primeiraTc), segundaTc: formatTemperature(item.segundaTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, status: labelStatusBuffet(item.status) }))
+    columns: columns([["data", "Data"], ["servico", "Serviço"], ["tipoServico", "Tipo de serviço"], ["periodoServico", "Período do serviço"], ["item", "Item"], ["classificacao", "Classificação"], ["tcEquipamento", "TC equipamento"], ["primeiraTc", "1ª TC"], ["segundaTc", "2ª TC"], ["acaoCorretiva", "Ação corretiva"], ["observacao", "Observação"], ["responsavel", "Responsável"], ["status", "Status"]]),
+    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), servico: item.servico.nome, tipoServico: getTipoServicoLabel(item.servico.tipoServico), periodoServico: getServicoPeriodoLabel(item.servico), item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: formatTemperature(item.tcEquipamento), primeiraTc: formatTemperature(item.primeiraTc), segundaTc: formatTemperature(item.segundaTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, status: labelStatusBuffet(item.status) }))
   });
 }
 

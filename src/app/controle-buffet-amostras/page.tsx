@@ -22,10 +22,13 @@ import {
   formatDateTimeDisplay,
   getClassificacaoLabel,
   getCurrentSystemDateTime,
+  getServicoPeriodoLabel,
+  getTipoServicoLabel,
   getMonthDateRange,
   getMonthYear,
   getStatusItemLabel,
   getTodaySystemDate,
+  isServicoDisponivelNaData,
   parsePositiveInt
 } from "./utils";
 import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
@@ -130,7 +133,9 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     registrosPorServico.set(registro.servicoId, current);
   }
 
-  const servicosDoDia = servicos.map((servico) => {
+  const servicosDoDia = servicos.filter((servico) =>
+    isServicoDisponivelNaData(servico, today)
+  ).map((servico) => {
     const registrosServico = registrosPorServico.get(servico.id) ?? [];
     const itensAtivos = servico.itens.map((vinculo) => vinculo.item.id);
     const registrosItensAtivos = registrosServico.filter(
@@ -157,6 +162,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     return {
       id: servico.id,
       nome: servico.nome,
+      tipoServico: servico.tipoServico,
+      periodo: getServicoPeriodoLabel(servico),
       quantidadeItens,
       status
     };
@@ -250,6 +257,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
               <tr>
                 <th className="px-3 py-2">Data</th>
                 <th className="px-3 py-2">Serviço</th>
+                <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Itens Configurados</th>
                 <th className="px-3 py-2">Status Geral</th>
                 <th className="px-3 py-2">Ações</th>
@@ -258,8 +266,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {servicosDoDia.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={5}>
-                    Nenhum serviço ativo configurado.
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={6}>
+                    Nenhum serviço previsto para hoje.
                   </td>
                 </tr>
               ) : (
@@ -267,6 +275,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                   <tr key={servico.id}>
                     <td className="px-3 py-2">{formatDateDisplay(today)}</td>
                     <td className="px-3 py-2">{servico.nome}</td>
+                    <td className="px-3 py-2">
+                      {getTipoServicoLabel(servico.tipoServico)}
+                      {servico.tipoServico === "ESPORADICO" ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {servico.periodo}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">{servico.quantidadeItens}</td>
                     <td className="px-3 py-2">
                       <ServiceStatusBadge status={servico.status} />

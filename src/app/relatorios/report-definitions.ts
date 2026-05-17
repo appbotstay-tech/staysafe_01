@@ -20,7 +20,7 @@ export type ReportFilterKey =
   | "semFotoObrigatoria" | "fita" | "temperatura" | "statusOleo" | "usoEquipamento"
   | "fornecedor" | "notaFiscal" | "produto" | "lote" | "sif" | "sifNa"
   | "transporte" | "aspecto" | "embalagem" | "responsavelConferencia" | "statusNota"
-  | "servico" | "item" | "classificacao" | "itemExtra" | "statusBuffet"
+  | "servico" | "tipoServicoBuffet" | "item" | "classificacao" | "itemExtra" | "statusBuffet"
   | "temperaturaForaRegra" | "area" | "turnoLimpeza" | "supervisor"
   | "statusPlanoLimpeza" | "semana" | "mes" | "ano" | "diaSemana"
   | "origem" | "usuario" | "statusChamado" | "chamadoSituacao";
@@ -124,6 +124,9 @@ export const FILTER_DEFINITIONS: Record<ReportFilterKey, ReportFilterDefinition>
     { value: "EM_CONFERENCIA", label: "Em conferência" }, { value: "FINALIZADA", label: "Finalizada" }
   ] },
   servico: { key: "servico", label: "Serviço", type: "text" },
+  tipoServicoBuffet: { key: "tipoServicoBuffet", label: "Tipo de serviço", type: "select", options: [
+    { value: "", label: "Todos" }, { value: "FIXO", label: "Fixo / Recorrente" }, { value: "ESPORADICO", label: "Esporádico / Eventual" }
+  ] },
   item: { key: "item", label: "Item / produto", type: "text" },
   classificacao: { key: "classificacao", label: "Classificação", type: "select", options: [
     { value: "", label: "Todas" }, { value: "QUENTE", label: "Quentes" }, { value: "FRIO", label: "Frios" }, { value: "TEMPERATURA_AMBIENTE", label: "Temperatura Ambiente" }
@@ -167,7 +170,7 @@ const hort = ["dataInicial", "dataFinal", "hortifruti", "produtoUtilizado", "res
 const temp = ["dataInicial", "dataFinal", "equipamento", "turnoTemperatura", "statusTemperatura", "responsavel", "temperaturaStatus", "acaoCorretiva", "comFoto", "semFotoObrigatoria"] as ReportFilterKey[];
 const oleo = ["dataInicial", "dataFinal", "fita", "temperatura", "responsavel", "statusOleo", "usoEquipamento", "comObservacao"] as ReportFilterKey[];
 const receb = ["dataInicial", "dataFinal", "fornecedor", "notaFiscal", "produto", "lote", "sif", "sifNa", "temperatura", "transporte", "aspecto", "embalagem", "responsavelConferencia", "statusNota", "acaoCorretiva"] as ReportFilterKey[];
-const buffet = ["dataInicial", "dataFinal", "servico", "item", "classificacao", "itemExtra", "acaoCorretiva", "responsavel", "statusBuffet", "temperaturaForaRegra"] as ReportFilterKey[];
+const buffet = ["dataInicial", "dataFinal", "servico", "tipoServicoBuffet", "item", "classificacao", "itemExtra", "acaoCorretiva", "responsavel", "statusBuffet", "temperaturaForaRegra"] as ReportFilterKey[];
 const diario = ["dataInicial", "dataFinal", "area", "turnoLimpeza", "responsavel", "supervisor", "statusPlanoLimpeza"] as ReportFilterKey[];
 const semanal = ["semana", "mes", "ano", "area", "item", "responsavel", "supervisor", "statusPlanoLimpeza", "diaSemana"] as ReportFilterKey[];
 const chamados = ["dataInicial", "dataFinal", "origem", "usuario", "statusChamado", "comFoto", "chamadoSituacao"] as ReportFilterKey[];

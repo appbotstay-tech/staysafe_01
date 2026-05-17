@@ -14,6 +14,8 @@ import {
   formatDateDisplay,
   formatDateTimeDisplay,
   getClassificacaoLabel,
+  getServicoPeriodoLabel,
+  getTipoServicoLabel,
   getMonthDateRange,
   getYearDateRange,
   parseDateInput,
@@ -148,7 +150,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const registros = await prisma.controleBuffetAmostraRegistro.findMany({
     where,
     include: {
-      servico: { select: { nome: true } },
+      servico: {
+        select: {
+          nome: true,
+          tipoServico: true,
+          dataInicio: true,
+          dataFim: true
+        }
+      },
       item: { select: { nome: true } }
     },
     orderBy: [{ data: "desc" }, { createdAt: "desc" }]
@@ -302,6 +311,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
               <tr>
                 <th className="px-3 py-2">Data</th>
                 <th className="px-3 py-2">Serviço</th>
+                <th className="px-3 py-2">Tipo do Serviço</th>
                 <th className="px-3 py-2">Item</th>
                 <th className="px-3 py-2">Classificação</th>
                 <th className="px-3 py-2">TC Equip.</th>
@@ -317,7 +327,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={13} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -326,6 +336,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                   <tr key={registro.id}>
                     <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
                     <td className="px-3 py-2">{registro.servico.nome}</td>
+                    <td className="px-3 py-2">
+                      {getTipoServicoLabel(registro.servico.tipoServico)}
+                      {registro.servico.tipoServico === "ESPORADICO" ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {getServicoPeriodoLabel(registro.servico)}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">
                       {registro.itemNome || registro.item?.nome}
                       {registro.itemExtra ? (

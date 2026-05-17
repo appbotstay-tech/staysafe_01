@@ -1,7 +1,8 @@
 import type {
   ClassificacaoItemBuffetAmostra,
   StatusItemBuffetAmostra,
-  StatusTemperaturaBuffetAmostra
+  StatusTemperaturaBuffetAmostra,
+  TipoServicoBuffetAmostra
 } from "@prisma/client";
 
 import {
@@ -17,6 +18,12 @@ import {
 } from "@/lib/date-time";
 
 export type StatusServicoBuffet = "PENDENTE" | "PARCIAL" | "CONCLUIDO";
+
+export type ServicoBuffetVigencia = {
+  tipoServico: TipoServicoBuffetAmostra;
+  dataInicio: Date | null;
+  dataFim: Date | null;
+};
 
 export type AvaliacaoTemperaturaBuffet = {
   status: StatusTemperaturaBuffetAmostra;
@@ -57,6 +64,54 @@ export function formatDateInput(date: Date): string {
 
 export function formatDateDisplay(date: Date): string {
   return formatAppDate(date);
+}
+
+export function getTipoServicoLabel(tipoServico: TipoServicoBuffetAmostra): string {
+  return tipoServico === "ESPORADICO" ? "Esporádico / Eventual" : "Fixo / Recorrente";
+}
+
+export function parseTipoServico(value: string): TipoServicoBuffetAmostra | null {
+  if (value === "FIXO" || value === "ESPORADICO") {
+    return value;
+  }
+
+  return null;
+}
+
+export function getServicoPeriodoLabel(servico: ServicoBuffetVigencia): string {
+  if (servico.tipoServico === "FIXO") {
+    return "Todos os dias";
+  }
+
+  if (!servico.dataInicio) {
+    return "Período não definido";
+  }
+
+  const end = servico.dataFim ?? servico.dataInicio;
+  if (formatDateInput(servico.dataInicio) === formatDateInput(end)) {
+    return formatDateDisplay(servico.dataInicio);
+  }
+
+  return `${formatDateDisplay(servico.dataInicio)} a ${formatDateDisplay(end)}`;
+}
+
+export function isServicoDisponivelNaData(
+  servico: ServicoBuffetVigencia,
+  date: Date
+): boolean {
+  if (servico.tipoServico === "FIXO") {
+    return true;
+  }
+
+  if (!servico.dataInicio) {
+    return false;
+  }
+
+  const dateKey = formatDateInput(date);
+  const startKey = formatDateInput(servico.dataInicio);
+  const endKey = formatDateInput(servico.dataFim ?? servico.dataInicio);
+
+  return dateKey >= startKey && dateKey <= endKey;
 }
 
 export function formatDateTimeDisplay(date: Date): string {

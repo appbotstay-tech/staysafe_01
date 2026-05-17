@@ -18,6 +18,9 @@ import {
   formatDateInput,
   formatDateTimeDisplay,
   getCurrentSystemDateTime,
+  getServicoPeriodoLabel,
+  getTipoServicoLabel,
+  isServicoDisponivelNaData,
   getMonthYear,
   parseDateInput,
   parsePositiveInt
@@ -126,6 +129,7 @@ export default async function ExecucaoServicoBuffetPage({
   if (!servico) {
     notFound();
   }
+  const servicoPrevistoNaData = isServicoDisponivelNaData(servico, dataReferencia);
 
   const period = getMonthYear(dataReferencia);
   const fechamento = await prisma.controleBuffetAmostraFechamento.findUnique({
@@ -141,7 +145,8 @@ export default async function ExecucaoServicoBuffetPage({
     }
   }
 
-  const itensFixosPendentes = servico.itens.filter((vinculo) => {
+  const itensConfiguradosDoDia = servicoPrevistoNaData ? servico.itens : [];
+  const itensFixosPendentes = itensConfiguradosDoDia.filter((vinculo) => {
     const registro = registrosByItemId.get(vinculo.itemId);
     return !registro || registro.status === StatusItemBuffetAmostra.PENDENTE;
   }).length;
@@ -155,12 +160,12 @@ export default async function ExecucaoServicoBuffetPage({
   const itensAssinados = registros.filter(
     (registro) => registro.status === StatusItemBuffetAmostra.ASSINADO
   ).length;
-  const totalItensServico = servico.itens.length + registrosExtras.length;
+  const totalItensServico = itensConfiguradosDoDia.length + registrosExtras.length;
   const todosItensPreenchidos = totalItensServico > 0 && itensPendentes === 0;
   const formatTemperatureInput = (value: number | null): string =>
     value !== null && value !== undefined ? String(value).replace(".", ",") : "";
   const itemRows: ServiceItemFormRow[] = [
-    ...servico.itens.map((vinculo) => {
+    ...itensConfiguradosDoDia.map((vinculo) => {
       const item = vinculo.item;
       const registro = registrosByItemId.get(item.id) ?? null;
       const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
@@ -243,6 +248,9 @@ export default async function ExecucaoServicoBuffetPage({
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               {servico.nome} • {formatDateDisplay(dataReferencia)}
             </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {getTipoServicoLabel(servico.tipoServico)} • {getServicoPeriodoLabel(servico)}
+            </p>
           </div>
           <div className="btn-group">
             <Link href={MODULE_PATH} className="btn-secondary">
@@ -274,6 +282,13 @@ export default async function ExecucaoServicoBuffetPage({
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           Este serviço pertence a um mês fechado. Os registros podem ser visualizados, mas não
           podem ser alterados.
+        </section>
+      ) : null}
+
+      {!servicoPrevistoNaData ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          Este serviço não está previsto para {formatDateDisplay(dataReferencia)}. Ele não
+          gera pendência nesta data.
         </section>
       ) : null}
 
@@ -322,7 +337,7 @@ export default async function ExecucaoServicoBuffetPage({
           dataInput={dataReferenciaInput}
           returnTo={returnTo}
           usuarioLogado={usuarioLogado}
-          fechamentoAssinado={fechamentoAssinado}
+          fechamentoAssinado={fechamentoAssinado || !servicoPrevistoNaData}
           rows={itemRows}
           acoesCorretivas={acoesCorretivasAtivas}
           inputClassName={INPUT_CLASS}
@@ -364,6 +379,10 @@ export default async function ExecucaoServicoBuffetPage({
         {fechamentoAssinado ? (
           <p className="text-sm text-amber-700 dark:text-amber-300">
             O mês deste serviço está fechado e não permite novas assinaturas.
+          </p>
+        ) : !servicoPrevistoNaData ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Serviço fora do período configurado para esta data.
           </p>
         ) : totalItensServico === 0 ? (
           <p className="text-sm text-slate-600 dark:text-slate-300">

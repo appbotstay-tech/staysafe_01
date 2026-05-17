@@ -131,6 +131,11 @@ enum StatusFechamentoBuffetAmostra {
   ASSINADO
 }
 
+enum TipoServicoBuffetAmostra {
+  FIXO
+  ESPORADICO
+}
+
 enum PerfilUsuario {
   DEV
   GERENTE
@@ -643,16 +648,20 @@ model PlanoLimpezaFechamento {
 }
 
 model ControleBuffetAmostraServico {
-  id        Int                                @id @default(autoincrement())
-  nome      String                             @unique
-  ativo     Boolean                            @default(true)
-  ordem     Int                                @default(1)
-  createdAt DateTime                           @default(now())
-  updatedAt DateTime                           @updatedAt
-  itens     ControleBuffetAmostraItemServico[]
-  registros ControleBuffetAmostraRegistro[]
+  id          Int                                @id @default(autoincrement())
+  nome        String                             @unique
+  tipoServico TipoServicoBuffetAmostra           @default(FIXO)
+  dataInicio  DateTime?                          @db.Date
+  dataFim     DateTime?                          @db.Date
+  ativo       Boolean                            @default(true)
+  ordem       Int                                @default(1)
+  createdAt   DateTime                           @default(now())
+  updatedAt   DateTime                           @updatedAt
+  itens       ControleBuffetAmostraItemServico[]
+  registros   ControleBuffetAmostraRegistro[]
 
   @@index([ativo, ordem, nome])
+  @@index([tipoServico, dataInicio, dataFim])
   @@map("controle_buffet_amostra_servico")
 }
 

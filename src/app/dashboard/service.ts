@@ -28,6 +28,7 @@ import {
   getTurnoLabel,
   getWeekStartDateForDate
 } from "@/app/plano-limpeza/utils";
+import { isServicoDisponivelNaData } from "@/app/controle-buffet-amostras/utils";
 import type { AuthenticatedUser } from "@/lib/auth-session";
 import { getEndOfAppDay, getStartOfAppDay, parseAppDateInput } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
@@ -1188,6 +1189,9 @@ async function buildBuffetStats(
       select: {
         id: true,
         nome: true,
+        tipoServico: true,
+        dataInicio: true,
+        dataFim: true,
         itens: {
           where: { item: { ativo: true } },
           select: {
@@ -1215,7 +1219,14 @@ async function buildBuffetStats(
         assinaturaNome: true,
         assinaturaDataHora: true,
         dataHoraRegistro: true,
-        servico: { select: { nome: true } }
+        servico: {
+          select: {
+            nome: true,
+            tipoServico: true,
+            dataInicio: true,
+            dataFim: true
+          }
+        }
       },
       orderBy: [{ data: "desc" }, { dataHoraRegistro: "desc" }]
     })
@@ -1240,6 +1251,10 @@ async function buildBuffetStats(
 
   for (const date of dates) {
     for (const servico of servicos) {
+      if (!isServicoDisponivelNaData(servico, date)) {
+        continue;
+      }
+
       for (const vinculo of servico.itens) {
         const item = vinculo.item;
         const key = keyFor(date, servico.id, item.id);
@@ -1293,6 +1308,12 @@ async function buildBuffetStats(
   for (const record of registros) {
     const key = keyFor(record.data, record.servicoId, record.itemId);
     if (!record.itemExtra && expectedKeys.has(key)) {
+      continue;
+    }
+    if (
+      record.servico.tipoServico === "ESPORADICO" &&
+      (record.data.getTime() < range.start.getTime() || record.data.getTime() > range.end.getTime())
+    ) {
       continue;
     }
 
@@ -2045,7 +2066,14 @@ async function buildNonConformitySummary(params: {
         acaoCorretiva: true,
         responsavelNome: true,
         dataHoraRegistro: true,
-        servico: { select: { nome: true } }
+        servico: {
+          select: {
+            nome: true,
+            tipoServico: true,
+            dataInicio: true,
+            dataFim: true
+          }
+        }
       },
       orderBy: [{ dataHoraRegistro: "desc" }]
     }),
@@ -2348,7 +2376,14 @@ async function buildCorrectiveActionsSummary(params: {
         acaoCorretiva: true,
         responsavelNome: true,
         dataHoraRegistro: true,
-        servico: { select: { nome: true } }
+        servico: {
+          select: {
+            nome: true,
+            tipoServico: true,
+            dataInicio: true,
+            dataFim: true
+          }
+        }
       },
       orderBy: [{ dataHoraRegistro: "desc" }]
     })

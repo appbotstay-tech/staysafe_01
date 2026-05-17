@@ -3,7 +3,8 @@
 import {
   ClassificacaoItemBuffetAmostra,
   StatusFechamentoBuffetAmostra,
-  StatusItemBuffetAmostra
+  StatusItemBuffetAmostra,
+  TipoServicoBuffetAmostra
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -37,8 +38,10 @@ import {
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
+  isServicoDisponivelNaData,
   parseDateInput,
   parsePositiveInt,
+  parseTipoServico,
   parseTemperatureInput
 } from "./utils";
 
@@ -158,6 +161,55 @@ async function ensurePeriodIsOpen(date: Date) {
   }
 }
 
+function parseServicoConfig(formData: FormData, fallback?: {
+  tipoServico: TipoServicoBuffetAmostra;
+  dataInicio: Date | null;
+  dataFim: Date | null;
+}) {
+  const tipoServico = parseTipoServico(getInputValue(formData, "tipoServico")) ??
+    fallback?.tipoServico ??
+    TipoServicoBuffetAmostra.FIXO;
+  const dataInicioInput = getInputValue(formData, "dataInicio");
+  const dataFimInput = getInputValue(formData, "dataFim");
+  const dataInicio = dataInicioInput ? parseDateInput(dataInicioInput) : null;
+  const dataFim = dataFimInput ? parseDateInput(dataFimInput) : null;
+
+  if (dataInicioInput && !dataInicio) {
+    throw new Error("Informe uma data inicial válida para o serviço.");
+  }
+
+  if (dataFimInput && !dataFim) {
+    throw new Error("Informe uma data final válida para o serviço.");
+  }
+
+  if (tipoServico === TipoServicoBuffetAmostra.ESPORADICO && !dataInicio) {
+    throw new Error("Serviço esporádico precisa ter data inicial.");
+  }
+
+  if (dataInicio && dataFim && dataFim.getTime() < dataInicio.getTime()) {
+    throw new Error("A data final do serviço não pode ser menor que a data inicial.");
+  }
+
+  return {
+    tipoServico,
+    dataInicio: tipoServico === TipoServicoBuffetAmostra.ESPORADICO ? dataInicio : null,
+    dataFim: tipoServico === TipoServicoBuffetAmostra.ESPORADICO ? dataFim : null
+  };
+}
+
+function ensureServicoPrevistoNaData(
+  servico: {
+    tipoServico: TipoServicoBuffetAmostra;
+    dataInicio: Date | null;
+    dataFim: Date | null;
+  },
+  date: Date
+) {
+  if (!isServicoDisponivelNaData(servico, date)) {
+    throw new Error("Este serviço não está previsto para a data selecionada.");
+  }
+}
+
 async function ensureAcoesCorretivasConfiguradas() {
   const options = await getAcoesCorretivas(true);
   if (options.length === 0) {
@@ -260,6 +312,7 @@ export async function saveRegistroItemAction(formData: FormData) {
     if (!servico || !item || !vinculacao) {
       throw new Error("Item não configurado para o serviço selecionado.");
     }
+    ensureServicoPrevistoNaData(servico, data);
 
     const tcEquipamento = parseTemperatureInput(tcEquipamentoInput);
     const primeiraTc = parseTemperatureInput(primeiraTcInput);
@@ -402,6 +455,7 @@ export async function saveServicoItemsStateAction(
     if (!servico) {
       throw new Error("Serviço não encontrado.");
     }
+    ensureServicoPrevistoNaData(servico, data);
 
     const fixedItemsById = new Map(servico.itens.map((vinculo) => [vinculo.itemId, vinculo.item]));
     const registrosByItemId = new Map<number, (typeof registros)[number]>();
@@ -571,13 +625,13 @@ export async function createExtraItemStateAction(
     await ensurePeriodIsOpen(data);
 
     const servico = await prisma.controleBuffetAmostraServico.findUnique({
-      where: { id: servicoId },
-      select: { id: true }
+      where: { id: servicoId }
     });
 
     if (!servico) {
       throw new Error("Serviço não encontrado.");
     }
+    ensureServicoPrevistoNaData(servico, data);
 
     const existingExtra = await prisma.controleBuffetAmostraRegistro.findFirst({
       where: {
@@ -726,6 +780,7 @@ export async function signServicoItensAction(formData: FormData) {
     if (!servico) {
       throw new Error("Serviço não encontrado.");
     }
+    ensureServicoPrevistoNaData(servico, data);
 
     const registros = await prisma.controleBuffetAmostraRegistro.findMany({
       where: {
@@ -945,6 +1000,7 @@ export async function createServicoAction(formData: FormData) {
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
+    const servicoConfig = parseServicoConfig(formData);
 
     if (!nome) {
       throw new Error("Informe o nome do serviço.");
@@ -957,6 +1013,7 @@ export async function createServicoAction(formData: FormData) {
     await prisma.controleBuffetAmostraServico.create({
       data: {
         nome,
+        ...servicoConfig,
         ordem,
         ativo: true
       }
@@ -996,6 +1053,7 @@ export async function updateServicoAction(formData: FormData) {
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
+    const servicoConfig = parseServicoConfig(formData, existing);
 
     if (!nome) {
       throw new Error("Informe o nome do serviço.");
@@ -1009,6 +1067,7 @@ export async function updateServicoAction(formData: FormData) {
       where: { id: existing.id },
       data: {
         nome,
+        ...servicoConfig,
         ordem,
         ativo
       }

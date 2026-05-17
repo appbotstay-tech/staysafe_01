@@ -1,4 +1,4 @@
-import { ClassificacaoItemBuffetAmostra } from "@prisma/client";
+import { ClassificacaoItemBuffetAmostra, TipoServicoBuffetAmostra } from "@prisma/client";
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth-session";
@@ -16,7 +16,13 @@ import {
   updateItemAction,
   updateServicoAction
 } from "../actions";
-import { getClassificacaoLabel, parsePositiveInt } from "../utils";
+import {
+  formatDateInput,
+  getClassificacaoLabel,
+  getServicoPeriodoLabel,
+  getTipoServicoLabel,
+  parsePositiveInt
+} from "../utils";
 import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 
 const MODULE_PATH = "/controle-buffet-amostras";
@@ -153,6 +159,37 @@ export default async function ControleBuffetAmostrasOpcoesPage({
               className={INPUT_CLASS}
             />
           </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Tipo de serviço
+            <select
+              name="tipoServico"
+              defaultValue={servicoEdicao?.tipoServico ?? TipoServicoBuffetAmostra.FIXO}
+              className={INPUT_CLASS}
+            >
+              <option value={TipoServicoBuffetAmostra.FIXO}>Fixo / Recorrente</option>
+              <option value={TipoServicoBuffetAmostra.ESPORADICO}>
+                Esporádico / Eventual
+              </option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Data inicial
+            <input
+              type="date"
+              name="dataInicio"
+              defaultValue={servicoEdicao?.dataInicio ? formatDateInput(servicoEdicao.dataInicio) : ""}
+              className={INPUT_CLASS}
+            />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Data final
+            <input
+              type="date"
+              name="dataFim"
+              defaultValue={servicoEdicao?.dataFim ? formatDateInput(servicoEdicao.dataFim) : ""}
+              className={INPUT_CLASS}
+            />
+          </label>
           {servicoEdicao ? (
             <label className="text-sm text-slate-700 dark:text-slate-200">
               Status
@@ -162,6 +199,10 @@ export default async function ControleBuffetAmostrasOpcoesPage({
               </select>
             </label>
           ) : null}
+          <p className="text-xs text-slate-500 dark:text-slate-400 md:col-span-3">
+            Serviços fixos aparecem todos os dias. Para serviços esporádicos, informe ao menos
+            a data inicial; se for um único dia, deixe a data final vazia.
+          </p>
           <div className="btn-group md:col-span-3">
             <button type="submit" className="btn-primary">
               {servicoEdicao ? "Salvar Serviço" : "Adicionar Serviço"}
@@ -179,6 +220,8 @@ export default async function ControleBuffetAmostrasOpcoesPage({
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Nome</th>
+                <th className="px-3 py-2">Tipo</th>
+                <th className="px-3 py-2">Período</th>
                 <th className="px-3 py-2">Ordem</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Ações</th>
@@ -187,7 +230,7 @@ export default async function ControleBuffetAmostrasOpcoesPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {servicos.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum serviço cadastrado.
                   </td>
                 </tr>
@@ -195,6 +238,8 @@ export default async function ControleBuffetAmostrasOpcoesPage({
                 servicos.map((servico) => (
                   <tr key={servico.id}>
                     <td className="px-3 py-2">{servico.nome}</td>
+                    <td className="px-3 py-2">{getTipoServicoLabel(servico.tipoServico)}</td>
+                    <td className="px-3 py-2">{getServicoPeriodoLabel(servico)}</td>
                     <td className="px-3 py-2">{servico.ordem}</td>
                     <td className="px-3 py-2">{servico.ativo ? "Ativo" : "Inativo"}</td>
                     <td className="px-3 py-2">
