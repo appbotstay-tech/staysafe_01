@@ -30,54 +30,48 @@ const BREAKFAST_ITEMS = [
   { nome: "Batata Doce", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 6 },
   { nome: "Brócolis", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 7 },
   { nome: "Banana cozida", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 8 },
-  {
-    nome: "Outro",
-    classificacao: ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE,
-    ordem: 9
-  },
-  { nome: "Pão de queijo", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 10 },
-  { nome: "Leite quente", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 11 },
+  { nome: "Pão de queijo", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 9 },
+  { nome: "Leite quente", classificacao: ClassificacaoItemBuffetAmostra.QUENTE, ordem: 10 },
   {
     nome: "Bolo 1",
     classificacao: ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE,
-    ordem: 12
+    ordem: 11
   },
   {
     nome: "Bolo 2",
     classificacao: ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE,
-    ordem: 13
+    ordem: 12
   },
   {
     nome: "Bolo 3",
     classificacao: ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE,
-    ordem: 14
+    ordem: 13
   },
   {
     nome: "Bolo 4",
     classificacao: ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE,
-    ordem: 15
+    ordem: 14
   },
-  { nome: "Mamão", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 16 },
-  { nome: "Melancia", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 17 },
-  { nome: "Uvas", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 18 },
-  { nome: "Melão", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 19 },
-  { nome: "Abacaxi", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 20 },
-  { nome: "Salada de Frutas", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 21 },
-  { nome: "Queijo branco", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 22 },
-  { nome: "Queijo Mussarela", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 23 },
-  { nome: "Queijo colonial", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 24 },
-  { nome: "Salame", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 25 },
-  { nome: "Peito de Peru", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 26 },
-  { nome: "Presunto", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 27 },
-  { nome: "Tomate", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 28 },
-  { nome: "Alface", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 29 },
-  { nome: "Abacate", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 30 },
-  { nome: "Goiaba", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 31 },
-  { nome: "Manga", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 32 },
-  { nome: "Kiwi", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 33 },
-  { nome: "Suco verde", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 34 },
-  { nome: "Suco Laranja", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 35 },
-  { nome: "Suco", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 36 }
+  { nome: "Mamão", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 15 },
+  { nome: "Melancia", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 16 },
+  { nome: "Uvas", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 17 },
+  { nome: "Melão", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 18 },
+  { nome: "Abacaxi", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 19 },
+  { nome: "Salada de Frutas", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 20 },
+  { nome: "Queijo branco", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 21 },
+  { nome: "Queijo Mussarela", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 22 },
+  { nome: "Queijo colonial", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 23 },
+  { nome: "Salame", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 24 },
+  { nome: "Peito de Peru", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 25 },
+  { nome: "Presunto", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 26 },
+  { nome: "Tomate", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 27 },
+  { nome: "Alface", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 28 },
+  { nome: "Abacate", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 29 },
+  { nome: "Goiaba", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 30 },
+  { nome: "Manga", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 31 },
+  { nome: "Kiwi", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 32 },
+  { nome: "Suco verde", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 33 },
+  { nome: "Suco Laranja", classificacao: ClassificacaoItemBuffetAmostra.FRIO, ordem: 34 }
 ] as const;
 
 async function main() {
