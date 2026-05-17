@@ -213,7 +213,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
             {usuarioEdicao.isDevDefinitivo ? (
               <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                 Este usuário é o DEV definitivo e não pode ter login/perfil/status alterados para
-                garantir administração contínua do sistema.
+                garantir continuidade técnica do sistema.
               </p>
             ) : null}
 
@@ -344,7 +344,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
           ) : null}
           {usuarioStatus.isDevDefinitivo || usuarioStatus.id === authUser.id ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              Esta ação está protegida para evitar perda de acesso administrativo.
+              Esta ação está protegida para evitar perda de acesso técnico.
             </p>
           ) : (
             <form action={toggleUserStatusAction} className="mt-4">

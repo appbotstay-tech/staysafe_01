@@ -95,7 +95,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const now = getAppNow();
 
   const params = await searchParams;
@@ -130,7 +130,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
       where.dataHoraCriacao = { gte: getStartOfAppDay(date), lte: getEndOfAppDay(date) };
     }
   }
-  if (isFuncionario && authUser) {
+  if (isColaborador && authUser) {
     where.criadoPorId = authUser.id;
   }
 
@@ -286,10 +286,10 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {isFuncionario ? "Meus Chamados" : "Lista de Chamados"}
+          {isColaborador ? "Meus Chamados" : "Lista de Chamados"}
         </h2>
 
-        {isFuncionario ? (
+        {isColaborador ? (
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
             Acompanhamento simples dos chamados que você abriu.
           </p>

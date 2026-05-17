@@ -65,7 +65,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
@@ -88,7 +88,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
 
   const hasManualFilters =
-    !isFuncionario &&
+    !isColaborador &&
     Boolean(
       filtroDataRaw ||
         filtroMesRaw ||
@@ -309,7 +309,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           Registros Automáticos do Dia
         </h2>
 
-        {isFuncionario ? (
+        {isColaborador ? (
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
             Exibindo apenas tarefas e pendências do dia.
           </p>

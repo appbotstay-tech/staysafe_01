@@ -50,7 +50,7 @@ const MODULE_PATH = "/rastreabilidade-recebimento";
 const DUPLICATE_NFE_MESSAGE =
   "Esta nota fiscal já foi importada anteriormente e não pode ser cadastrada novamente.";
 
-function canImportXmlAsAdmin(role: UserRole): boolean {
+function canImportXmlAsGerente(role: UserRole): boolean {
   return role === "DEV" || role === "GERENTE";
 }
 
@@ -450,8 +450,8 @@ export async function importXmlAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    if (!canImportXmlAsAdmin(actor.perfil)) {
-      throw new Error("A importação de XML é permitida apenas para perfil administrativo.");
+    if (!canImportXmlAsGerente(actor.perfil)) {
+      throw new Error("A importação de XML é permitida apenas para DEV e GERENTE.");
     }
 
     const file = formData.get("xmlFile");
@@ -954,7 +954,7 @@ export async function deleteItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    if (!canImportXmlAsAdmin(actor.perfil)) {
+    if (!canImportXmlAsGerente(actor.perfil)) {
       throw new Error("Seu perfil não pode excluir itens de recebimento.");
     }
 
@@ -1005,7 +1005,7 @@ export async function deleteNoteAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    if (!canImportXmlAsAdmin(actor.perfil)) {
+    if (!canImportXmlAsGerente(actor.perfil)) {
       throw new Error("Seu perfil não pode excluir notas de recebimento.");
     }
 

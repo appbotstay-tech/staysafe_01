@@ -123,7 +123,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const permitirImportacao = canImportXml(authUser?.perfil ?? null);
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
@@ -318,7 +318,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
             </div>
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              A importação de XML está disponível para perfis administrativos.
+              A importação de XML está disponível para DEV e GERENTE.
             </div>
           )}
         </section>
@@ -368,7 +368,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           Exibindo notas pendentes de conferência, independentemente da data de importação.
         </p>
 
-        {isFuncionario ? (
+        {isColaborador ? (
           <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
             Exibindo notas aguardando conferência operacional.
           </p>

@@ -26,9 +26,9 @@ function hashPassword(password: string): string {
 }
 
 async function main() {
-  const nomeCompleto = getRequiredEnv("BPMA_DEV_ADMIN_NOME");
-  const nomeUsuario = getRequiredEnv("BPMA_DEV_ADMIN_USUARIO");
-  const senha = getRequiredEnv("BPMA_DEV_ADMIN_SENHA");
+  const nomeCompleto = getRequiredEnv("BPMA_DEV_NOME");
+  const nomeUsuario = getRequiredEnv("BPMA_DEV_USUARIO");
+  const senha = getRequiredEnv("BPMA_DEV_SENHA");
 
   const senhaHash = hashPassword(senha);
   const now = new Date();
@@ -67,7 +67,7 @@ async function main() {
       obrigarTrocaSenha: false,
       dataAdmissao: now,
       ultimaAlteracaoSenha: now,
-      observacoesInternas: "Usuário DEV definitivo criado via bootstrap administrativo."
+      observacoesInternas: "Usuário DEV definitivo criado via bootstrap técnico."
     }
   });
 

@@ -1508,13 +1508,13 @@ async function buildMaintenanceStats(params: {
 }): Promise<ModuleStats> {
   const moduleInfo = MODULES.chamados;
   const stats = moduleStatsBase(moduleInfo);
-  const funcionarioScope =
+  const colaboradorScope =
     params.user.perfil === "COLABORADOR" ? { criadoPorId: params.user.id } : {};
 
   const [abertos, emAndamento, concluidos] = await Promise.all([
     prisma.chamadoManutencao.findMany({
       where: {
-        ...funcionarioScope,
+        ...colaboradorScope,
         status: StatusChamadoManutencao.ABERTO
       },
       select: {
@@ -1529,7 +1529,7 @@ async function buildMaintenanceStats(params: {
     }),
     prisma.chamadoManutencao.findMany({
       where: {
-        ...funcionarioScope,
+        ...colaboradorScope,
         status: StatusChamadoManutencao.EM_ANDAMENTO
       },
       select: {
@@ -1544,7 +1544,7 @@ async function buildMaintenanceStats(params: {
     }),
     prisma.chamadoManutencao.findMany({
       where: {
-        ...funcionarioScope,
+        ...colaboradorScope,
         status: StatusChamadoManutencao.CONCLUIDO,
         dataHoraConclusao: {
           gte: params.range.start,
@@ -2326,7 +2326,7 @@ async function buildCorrectiveActionsSummary(params: {
   return summary;
 }
 
-function buildFuncionarioAlerts(params: {
+function buildColaboradorAlerts(params: {
   dailyCard: DashboardSummaryCard;
   weeklyCard: DashboardSummaryCard;
   maintenanceCard: DashboardSummaryCard;
@@ -2341,7 +2341,7 @@ function buildFuncionarioAlerts(params: {
     for (const item of items) {
       addInsightItem(summary, {
         ...item,
-        id: `alerta-funcionario:${item.id}`,
+        id: `alerta-colaborador:${item.id}`,
         severity: item.status === "Não conformidade" ? "Crítico" : "Atenção",
         occurrenceType
       });
@@ -2354,7 +2354,7 @@ function buildFuncionarioAlerts(params: {
 
   if (summary.total === 0) {
     addInsightItem(summary, {
-      id: "alerta-funcionario:sem-pendencias",
+      id: "alerta-colaborador:sem-pendencias",
       moduleId: "dashboard",
       moduleName: "Dashboard",
       title: "Nenhum alerta operacional prioritário",
@@ -2690,7 +2690,7 @@ async function buildOperationalInsights(params: {
   evolution: DashboardEvolutionMetric[];
 }> {
   if (!params.profileView.showManagement) {
-    const alerts = buildFuncionarioAlerts({
+    const alerts = buildColaboradorAlerts({
       dailyCard: params.dailyCard,
       weeklyCard: params.weeklyCard,
       maintenanceCard: params.maintenanceCard

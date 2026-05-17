@@ -81,7 +81,7 @@ export default async function HigienizacaoHortifrutiPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
@@ -91,7 +91,7 @@ export default async function HigienizacaoHortifrutiPage({
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
 
   const todayInput = formatDateInput(getTodaySystemDate());
-  const filtroData = firstParam(params.filtroData).trim() || (isFuncionario ? todayInput : "");
+  const filtroData = firstParam(params.filtroData).trim() || (isColaborador ? todayInput : "");
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes));
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno));
   const filtroHortifruti = firstParam(params.filtroHortifruti).trim();

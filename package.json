@@ -12,6 +12,7 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "auth:bootstrap-dev": "node --experimental-strip-types prisma/bootstrap-dev-admin.ts",
     "buffet:reset-kplatz": "node --experimental-strip-types prisma/reset-buffet-amostras-kplatz.ts",

@@ -191,13 +191,12 @@ async function ensureOfficialUsers(tx: Tx) {
   }
 
   const existingUsers = await tx.usuario.findMany({
-    select: { id: true, nomeCompleto: true, nomeUsuario: true, isDevDefinitivo: true, perfil: true }
+    select: { id: true, nomeCompleto: true, nomeUsuario: true, isDevDefinitivo: true }
   });
   const preserveIds = existingUsers
     .filter(
       (user) =>
         user.isDevDefinitivo ||
-        user.perfil === "DEV" ||
         officialNames.has(normalize(user.nomeCompleto)) ||
         OFFICIAL_USERS.some((official) => official.nomeUsuario === user.nomeUsuario)
     )

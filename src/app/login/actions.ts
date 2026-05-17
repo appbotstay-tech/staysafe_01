@@ -49,7 +49,7 @@ export async function loginAction(formData: FormData) {
     redirectWithFeedback(
       "/login",
       "error",
-      "Seu usuário está inativo. Procure seu gestor para reativação."
+      "Seu usuário está inativo. Procure um gerente para reativação."
     );
   }
 
@@ -97,7 +97,7 @@ export async function requestPasswordResetAction(formData: FormData) {
     redirectWithFeedback(
       "/login/esqueci-senha",
       "success",
-      "Solicitação registrada com sucesso. Aguarde contato do gestor/supervisor."
+      "Solicitação registrada com sucesso. Aguarde contato da gerência."
     );
   } catch (error) {
     rethrowIfRedirectError(error);

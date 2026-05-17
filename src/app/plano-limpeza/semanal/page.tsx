@@ -71,7 +71,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
@@ -91,7 +91,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const filtroItem = firstParam(params.filtroItem).trim();
 
   const hasManualFilters =
-    !isFuncionario &&
+    !isColaborador &&
     Boolean(
       filtroDataRaw ||
         filtroMesRaw ||
@@ -381,10 +381,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {isFuncionario ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Área"}
+          {isColaborador ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Área"}
         </h2>
 
-        {isFuncionario ? (
+        {isColaborador ? (
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
             Exibindo automaticamente as rotinas da semana atual que exigem execução operacional.
           </p>
@@ -463,7 +463,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           </form>
         )}
 
-        {!hasManualFilters && !isFuncionario ? (
+        {!hasManualFilters && !isColaborador ? (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             Exibindo automaticamente as execuções da semana atual por área.
           </p>

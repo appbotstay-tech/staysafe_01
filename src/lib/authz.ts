@@ -71,13 +71,13 @@ export function ensureCanSignResponsible(role: UserRole) {
 
 export function ensureCanSignSupervisor(role: UserRole) {
   if (!canSignAsSupervisor(role)) {
-    throw new Error("Seu perfil não pode assinar como supervisor.");
+    throw new Error("Seu perfil não pode registrar assinatura de supervisão.");
   }
 }
 
 export function ensureCanSignTechnical(role: UserRole) {
   if (!canSignTechnical(role)) {
-    throw new Error("Seu perfil não pode assinar como responsável técnico.");
+    throw new Error("Seu perfil não pode assinar como nutricionista.");
   }
 }
 

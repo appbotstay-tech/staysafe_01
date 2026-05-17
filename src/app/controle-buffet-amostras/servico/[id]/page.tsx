@@ -76,7 +76,7 @@ export default async function ExecucaoServicoBuffetPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const now = getCurrentSystemDateTime();
 
@@ -93,7 +93,7 @@ export default async function ExecucaoServicoBuffetPage({
   const dataFiltroRaw = firstParam(query.data).trim();
   const dataFiltro = parseDateInput(dataFiltroRaw);
   const hoje = parseDateInput(formatDateInput(now)) ?? now;
-  const dataReferencia = isFuncionario ? hoje : dataFiltro ?? hoje;
+  const dataReferencia = isColaborador ? hoje : dataFiltro ?? hoje;
   const dataReferenciaInput = formatDateInput(dataReferencia);
   const returnTo = buildReturnToPath(servicoId, dataReferenciaInput);
 
@@ -282,7 +282,7 @@ export default async function ExecucaoServicoBuffetPage({
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Itens do Serviço
           </h2>
-          {isFuncionario ? (
+          {isColaborador ? (
             <p className="text-sm text-slate-600 dark:text-slate-300">
               Serviço do dia em foco operacional.
             </p>
