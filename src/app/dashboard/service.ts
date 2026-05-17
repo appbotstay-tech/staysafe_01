@@ -409,8 +409,8 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "FUNCIONARIO") {
     return {
       role: user.perfil,
-      title: "Minhas Rotinas",
-      subtitle: "Pendências operacionais liberadas para o seu perfil.",
+      title: "Resumo BPMA",
+      subtitle: "",
       showManagement: false
     };
   }
@@ -418,8 +418,8 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "SUPERVISOR") {
     return {
       role: user.perfil,
-      title: "Dashboard Operacional",
-      subtitle: "Pendências, assinaturas e chamados que precisam de supervisão.",
+      title: "Resumo BPMA",
+      subtitle: "",
       showManagement: true
     };
   }
@@ -427,8 +427,8 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "RESPONSAVEL_TECNICO") {
     return {
       role: user.perfil,
-      title: "Dashboard Sanitário",
-      subtitle: "Validações técnicas, fechamentos e módulos sanitários em acompanhamento.",
+      title: "Resumo BPMA",
+      subtitle: "",
       showManagement: true
     };
   }
@@ -436,16 +436,16 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "GESTOR") {
     return {
       role: user.perfil,
-      title: "Dashboard Gerencial",
-      subtitle: "Visão consolidada da operação, pendências por módulo e chamados.",
+      title: "Resumo BPMA",
+      subtitle: "",
       showManagement: true
     };
   }
 
   return {
     role: user.perfil,
-    title: "Dashboard DEV",
-    subtitle: "Visão completa dos indicadores operacionais disponíveis na Fase 1.",
+    title: "Resumo BPMA",
+    subtitle: "",
     showManagement: true
   };
 }
@@ -1636,99 +1636,17 @@ async function buildMaintenanceStats(params: {
   return stats;
 }
 
-function buildMyPendencies(params: {
-  user: AuthenticatedUser;
-  dailyCard: DashboardSummaryCard;
-  weeklyStats: ModuleStats;
-  monthlyCard: DashboardSummaryCard | null;
-  maintenanceStats: ModuleStats;
-}): {
-  total: number;
-  details: DashboardDetailItem[];
-} {
-  const details: DashboardDetailItem[] = [];
-
-  const addMany = (items: DashboardDetailItem[]) => {
-    for (const item of items) {
-      addDetail(details, item);
-    }
-  };
-
-  if (params.user.perfil === "FUNCIONARIO") {
-    addMany(params.dailyCard.pendingDetails);
-    addMany(params.weeklyStats.pendingDetails);
-    addMany(params.maintenanceStats.pendingDetails);
-
-    return {
-      total: params.dailyCard.pending + params.weeklyStats.pending + params.maintenanceStats.pending,
-      details
-    };
-  }
-
-  if (params.user.perfil === "SUPERVISOR") {
-    addMany(
-      params.dailyCard.pendingDetails.filter(
-        (item) => item.status === "Aguardando supervisor"
-      )
-    );
-    addMany(
-      params.weeklyStats.pendingDetails.filter(
-        (item) => item.status === "Aguardando supervisor"
-      )
-    );
-    addMany(params.maintenanceStats.pendingDetails);
-    if (params.monthlyCard) addMany(params.monthlyCard.pendingDetails);
-
-    return {
-      total:
-        (params.dailyCard.waitingSupervisor ?? 0) +
-        (params.weeklyStats.waitingSupervisor ?? 0) +
-        params.maintenanceStats.pending +
-        (params.monthlyCard?.pending ?? 0),
-      details
-    };
-  }
-
-  if (params.user.perfil === "RESPONSAVEL_TECNICO") {
-    addMany(params.dailyCard.pendingDetails);
-    addMany(params.weeklyStats.pendingDetails);
-    if (params.monthlyCard) addMany(params.monthlyCard.pendingDetails);
-    addMany(params.maintenanceStats.pendingDetails);
-
-    return {
-      total:
-        params.dailyCard.pending +
-        params.weeklyStats.pending +
-        (params.monthlyCard?.pending ?? 0) +
-        params.maintenanceStats.pending,
-      details
-    };
-  }
-
-  addMany(params.dailyCard.pendingDetails);
-  addMany(params.weeklyStats.pendingDetails);
-  if (params.monthlyCard) addMany(params.monthlyCard.pendingDetails);
-  addMany(params.maintenanceStats.pendingDetails);
-
-  return {
-    total:
-      params.dailyCard.pending +
-      params.weeklyStats.pending +
-      (params.monthlyCard?.pending ?? 0) +
-      params.maintenanceStats.pending,
-    details
-  };
-}
-
 export async function getOperationalDashboardData(params: {
   user: AuthenticatedUser;
   period: DashboardPeriod;
   includeDetails?: boolean;
+  includeInsights?: boolean;
 }): Promise<DashboardData> {
   const now = getCurrentSystemDateTime();
   const ranges = getRanges(params.period, now);
   const profileView = getProfileView(params.user);
   const includeDetails = params.includeDetails ?? false;
+  const includeInsights = params.includeInsights ?? false;
 
   const [
     hortifrutiStats,
@@ -1820,38 +1738,11 @@ export async function getOperationalDashboardData(params: {
     completedDetails: maintenanceStats.completedDetails
   });
 
-  const myPendencies = buildMyPendencies({
-    user: params.user,
-    dailyCard,
-    weeklyStats: weeklyCleaningStats,
-    monthlyCard,
-    maintenanceStats
-  });
-  const myPendenciesWaitingResponsible = myPendencies.details.filter(
-    (detail) => detail.status === "Aguardando responsável"
-  ).length;
-  const myPendenciesWaitingSupervisor = myPendencies.details.filter(
-    (detail) => detail.status === "Aguardando supervisor"
-  ).length;
-
-  const myPendenciesCard = buildSummaryCard({
-    id: "minhas-pendencias",
-    title: "Minhas Pendências",
-    description: "Itens que mais provavelmente precisam da sua ação pelo perfil logado.",
-    total: myPendencies.total,
-    completed: 0,
-    pending: myPendencies.total,
-    waitingResponsible: myPendenciesWaitingResponsible,
-    waitingSupervisor: myPendenciesWaitingSupervisor,
-    pendingDetails: myPendencies.details,
-    completedDetails: []
-  });
-
   const cardsWithDetails = profileView.showManagement
-    ? [dailyCard, weeklyCard, monthlyCard, maintenanceCard, myPendenciesCard].filter(
+    ? [dailyCard, weeklyCard, monthlyCard, maintenanceCard].filter(
         (card): card is DashboardSummaryCard => Boolean(card)
       )
-    : [dailyCard, weeklyCard, maintenanceCard, myPendenciesCard];
+    : [dailyCard, weeklyCard, maintenanceCard];
   const cards = includeDetails ? cardsWithDetails : cardsWithDetails.map(stripCardDetails);
 
   const moduleSummaries = [
@@ -1864,16 +1755,22 @@ export async function getOperationalDashboardData(params: {
     buildModuleSummary(weeklyCleaningStats),
     buildModuleSummary(maintenanceStats)
   ];
-  const insights = await buildOperationalInsights({
-    user: params.user,
-    profileView,
-    ranges,
-    dailyCard,
-    weeklyCard,
-    monthlyCard,
-    maintenanceCard,
-    includeDetails
-  });
+  const insights = includeInsights
+    ? await buildOperationalInsights({
+        user: params.user,
+        profileView,
+        ranges,
+        dailyCard,
+        weeklyCard,
+        monthlyCard,
+        maintenanceCard,
+        includeDetails
+      })
+    : {
+        riskOverview: null,
+        insightSummaries: [],
+        evolution: []
+      };
 
   return {
     period: params.period,
@@ -1884,7 +1781,7 @@ export async function getOperationalDashboardData(params: {
     riskOverview: insights.riskOverview,
     insightSummaries: insights.insightSummaries,
     evolution: insights.evolution,
-    myPendencies: includeDetails ? myPendencies.details : [],
+    myPendencies: [],
     moduleSummaries,
     scope: {
       daily: formatRangeLabel(ranges.daily),
@@ -2634,7 +2531,7 @@ function buildRiskOverview(params: {
 
   const summary = createInsightSummary({
     id: "risco-operacional",
-    title: "Status da Operação",
+    title: "Indicador Operacional",
     description: "Consolidação simples de risco operacional com base nos alertas do período.",
     status,
     level
@@ -2906,7 +2803,8 @@ export async function getDashboardInsightDetails(params: {
   const dashboard = await getOperationalDashboardData({
     user: params.user,
     period: params.period,
-    includeDetails: true
+    includeDetails: true,
+    includeInsights: true
   });
   const section =
     dashboard.riskOverview?.id === params.sectionId

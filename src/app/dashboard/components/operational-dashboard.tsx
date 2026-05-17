@@ -4,15 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type {
-  DashboardAlertSeverity,
   DashboardData,
   DashboardDetailItem,
   DashboardDetailKind,
   DashboardDetailsResponse,
-  DashboardInsightDetailsResponse,
-  DashboardInsightId,
-  DashboardInsightItem,
-  DashboardInsightSummary,
   DashboardModuleSummary,
   DashboardNormalizedStatus,
   DashboardPeriod,
@@ -59,14 +54,6 @@ type DetailLoadState = {
   error?: string;
 };
 
-type InsightLoadState = {
-  details: DashboardInsightItem[];
-  total: number;
-  loading: boolean;
-  loaded: boolean;
-  error?: string;
-};
-
 type ModuleVisualStatus = "Concluído" | "Atenção" | "Crítico" | "Sem dados";
 
 type ModuleSnapshot = {
@@ -88,10 +75,6 @@ function detailCacheKey(
   kind: DashboardDetailKind
 ): string {
   return `${period}:${cardId}:${kind}`;
-}
-
-function insightCacheKey(period: DashboardPeriod, sectionId: DashboardInsightId): string {
-  return `${period}:${sectionId}`;
 }
 
 function calculatePercent(value: number, total: number): number {
@@ -209,18 +192,6 @@ function statusBadgeClass(status: DashboardNormalizedStatus): string {
   return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200";
 }
 
-function severityBadgeClass(severity: DashboardAlertSeverity): string {
-  if (severity === "Crítico") {
-    return "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200";
-  }
-
-  if (severity === "Atenção") {
-    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200";
-  }
-
-  return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
-}
-
 function moduleStatusClass(status: ModuleVisualStatus): string {
   if (status === "Concluído") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
@@ -237,8 +208,8 @@ function moduleStatusClass(status: ModuleVisualStatus): string {
   return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200";
 }
 
-function groupDetails(details: Array<DashboardDetailItem | DashboardInsightItem>) {
-  const grouped = new Map<string, Array<DashboardDetailItem | DashboardInsightItem>>();
+function groupDetails(details: DashboardDetailItem[]) {
+  const grouped = new Map<string, DashboardDetailItem[]>();
 
   for (const detail of details) {
     grouped.set(detail.moduleName, [...(grouped.get(detail.moduleName) ?? []), detail]);
@@ -247,17 +218,11 @@ function groupDetails(details: Array<DashboardDetailItem | DashboardInsightItem>
   return Array.from(grouped.entries());
 }
 
-function isInsightItem(
-  item: DashboardDetailItem | DashboardInsightItem
-): item is DashboardInsightItem {
-  return "severity" in item;
-}
-
 function DetailList({
   details,
   emptyText
 }: {
-  details: Array<DashboardDetailItem | DashboardInsightItem>;
+  details: DashboardDetailItem[];
   emptyText: string;
 }) {
   if (details.length === 0) {
@@ -279,51 +244,32 @@ function DetailList({
             {items.map((item) => (
               <div
                 key={item.id}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
+                className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="break-words text-sm font-medium text-slate-900 dark:text-slate-100">
+                <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="whitespace-normal break-normal text-sm font-medium text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
                       {item.title}
                     </p>
                     {item.description ? (
-                      <p className="mt-1 break-words text-xs text-slate-600 dark:text-slate-300">
+                      <p className="mt-1 whitespace-normal break-normal text-xs text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">
                         {item.description}
                       </p>
                     ) : null}
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                       {item.responsible ? <span>{item.responsible}</span> : null}
                       {item.dateTime ? <span>{item.dateTime}</span> : null}
-                      {isInsightItem(item) ? <span>{item.occurrenceType}</span> : null}
-                      {isInsightItem(item) && item.correctiveAction ? (
-                        <span>Ação: {item.correctiveAction}</span>
-                      ) : null}
-                      {isInsightItem(item) && typeof item.hasEvidence === "boolean" ? (
-                        <span>{item.hasEvidence ? "Com evidência" : "Sem evidência"}</span>
-                      ) : null}
-                      {isInsightItem(item) && item.relatedTicketStatus ? (
-                        <span>Chamado: {item.relatedTicketStatus}</span>
-                      ) : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {isInsightItem(item) ? (
-                      <span
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${severityBadgeClass(
-                          item.severity
-                        )}`}
-                      >
-                        {item.severity}
-                      </span>
-                    ) : null}
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
                     <span
-                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                      className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
                         item.status
                       )}`}
                     >
                       {item.status}
                     </span>
-                    <Link href={item.href} className="btn-secondary">
+                    <Link href={item.href} className="btn-secondary whitespace-nowrap">
                       Abrir
                     </Link>
                   </div>
@@ -403,7 +349,11 @@ function SummaryCard({
       : detailsState?.total ?? card.pending;
 
   return (
-    <article className="bpma-card-compact flex flex-col gap-3">
+    <article
+      className={`bpma-card-compact flex flex-col gap-3 ${
+        expandedKind ? "sm:col-span-2 xl:col-span-4" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
           {card.title}
@@ -472,217 +422,29 @@ function SummaryCard({
   );
 }
 
-function InsightDetails({
-  summary,
-  state,
-  onClose
-}: {
-  summary: DashboardInsightSummary;
-  state?: InsightLoadState;
-  onClose: () => void;
-}) {
+function ModuleSummaryGrid({ modules }: { modules: ModuleSnapshot[] }) {
   return (
-    <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Fatores do status
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-xs font-medium text-slate-600 underline-offset-4 hover:underline dark:text-slate-300"
-        >
-          Recolher
-        </button>
-      </div>
-      {state?.loading ? (
-        <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          Carregando fatores...
-        </p>
-      ) : state?.error ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {state.error}
-        </p>
-      ) : state && state.total > state.details.length ? (
-        <div>
-          <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            Mostrando {state.details.length} de {state.total} fatores.
-          </p>
-          <DetailList
-            details={state.details}
-            emptyText={`Nenhum detalhe para ${summary.title.toLocaleLowerCase("pt-BR")}.`}
-          />
-        </div>
-      ) : (
-        <DetailList
-          details={state?.details ?? []}
-          emptyText={`Nenhum detalhe para ${summary.title.toLocaleLowerCase("pt-BR")}.`}
-        />
-      )}
-    </div>
-  );
-}
-
-function buildRiskReasons(summary: DashboardInsightSummary, modules: ModuleSnapshot[]): string[] {
-  const reasons: string[] = [];
-  const modulesWithPending = modules
-    .filter((moduleSnapshot) => moduleSnapshot.pending > 0)
-    .sort((left, right) => right.pending - left.pending);
-
-  for (const moduleSnapshot of modulesWithPending) {
-    reasons.push(`${moduleSnapshot.pending} pendência(s) em ${moduleSnapshot.name}`);
-  }
-
-  if (summary.critical > 0) {
-    reasons.push(`${summary.critical} ocorrência(s) crítica(s)`);
-  }
-
-  if (summary.attention > 0) {
-    reasons.push(`${summary.attention} alerta(s) de atenção`);
-  }
-
-  return reasons.length > 0 ? reasons.slice(0, 3) : ["Sem fatores críticos no período."];
-}
-
-function CompactRiskCard({
-  summary,
-  modules,
-  expanded,
-  detailsState,
-  onToggle
-}: {
-  summary: DashboardInsightSummary;
-  modules: ModuleSnapshot[];
-  expanded: boolean;
-  detailsState?: InsightLoadState;
-  onToggle: (sectionId: DashboardInsightId) => void;
-}) {
-  const level = summary.level ?? "Informativo";
-  const reasons = buildRiskReasons(summary, modules);
-
-  return (
-    <section className="bpma-card-compact">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Status da Operação
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-              {summary.status ?? "Operação em dia"}
-            </h2>
-            <span
-              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${severityBadgeClass(
-                level
-              )}`}
-            >
-              {level}
-            </span>
-          </div>
-        </div>
-        <button type="button" onClick={() => onToggle(summary.id)} className="btn-secondary">
-          Ver fatores
-        </button>
-      </div>
-
-      <ul className="mt-3 grid gap-2 text-sm text-slate-700 dark:text-slate-200 lg:grid-cols-3">
-        {reasons.map((reason) => (
-          <li
-            key={reason}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
-          >
-            {reason}
-          </li>
-        ))}
-      </ul>
-
-      {expanded ? (
-        <InsightDetails
-          summary={summary}
-          state={detailsState}
-          onClose={() => onToggle(summary.id)}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function ModuleBarChart({ modules }: { modules: ModuleSnapshot[] }) {
-  return (
-    <section className="bpma-card">
+    <section className="bpma-card space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Resumo por Módulo
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Concluídos e pendentes no período selecionado.
+            Visão rápida de concluídos, pendentes e status por área.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-300">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            Concluídos
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            Pendentes
-          </span>
-        </div>
       </div>
 
-      <div className="mt-5 space-y-4">
-        {modules.map((moduleSnapshot) => {
-          const completedWidth = moduleSnapshot.total > 0 ? moduleSnapshot.percentCompleted : 0;
-          const pendingWidth = moduleSnapshot.total > 0 ? 100 - completedWidth : 0;
-
-          return (
-            <div
-              key={moduleSnapshot.id}
-              className="grid gap-2 lg:grid-cols-[16rem_1fr_9rem] lg:items-center"
-            >
-              <div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {moduleSnapshot.name}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {moduleSnapshot.percentCompleted}% concluído
-                </p>
-              </div>
-              <div className="flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                <div
-                  className="h-full bg-emerald-500"
-                  style={{ width: `${completedWidth}%` }}
-                />
-                <div className="h-full bg-amber-500" style={{ width: `${pendingWidth}%` }} />
-              </div>
-              <p className="text-sm text-slate-700 dark:text-slate-200 lg:text-right">
-                {moduleSnapshot.completed} concl. | {moduleSnapshot.pending} pend.
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function ModuleSituationList({ modules }: { modules: ModuleSnapshot[] }) {
-  return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Situação por Módulo
-        </h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Resumo compacto para decidir onde aprofundar.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {modules.map((moduleSnapshot) => (
-          <article key={moduleSnapshot.id} className="bpma-card-compact flex flex-col gap-3">
+          <Link
+            key={moduleSnapshot.id}
+            href={moduleSnapshot.href}
+            className="bpma-clickable-card flex min-h-36 flex-col justify-between gap-3 p-4"
+          >
             <div className="flex items-start justify-between gap-3">
-              <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <h3 className="min-w-0 whitespace-normal break-normal text-sm font-semibold text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
                 {moduleSnapshot.name}
               </h3>
               <span
@@ -693,93 +455,20 @@ function ModuleSituationList({ modules }: { modules: ModuleSnapshot[] }) {
                 {moduleSnapshot.status}
               </span>
             </div>
-            <p className="text-sm text-slate-700 dark:text-slate-200">
-              {moduleSnapshot.pending} pendência(s)
-            </p>
-            <Link href={moduleSnapshot.href} className="btn-secondary w-fit">
-              Abrir
-            </Link>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CompactMyPendenciesCard({
-  card,
-  expanded,
-  detailsState,
-  onToggle
-}: {
-  card: DashboardSummaryCard;
-  expanded: ExpandedState;
-  detailsState?: DetailLoadState;
-  onToggle: (cardId: string, kind: DashboardDetailKind) => void;
-}) {
-  const isExpanded = expanded?.cardId === card.id && expanded.kind === "pending";
-  const waitingSignatures = (card.waitingResponsible ?? 0) + (card.waitingSupervisor ?? 0);
-
-  return (
-    <section className="bpma-card-compact">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Minhas Pendências
-          </h2>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Resumo das tarefas que podem precisar da sua ação.
-          </p>
-        </div>
-        <button type="button" onClick={() => onToggle(card.id, "pending")} className="btn-primary">
-          Ver minhas tarefas
-        </button>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{card.pending}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">pendências no total</p>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <p className="text-2xl font-bold">{waitingSignatures}</p>
-          <p className="text-xs">aguardando assinatura</p>
-        </div>
-      </div>
-
-      {isExpanded ? (
-        <CardDetails
-          title="Minhas tarefas"
-          state={detailsState}
-          total={detailsState?.total ?? card.pending}
-          details={detailsState?.details ?? []}
-          emptyText="Nenhuma pendência prioritária para o seu perfil neste período."
-          onClose={() => onToggle(card.id, "pending")}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function EmployeeShortcuts({ modules }: { modules: ModuleSnapshot[] }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Atalhos Operacionais
-      </h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {modules.map((moduleSnapshot) => (
-          <Link
-            key={moduleSnapshot.id}
-            href={moduleSnapshot.href}
-            className="bpma-clickable-card p-4"
-          >
-            <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {moduleSnapshot.name}
-            </span>
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-              Abrir módulo
-            </span>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                <span className="block text-lg font-semibold">{moduleSnapshot.completed}</span>
+                <span className="text-xs">concluídos</span>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                <span className="block text-lg font-semibold">{moduleSnapshot.pending}</span>
+                <span className="text-xs">pendentes</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>{moduleSnapshot.percentCompleted}% concluído</span>
+              <span className="btn-secondary px-3 py-1 text-xs">Abrir</span>
+            </div>
           </Link>
         ))}
       </div>
@@ -790,16 +479,12 @@ function EmployeeShortcuts({ modules }: { modules: ModuleSnapshot[] }) {
 export function OperationalDashboard({ data }: OperationalDashboardProps) {
   const [expanded, setExpanded] = useState<ExpandedState>(null);
   const [detailCache, setDetailCache] = useState<Record<string, DetailLoadState>>({});
-  const [expandedInsight, setExpandedInsight] = useState<DashboardInsightId | null>(null);
-  const [insightCache, setInsightCache] = useState<Record<string, InsightLoadState>>({});
 
   const moduleSnapshots = useMemo(
     () => buildModuleSnapshots(data.moduleSummaries),
     [data.moduleSummaries]
   );
-  const isManagementView = data.profileView.showManagement;
   const mainCards = data.cards.filter((card) => MAIN_CARD_IDS.has(card.id));
-  const myPendenciesCard = data.cards.find((card) => card.id === "minhas-pendencias");
 
   const loadDetails = async (cardId: string, kind: DashboardDetailKind) => {
     const key = detailCacheKey(data.period, cardId, kind);
@@ -867,81 +552,14 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
     }
   };
 
-  const loadInsightDetails = async (sectionId: DashboardInsightId) => {
-    const key = insightCacheKey(data.period, sectionId);
-    const current = insightCache[key];
-
-    if (current?.loaded || current?.loading) {
-      return;
-    }
-
-    setInsightCache((cache) => ({
-      ...cache,
-      [key]: {
-        details: [],
-        total: 0,
-        loading: true,
-        loaded: false
-      }
-    }));
-
-    try {
-      const query = new URLSearchParams({
-        period: data.period,
-        sectionId
-      });
-      const response = await fetch(`/api/dashboard/insights?${query.toString()}`, {
-        method: "GET"
-      });
-
-      if (!response.ok) {
-        throw new Error("Falha ao buscar detalhes.");
-      }
-
-      const payload = (await response.json()) as DashboardInsightDetailsResponse;
-      setInsightCache((cache) => ({
-        ...cache,
-        [key]: {
-          details: payload.details,
-          total: payload.total,
-          loading: false,
-          loaded: true
-        }
-      }));
-    } catch {
-      setInsightCache((cache) => ({
-        ...cache,
-        [key]: {
-          details: [],
-          total: 0,
-          loading: false,
-          loaded: true,
-          error: "Não foi possível carregar os detalhes agora."
-        }
-      }));
-    }
-  };
-
-  const toggleInsight = (sectionId: DashboardInsightId) => {
-    const willClose = expandedInsight === sectionId;
-    setExpandedInsight(willClose ? null : sectionId);
-
-    if (!willClose) {
-      void loadInsightDetails(sectionId);
-    }
-  };
-
   return (
     <div className="space-y-5 dark:text-slate-100">
       <section className="bpma-card-compact">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {data.profileView.title}
+              Resumo BPMA
             </h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-              {data.profileView.subtitle}
-            </p>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               {data.periodLabel} | Atualizado em {data.generatedAt}
             </p>
@@ -961,20 +579,6 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         </div>
       </section>
 
-      {isManagementView && data.riskOverview ? (
-        <CompactRiskCard
-          summary={data.riskOverview}
-          modules={moduleSnapshots}
-          expanded={expandedInsight === data.riskOverview.id}
-          detailsState={
-            expandedInsight === data.riskOverview.id
-              ? insightCache[insightCacheKey(data.period, data.riskOverview.id)]
-              : undefined
-          }
-          onToggle={toggleInsight}
-        />
-      ) : null}
-
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {mainCards.map((card) => (
           <SummaryCard
@@ -991,26 +595,7 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         ))}
       </section>
 
-      {myPendenciesCard ? (
-        <CompactMyPendenciesCard
-          card={myPendenciesCard}
-          expanded={expanded}
-          detailsState={
-            expanded?.cardId === myPendenciesCard.id
-              ? detailCache[detailCacheKey(data.period, myPendenciesCard.id, expanded.kind)]
-              : undefined
-          }
-          onToggle={toggleExpanded}
-        />
-      ) : null}
-
-      {isManagementView ? <ModuleBarChart modules={moduleSnapshots} /> : null}
-
-      {isManagementView ? (
-        <ModuleSituationList modules={moduleSnapshots} />
-      ) : (
-        <EmployeeShortcuts modules={moduleSnapshots} />
-      )}
+      <ModuleSummaryGrid modules={moduleSnapshots} />
     </div>
   );
 }
