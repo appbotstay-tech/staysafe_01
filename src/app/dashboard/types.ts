@@ -51,6 +51,8 @@ export type DashboardModuleSummary = {
   total: number;
   completed: number;
   pending: number;
+  percentCompleted: number;
+  percentPending: number;
   status: "Concluído" | "Parcial" | "Pendente" | "Sem dados";
   note?: string;
 };
@@ -76,4 +78,11 @@ export type DashboardData = {
     monthly: string;
     maintenance: string;
   };
+};
+
+export type DashboardDetailsResponse = {
+  cardId: string;
+  kind: DashboardDetailKind;
+  total: number;
+  details: DashboardDetailItem[];
 };

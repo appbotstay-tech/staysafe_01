@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import type {
   DashboardData,
+  DashboardDetailsResponse,
   DashboardDetailItem,
   DashboardDetailKind,
   DashboardModuleSummary,
@@ -27,6 +28,22 @@ type ExpandedState = {
   cardId: string;
   kind: DashboardDetailKind;
 } | null;
+
+type DetailLoadState = {
+  details: DashboardDetailItem[];
+  total: number;
+  loading: boolean;
+  loaded: boolean;
+  error?: string;
+};
+
+function detailCacheKey(
+  period: DashboardPeriod,
+  cardId: string,
+  kind: DashboardDetailKind
+): string {
+  return `${period}:${cardId}:${kind}`;
+}
 
 function statusBadgeClass(status: DashboardNormalizedStatus): string {
   if (status === "Concluído") {
@@ -146,15 +163,20 @@ function DetailList({
 function SummaryCard({
   card,
   expanded,
+  detailsState,
   onToggle
 }: {
   card: DashboardSummaryCard;
   expanded: ExpandedState;
+  detailsState?: DetailLoadState;
   onToggle: (cardId: string, kind: DashboardDetailKind) => void;
 }) {
   const expandedKind = expanded?.cardId === card.id ? expanded.kind : null;
-  const expandedDetails =
-    expandedKind === "completed" ? card.completedDetails : card.pendingDetails;
+  const expandedDetails = detailsState?.details ?? [];
+  const expandedTotal =
+    expandedKind === "completed"
+      ? detailsState?.total ?? card.completed
+      : detailsState?.total ?? card.pending;
 
   return (
     <article className="bpma-card-compact flex min-h-[18rem] flex-col gap-4">
@@ -239,14 +261,30 @@ function SummaryCard({
               Recolher
             </button>
           </div>
-          <DetailList
-            details={expandedDetails}
-            emptyText={
-              expandedKind === "completed"
-                ? "Nenhuma tarefa concluída neste grupo."
-                : "Nenhuma pendência neste grupo."
-            }
-          />
+          {detailsState?.loading ? (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Carregando detalhes...
+            </p>
+          ) : detailsState?.error ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              {detailsState.error}
+            </p>
+          ) : expandedTotal > expandedDetails.length ? (
+            <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Mostrando {expandedDetails.length} de {expandedTotal} itens. Use Abrir para ver o
+              módulo completo.
+            </p>
+          ) : null}
+          {!detailsState?.loading && !detailsState?.error ? (
+            <DetailList
+              details={expandedDetails}
+              emptyText={
+                expandedKind === "completed"
+                  ? "Nenhuma tarefa concluída neste grupo."
+                  : "Nenhuma pendência neste grupo."
+              }
+            />
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -272,26 +310,31 @@ function MyPendenciesSection({ details }: { details: DashboardDetailItem[] }) {
   );
 }
 
-function ModuleSummaryCard({ module }: { module: DashboardModuleSummary }) {
+function ModuleSummaryCard({ moduleSummary }: { moduleSummary: DashboardModuleSummary }) {
   return (
-    <Link href={module.href} className="bpma-clickable-card p-4">
+    <Link href={moduleSummary.href} className="bpma-clickable-card p-4">
       <div className="flex items-start justify-between gap-3">
         <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {module.name}
+          {moduleSummary.name}
         </h3>
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${moduleStatusClass(
-            module.status
+            moduleSummary.status
           )}`}
         >
-          {module.status}
+          {moduleSummary.status}
         </span>
       </div>
       <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-        {module.pending} pendentes | {module.completed} concluídos
+        {moduleSummary.completed} concluídos | {moduleSummary.pending} pendentes
       </p>
-      {module.note ? (
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{module.note}</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        {moduleSummary.percentCompleted}% concluído
+      </p>
+      {moduleSummary.note ? (
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          {moduleSummary.note}
+        </p>
       ) : null}
     </Link>
   );
@@ -299,11 +342,72 @@ function ModuleSummaryCard({ module }: { module: DashboardModuleSummary }) {
 
 export function OperationalDashboard({ data }: OperationalDashboardProps) {
   const [expanded, setExpanded] = useState<ExpandedState>(null);
+  const [detailCache, setDetailCache] = useState<Record<string, DetailLoadState>>({});
+
+  const loadDetails = async (cardId: string, kind: DashboardDetailKind) => {
+    const key = detailCacheKey(data.period, cardId, kind);
+    const current = detailCache[key];
+
+    if (current?.loaded || current?.loading) {
+      return;
+    }
+
+    setDetailCache((cache) => ({
+      ...cache,
+      [key]: {
+        details: [],
+        total: 0,
+        loading: true,
+        loaded: false
+      }
+    }));
+
+    try {
+      const query = new URLSearchParams({
+        period: data.period,
+        cardId,
+        kind
+      });
+      const response = await fetch(`/api/dashboard/details?${query.toString()}`, {
+        method: "GET"
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao buscar detalhes.");
+      }
+
+      const payload = (await response.json()) as DashboardDetailsResponse;
+
+      setDetailCache((cache) => ({
+        ...cache,
+        [key]: {
+          details: payload.details,
+          total: payload.total,
+          loading: false,
+          loaded: true
+        }
+      }));
+    } catch {
+      setDetailCache((cache) => ({
+        ...cache,
+        [key]: {
+          details: [],
+          total: 0,
+          loading: false,
+          loaded: true,
+          error: "Não foi possível carregar os detalhes agora."
+        }
+      }));
+    }
+  };
 
   const toggleExpanded = (cardId: string, kind: DashboardDetailKind) => {
-    setExpanded((current) =>
-      current?.cardId === cardId && current.kind === kind ? null : { cardId, kind }
-    );
+    const willClose = expanded?.cardId === cardId && expanded.kind === kind;
+    setExpanded(willClose ? null : { cardId, kind });
+
+    if (!willClose) {
+      void loadDetails(cardId, kind);
+    }
   };
 
   return (
@@ -345,6 +449,11 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
             key={card.id}
             card={card}
             expanded={expanded}
+            detailsState={
+              expanded?.cardId === card.id
+                ? detailCache[detailCacheKey(data.period, card.id, expanded.kind)]
+                : undefined
+            }
             onToggle={toggleExpanded}
           />
         ))}
@@ -364,7 +473,7 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {data.moduleSummaries.map((module) => (
-            <ModuleSummaryCard key={module.id} module={module} />
+            <ModuleSummaryCard key={module.id} moduleSummary={module} />
           ))}
         </div>
       </section>

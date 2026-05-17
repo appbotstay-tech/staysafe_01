@@ -29,7 +29,9 @@ import { prisma } from "@/lib/prisma";
 import {
   DASHBOARD_PERIODS,
   type DashboardData,
+  type DashboardDetailKind,
   type DashboardDetailItem,
+  type DashboardDetailsResponse,
   type DashboardModuleSummary,
   type DashboardNormalizedStatus,
   type DashboardPeriod,
@@ -92,6 +94,7 @@ type DashboardRanges = {
   daily: DateOnlyRange;
   weekly: DateOnlyRange;
   monthly: DateOnlyRange;
+  openPendencies: DateOnlyRange;
   dateTime: {
     start: Date;
     end: Date;
@@ -154,6 +157,8 @@ function buildModuleSummary(stats: ModuleStats): DashboardModuleSummary {
     total: stats.total,
     completed: stats.completed,
     pending: stats.pending,
+    percentCompleted: calculatePercent(stats.completed, stats.total),
+    percentPending: calculatePercent(stats.pending, stats.total),
     status,
     note: stats.note
   };
@@ -216,6 +221,14 @@ function combineStatsToCard(params: {
   });
 }
 
+function stripCardDetails(card: DashboardSummaryCard): DashboardSummaryCard {
+  return {
+    ...card,
+    pendingDetails: [],
+    completedDetails: []
+  };
+}
+
 function formatRangeLabel(range: DateOnlyRange): string {
   if (formatDateInput(range.start) === formatDateInput(range.end)) {
     return formatDateDisplay(range.start);
@@ -258,6 +271,10 @@ function dateOnlyToLocalDateTime(date: Date, endOfDay: boolean): Date {
   );
 }
 
+function hasOpenPendenciesBeforeRange(range: DateOnlyRange, openRange: DateOnlyRange): boolean {
+  return openRange.start.getTime() < range.start.getTime();
+}
+
 function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
   const today = getTodaySystemDate();
   const { mes, ano } = getMonthYear(today);
@@ -285,6 +302,10 @@ function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
     daily,
     weekly,
     monthly: currentMonth,
+    openPendencies: {
+      start: currentMonth.start,
+      end: minDateOnly(currentMonth.end, today)
+    },
     dateTime: {
       start: dateTimeStart,
       end: dateTimeEnd.getTime() > now.getTime() ? now : dateTimeEnd
@@ -423,6 +444,34 @@ function moduleStatsBase(moduleInfo: (typeof MODULES)[keyof typeof MODULES]): Mo
   };
 }
 
+async function safeModuleStats(
+  moduleInfo: (typeof MODULES)[keyof typeof MODULES],
+  build: () => Promise<ModuleStats>
+): Promise<ModuleStats> {
+  try {
+    return await build();
+  } catch (error) {
+    console.error(`[dashboard] Falha ao consultar ${moduleInfo.name}`, error);
+
+    return {
+      ...moduleStatsBase(moduleInfo),
+      note: "Dados indisponíveis no momento."
+    };
+  }
+}
+
+async function safeSummaryCard(
+  fallback: Omit<DashboardSummaryCard, "percentCompleted" | "percentPending">,
+  build: () => Promise<DashboardSummaryCard>
+): Promise<DashboardSummaryCard> {
+  try {
+    return await build();
+  } catch (error) {
+    console.error(`[dashboard] Falha ao consultar ${fallback.title}`, error);
+    return buildSummaryCard(fallback);
+  }
+}
+
 function addPending(stats: ModuleStats, detail: DashboardDetailItem, status?: DashboardNormalizedStatus): void {
   stats.total += 1;
   stats.pending += 1;
@@ -444,10 +493,24 @@ function addCompleted(stats: ModuleStats, detail: DashboardDetailItem): void {
   addDetail(stats.completedDetails, detail);
 }
 
-async function buildDailyCleaningStats(range: DateOnlyRange): Promise<ModuleStats> {
+async function buildDailyCleaningStats(
+  range: DateOnlyRange,
+  openRange: DateOnlyRange = range
+): Promise<ModuleStats> {
   const moduleInfo = MODULES.limpezaDiaria;
   const stats = moduleStatsBase(moduleInfo);
   const dates = enumerateDateRange(range);
+  const recordWhere = hasOpenPendenciesBeforeRange(range, openRange)
+    ? {
+        OR: [
+          { data: { gte: range.start, lte: range.end } },
+          {
+            data: { gte: openRange.start, lt: range.start },
+            status: { not: StatusPlanoLimpeza.CONCLUIDO }
+          }
+        ]
+      }
+    : { data: { gte: range.start, lte: range.end } };
 
   const [areaConfigs, registros] = await Promise.all([
     prisma.planoLimpezaDiarioArea.findMany({
@@ -461,7 +524,7 @@ async function buildDailyCleaningStats(range: DateOnlyRange): Promise<ModuleStat
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
     prisma.planoLimpezaDiarioRegistro.findMany({
-      where: { data: { gte: range.start, lte: range.end } },
+      where: recordWhere,
       select: {
         id: true,
         data: true,
@@ -819,12 +882,26 @@ async function buildHortifrutiStats(range: DateOnlyRange): Promise<ModuleStats> 
   return stats;
 }
 
-async function buildReceivingStats(range: DateOnlyRange): Promise<ModuleStats> {
+async function buildReceivingStats(
+  range: DateOnlyRange,
+  openRange: DateOnlyRange = range
+): Promise<ModuleStats> {
   const moduleInfo = MODULES.rastreabilidade;
   const stats = moduleStatsBase(moduleInfo);
+  const noteWhere = hasOpenPendenciesBeforeRange(range, openRange)
+    ? {
+        OR: [
+          { data: { gte: range.start, lte: range.end } },
+          {
+            data: { gte: openRange.start, lt: range.start },
+            statusNota: { not: StatusNotaRecebimento.FINALIZADA }
+          }
+        ]
+      }
+    : { data: { gte: range.start, lte: range.end } };
 
   const notas = await prisma.rastreabilidadeRecebimentoNota.findMany({
-    where: { data: { gte: range.start, lte: range.end } },
+    where: noteWhere,
     select: {
       id: true,
       data: true,
@@ -864,10 +941,24 @@ async function buildReceivingStats(range: DateOnlyRange): Promise<ModuleStats> {
   return stats;
 }
 
-async function buildBuffetStats(range: DateOnlyRange): Promise<ModuleStats> {
+async function buildBuffetStats(
+  range: DateOnlyRange,
+  openRange: DateOnlyRange = range
+): Promise<ModuleStats> {
   const moduleInfo = MODULES.buffet;
   const stats = moduleStatsBase(moduleInfo);
   const dates = enumerateDateRange(range);
+  const recordWhere = hasOpenPendenciesBeforeRange(range, openRange)
+    ? {
+        OR: [
+          { data: { gte: range.start, lte: range.end } },
+          {
+            data: { gte: openRange.start, lt: range.start },
+            status: { not: StatusItemBuffetAmostra.ASSINADO }
+          }
+        ]
+      }
+    : { data: { gte: range.start, lte: range.end } };
 
   const [servicos, registros] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
@@ -888,7 +979,7 @@ async function buildBuffetStats(range: DateOnlyRange): Promise<ModuleStats> {
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
     prisma.controleBuffetAmostraRegistro.findMany({
-      where: { data: { gte: range.start, lte: range.end } },
+      where: recordWhere,
       select: {
         id: true,
         data: true,
@@ -1017,10 +1108,24 @@ function enumerateWeekStarts(range: DateOnlyRange): Date[] {
   return Array.from(starts.values()).sort((a, b) => a.getTime() - b.getTime());
 }
 
-async function buildWeeklyCleaningStats(range: DateOnlyRange): Promise<ModuleStats> {
+async function buildWeeklyCleaningStats(
+  range: DateOnlyRange,
+  openRange: DateOnlyRange = range
+): Promise<ModuleStats> {
   const moduleInfo = MODULES.limpezaSemanal;
   const stats = moduleStatsBase(moduleInfo);
   const weekStarts = enumerateWeekStarts(range);
+  const executionWhere = hasOpenPendenciesBeforeRange(range, openRange)
+    ? {
+        OR: [
+          { dataExecucao: { gte: range.start, lte: range.end } },
+          {
+            dataExecucao: { gte: openRange.start, lt: range.start },
+            status: { not: StatusPlanoLimpeza.CONCLUIDO }
+          }
+        ]
+      }
+    : { dataExecucao: { gte: range.start, lte: range.end } };
 
   const [items, execucoes] = await Promise.all([
     prisma.planoLimpezaSemanalItem.findMany({
@@ -1034,7 +1139,7 @@ async function buildWeeklyCleaningStats(range: DateOnlyRange): Promise<ModuleSta
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     }),
     prisma.planoLimpezaSemanalExecucao.findMany({
-      where: { dataExecucao: { gte: range.start, lte: range.end } },
+      where: executionWhere,
       select: {
         id: true,
         dataExecucao: true,
@@ -1511,10 +1616,12 @@ function buildMyPendencies(params: {
 export async function getOperationalDashboardData(params: {
   user: AuthenticatedUser;
   period: DashboardPeriod;
+  includeDetails?: boolean;
 }): Promise<DashboardData> {
   const now = getCurrentSystemDateTime();
   const ranges = getRanges(params.period, now);
   const profileView = getProfileView(params.user);
+  const includeDetails = params.includeDetails ?? false;
 
   const [
     hortifrutiStats,
@@ -1527,20 +1634,41 @@ export async function getOperationalDashboardData(params: {
     maintenanceStats,
     monthlyCard
   ] = await Promise.all([
-    buildHortifrutiStats(ranges.daily),
-    buildTemperatureStats(ranges.daily),
-    buildOilStats(ranges.daily),
-    buildReceivingStats(ranges.daily),
-    buildBuffetStats(ranges.daily),
-    buildDailyCleaningStats(ranges.daily),
-    buildWeeklyCleaningStats(ranges.weekly),
-    buildMaintenanceStats({ user: params.user, range: ranges.dateTime }),
+    safeModuleStats(MODULES.hortifruti, () => buildHortifrutiStats(ranges.daily)),
+    safeModuleStats(MODULES.temperatura, () => buildTemperatureStats(ranges.daily)),
+    safeModuleStats(MODULES.oleo, () => buildOilStats(ranges.daily)),
+    safeModuleStats(MODULES.rastreabilidade, () =>
+      buildReceivingStats(ranges.daily, ranges.openPendencies)
+    ),
+    safeModuleStats(MODULES.buffet, () => buildBuffetStats(ranges.daily, ranges.openPendencies)),
+    safeModuleStats(MODULES.limpezaDiaria, () =>
+      buildDailyCleaningStats(ranges.daily, ranges.openPendencies)
+    ),
+    safeModuleStats(MODULES.limpezaSemanal, () =>
+      buildWeeklyCleaningStats(ranges.weekly, ranges.openPendencies)
+    ),
+    safeModuleStats(MODULES.chamados, () =>
+      buildMaintenanceStats({ user: params.user, range: ranges.dateTime })
+    ),
     profileView.showManagement
-      ? buildMonthlyClosingCard({
-          mes: ranges.mes,
-          ano: ranges.ano,
-          range: ranges.monthly
-        })
+      ? safeSummaryCard(
+          {
+            id: "mensal",
+            title: "Fechamentos Mensais",
+            description: "Assinaturas mensais dos módulos com fechamento implementado.",
+            total: 0,
+            completed: 0,
+            pending: 0,
+            pendingDetails: [],
+            completedDetails: []
+          },
+          () =>
+            buildMonthlyClosingCard({
+              mes: ranges.mes,
+              ano: ranges.ano,
+              range: ranges.monthly
+            })
+        )
       : Promise.resolve(null)
   ]);
 
@@ -1556,7 +1684,7 @@ export async function getOperationalDashboardData(params: {
   const dailyCard = combineStatsToCard({
     id: "diarias",
     title: "Tarefas Diárias",
-    description: `Rotinas diárias consideradas em ${formatRangeLabel(ranges.daily)}.`,
+    description: `Rotinas de ${formatRangeLabel(ranges.daily)} e pendências abertas do mês.`,
     href: "/",
     stats: dailyStats
   });
@@ -1564,7 +1692,7 @@ export async function getOperationalDashboardData(params: {
   const weeklyCard = combineStatsToCard({
     id: "semanais",
     title: "Tarefas Semanais",
-    description: `Plano semanal e pendências ativas em ${formatRangeLabel(ranges.weekly)}.`,
+    description: `Plano semanal de ${formatRangeLabel(ranges.weekly)} e pendências abertas do mês.`,
     href: MODULES.limpezaSemanal.href,
     stats: [weeklyCleaningStats]
   });
@@ -1604,11 +1732,12 @@ export async function getOperationalDashboardData(params: {
     completedDetails: []
   });
 
-  const cards = profileView.showManagement
+  const cardsWithDetails = profileView.showManagement
     ? [dailyCard, weeklyCard, monthlyCard, maintenanceCard, myPendenciesCard].filter(
         (card): card is DashboardSummaryCard => Boolean(card)
       )
     : [dailyCard, weeklyCard, maintenanceCard, myPendenciesCard];
+  const cards = includeDetails ? cardsWithDetails : cardsWithDetails.map(stripCardDetails);
 
   const moduleSummaries = [
     buildModuleSummary(hortifrutiStats),
@@ -1638,5 +1767,31 @@ export async function getOperationalDashboardData(params: {
           ? "Chamados criados pelo usuário logado"
           : `Chamados abertos atuais e concluídos em ${formatRangeLabel(ranges.daily)}`
     }
+  };
+}
+
+export async function getDashboardCardDetails(params: {
+  user: AuthenticatedUser;
+  period: DashboardPeriod;
+  cardId: string;
+  kind: DashboardDetailKind;
+}): Promise<DashboardDetailsResponse> {
+  const dashboard = await getOperationalDashboardData({
+    user: params.user,
+    period: params.period,
+    includeDetails: true
+  });
+  const card = dashboard.cards.find((item) => item.id === params.cardId);
+  const details =
+    params.kind === "completed"
+      ? (card?.completedDetails ?? [])
+      : (card?.pendingDetails ?? []);
+  const total = params.kind === "completed" ? (card?.completed ?? 0) : (card?.pending ?? 0);
+
+  return {
+    cardId: params.cardId,
+    kind: params.kind,
+    total,
+    details
   };
 }
