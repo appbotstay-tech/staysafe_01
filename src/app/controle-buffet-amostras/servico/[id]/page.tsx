@@ -76,7 +76,7 @@ export default async function ExecucaoServicoBuffetPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const isFuncionario = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const now = getCurrentSystemDateTime();
 

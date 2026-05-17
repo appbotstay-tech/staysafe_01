@@ -15,6 +15,7 @@ import {
   ensureCanUpdateMaintenance,
   validateSignaturePassword
 } from "@/lib/authz";
+import { getAppNow } from "@/lib/date-time";
 import { parseImageUploadFromFormData } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 
@@ -135,7 +136,7 @@ export async function createChamadoAction(formData: FormData) {
     });
 
     const titulo = tituloInput || "Chamado de Manutenção";
-    const now = new Date();
+    const now = getAppNow();
 
     const chamado = await prisma.chamadoManutencao.create({
       data: {
@@ -224,7 +225,7 @@ export async function updateChamadoStatusAction(formData: FormData) {
             ? observacaoConclusao || null
             : null,
         dataHoraConclusao:
-          status === StatusChamadoManutencao.CONCLUIDO ? new Date() : null
+          status === StatusChamadoManutencao.CONCLUIDO ? getAppNow() : null
       }
     });
 

@@ -133,10 +133,9 @@ enum StatusFechamentoBuffetAmostra {
 
 enum PerfilUsuario {
   DEV
-  GESTOR
-  SUPERVISOR
-  RESPONSAVEL_TECNICO
-  FUNCIONARIO
+  GERENTE
+  NUTRICIONISTA
+  COLABORADOR
 }
 
 enum StatusUsuario {

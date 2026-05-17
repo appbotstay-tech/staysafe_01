@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { createSessionForUser, getCurrentUserForAction } from "@/lib/auth-session";
+import { getAppNow } from "@/lib/date-time";
 import { hashPassword, validatePasswordRules, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -54,7 +55,7 @@ export async function loginAction(formData: FormData) {
 
   await prisma.usuario.update({
     where: { id: usuario.id },
-    data: { ultimoAcesso: new Date() }
+    data: { ultimoAcesso: getAppNow() }
   });
 
   await createSessionForUser(usuario.id);
@@ -142,7 +143,7 @@ export async function changeOwnPasswordAction(formData: FormData) {
         data: {
           senhaHash: hashPassword(novaSenha),
           obrigarTrocaSenha: false,
-          ultimaAlteracaoSenha: new Date()
+          ultimaAlteracaoSenha: getAppNow()
         }
       });
       await tx.usuarioSessao.deleteMany({

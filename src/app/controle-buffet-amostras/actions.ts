@@ -33,6 +33,7 @@ import {
 import { normalizeOption } from "./options";
 import {
   avaliarTemperaturaBuffet,
+  formatDateInput,
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
@@ -788,7 +789,7 @@ export async function signServicoItensAction(formData: FormData) {
       user: actor,
       tipo: "RESPONSAVEL",
       modulo: "controle-buffet-amostras/servico",
-      referenciaId: `${servicoId}:${dataInput || now.toISOString()}`
+      referenciaId: `${servicoId}:${dataInput || formatDateInput(now)}`
     });
 
     revalidateModulePaths(servicoId);

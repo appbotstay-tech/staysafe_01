@@ -227,11 +227,12 @@ export default async function ControleTemperaturaEquipamentosPage({
       : equipamentoOptionsAtivas;
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
+  const periodoAtual = getMonthYear(now);
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : periodoAtual.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? periodoAtual.ano;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const registro of registros) {

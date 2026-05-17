@@ -1,6 +1,7 @@
 import type { TipoAssinaturaSistema } from "@prisma/client";
 
 import type { AuthenticatedUser } from "@/lib/auth-session";
+import { getAppNow } from "@/lib/date-time";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
@@ -133,7 +134,7 @@ export async function createSignatureLog(params: {
       modulo: params.modulo,
       referenciaId: params.referenciaId ?? null,
       observacao: params.observacao ?? null,
-      assinadoEm: new Date()
+      assinadoEm: getAppNow()
     }
   });
 }

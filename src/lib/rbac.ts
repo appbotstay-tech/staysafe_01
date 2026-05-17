@@ -1,74 +1,32 @@
-export const USER_ROLE_VALUES = [
-  "DEV",
-  "GESTOR",
-  "SUPERVISOR",
-  "RESPONSAVEL_TECNICO",
-  "FUNCIONARIO"
-] as const;
+export const USER_ROLE_VALUES = ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"] as const;
+
+export const CUSTOMER_USER_ROLE_VALUES = ["GERENTE", "NUTRICIONISTA", "COLABORADOR"] as const;
 
 export type UserRole = (typeof USER_ROLE_VALUES)[number];
+export type CustomerUserRole = (typeof CUSTOMER_USER_ROLE_VALUES)[number];
+
+const OPERATIONAL_MODULES = [
+  "/higienizacao-hortifruti",
+  "/controle-temperatura-equipamentos",
+  "/controle-qualidade-oleo",
+  "/rastreabilidade-recebimento",
+  "/controle-buffet-amostras",
+  "/plano-limpeza",
+  "/chamados-manutencao"
+];
 
 export function getRoleLabel(role: UserRole): string {
-  if (role === "RESPONSAVEL_TECNICO") {
-    return "Responsável Técnico";
-  }
-
-  return role
-    .toLocaleLowerCase("pt-BR")
-    .replace("_", " ")
-    .replace(/(^\w|\s\w)/g, (chunk) => chunk.toUpperCase());
+  if (role === "DEV") return "DEV";
+  if (role === "GERENTE") return "Gerente";
+  if (role === "NUTRICIONISTA") return "Nutricionista";
+  return "Colaborador";
 }
 
 const MODULE_ACCESS: Record<UserRole, string[]> = {
-  DEV: [
-    "/higienizacao-hortifruti",
-    "/controle-temperatura-equipamentos",
-    "/controle-qualidade-oleo",
-    "/rastreabilidade-recebimento",
-    "/controle-buffet-amostras",
-    "/plano-limpeza",
-    "/chamados-manutencao",
-    "/relatorios"
-  ],
-  GESTOR: [
-    "/higienizacao-hortifruti",
-    "/controle-temperatura-equipamentos",
-    "/controle-qualidade-oleo",
-    "/rastreabilidade-recebimento",
-    "/controle-buffet-amostras",
-    "/plano-limpeza",
-    "/chamados-manutencao",
-    "/relatorios"
-  ],
-  SUPERVISOR: [
-    "/higienizacao-hortifruti",
-    "/controle-temperatura-equipamentos",
-    "/controle-qualidade-oleo",
-    "/rastreabilidade-recebimento",
-    "/controle-buffet-amostras",
-    "/plano-limpeza",
-    "/chamados-manutencao",
-    "/relatorios"
-  ],
-  RESPONSAVEL_TECNICO: [
-    "/higienizacao-hortifruti",
-    "/controle-temperatura-equipamentos",
-    "/controle-qualidade-oleo",
-    "/rastreabilidade-recebimento",
-    "/controle-buffet-amostras",
-    "/plano-limpeza",
-    "/chamados-manutencao",
-    "/relatorios"
-  ],
-  FUNCIONARIO: [
-    "/higienizacao-hortifruti",
-    "/controle-temperatura-equipamentos",
-    "/controle-qualidade-oleo",
-    "/rastreabilidade-recebimento",
-    "/controle-buffet-amostras",
-    "/plano-limpeza",
-    "/chamados-manutencao"
-  ]
+  DEV: [...OPERATIONAL_MODULES, "/relatorios"],
+  GERENTE: [...OPERATIONAL_MODULES, "/relatorios"],
+  NUTRICIONISTA: [...OPERATIONAL_MODULES, "/relatorios"],
+  COLABORADOR: OPERATIONAL_MODULES
 };
 
 export function canAccessModule(role: UserRole, href: string): boolean {
@@ -76,35 +34,35 @@ export function canAccessModule(role: UserRole, href: string): boolean {
 }
 
 export function canManageUsers(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 export function canViewResetRequests(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "SUPERVISOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 export function canManageModuleOptions(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 export function canViewFullHistory(role: UserRole): boolean {
-  return role !== "FUNCIONARIO";
+  return role !== "COLABORADOR";
 }
 
 export function canViewManagementSections(role: UserRole): boolean {
-  return role !== "FUNCIONARIO";
+  return role !== "COLABORADOR";
 }
 
 export function canAccessReports(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "SUPERVISOR" || role === "RESPONSAVEL_TECNICO";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canDeleteOperationalRecords(role: UserRole): boolean {
-  return role !== "FUNCIONARIO";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canCloseMonth(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "RESPONSAVEL_TECNICO";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canReopenMonth(role: UserRole): boolean {
@@ -112,15 +70,15 @@ export function canReopenMonth(role: UserRole): boolean {
 }
 
 export function canSignAsSupervisor(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "SUPERVISOR";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canSignAsResponsible(role: UserRole): boolean {
-  return role !== "RESPONSAVEL_TECNICO";
+  return role !== "NUTRICIONISTA";
 }
 
 export function canSignTechnical(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "RESPONSAVEL_TECNICO";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canResetPassword(actorRole: UserRole, targetRole: UserRole): boolean {
@@ -128,16 +86,8 @@ export function canResetPassword(actorRole: UserRole, targetRole: UserRole): boo
     return true;
   }
 
-  if (actorRole === "GESTOR") {
-    return (
-      targetRole === "SUPERVISOR" ||
-      targetRole === "RESPONSAVEL_TECNICO" ||
-      targetRole === "FUNCIONARIO"
-    );
-  }
-
-  if (actorRole === "SUPERVISOR") {
-    return targetRole === "FUNCIONARIO";
+  if (actorRole === "GERENTE") {
+    return targetRole === "GERENTE" || targetRole === "NUTRICIONISTA" || targetRole === "COLABORADOR";
   }
 
   return false;
@@ -148,7 +98,7 @@ export function canOpenMaintenanceTicket(role: UserRole): boolean {
 }
 
 export function canUpdateMaintenanceTicket(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR" || role === "SUPERVISOR";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canAccessPath(role: UserRole, pathname: string): boolean {

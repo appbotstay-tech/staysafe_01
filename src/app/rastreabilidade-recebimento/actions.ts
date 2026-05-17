@@ -51,15 +51,15 @@ const DUPLICATE_NFE_MESSAGE =
   "Esta nota fiscal já foi importada anteriormente e não pode ser cadastrada novamente.";
 
 function canImportXmlAsAdmin(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 function canEditImportedXmlFields(role: UserRole): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 function canCreateManualReceiving(role: UserRole): boolean {
-  return role !== "FUNCIONARIO";
+  return role !== "COLABORADOR";
 }
 
 type FeedbackType = "success" | "error";

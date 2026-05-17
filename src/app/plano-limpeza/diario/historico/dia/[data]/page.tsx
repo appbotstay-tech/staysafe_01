@@ -17,6 +17,7 @@ import {
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
+  getCurrentSystemDateTime,
   getMonthYear,
   getTurnoLabel,
   parseDateInput
@@ -43,7 +44,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const now = new Date();
+  const now = getCurrentSystemDateTime();
 
   const { data } = await params;
   const query = await searchParams;

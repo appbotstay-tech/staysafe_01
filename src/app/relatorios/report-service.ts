@@ -17,6 +17,19 @@ import {
 } from "@prisma/client";
 
 import type { AuthenticatedUser } from "@/lib/auth-session";
+import {
+  formatAppDate,
+  formatAppDateInput,
+  formatAppDateTime,
+  getAppDate,
+  getAppMonthYear,
+  getAppMonthDateRange,
+  getAppNow,
+  getAppWeekDateRange,
+  getEndOfAppDay,
+  getStartOfAppDay,
+  parseAppDateInput
+} from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
@@ -60,43 +73,35 @@ function getParam(params: ReportSearchParams, key: string): string {
 }
 
 function parseDateInput(value: string): Date | null {
-  const [year, month, day] = value.split("-").map((item) => Number(item));
-  if (!year || !month || !day) return null;
-  const date = new Date(year, month - 1, day);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseAppDateInput(value);
 }
 
 function formatDateInput(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return formatAppDateInput(date);
 }
 
 function formatDateDisplay(date: Date | null | undefined): string {
   if (!date) return "-";
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
+  return formatAppDate(date);
 }
 
 function formatDateTimeDisplay(date: Date | null | undefined): string {
   if (!date) return "-";
-  return `${formatDateDisplay(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return formatAppDateTime(date);
 }
 
 function getDateRange(params: ReportSearchParams): DateRange {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getAppDate();
   const end = parseDateInput(getParam(params, "dataFinal")) ?? today;
   const fallbackStart = new Date(end);
-  fallbackStart.setDate(fallbackStart.getDate() - 30);
+  fallbackStart.setUTCDate(fallbackStart.getUTCDate() - 30);
   const start = parseDateInput(getParam(params, "dataInicial")) ?? fallbackStart;
   return { start, end, startInput: formatDateInput(start), endInput: formatDateInput(end) };
 }
 
 function getDateTimeRange(params: ReportSearchParams): { start: Date; end: Date } {
   const range = getDateRange(params);
-  const start = new Date(range.start);
-  const end = new Date(range.end);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
+  return { start: getStartOfAppDay(range.start), end: getEndOfAppDay(range.end) };
 }
 
 function getPeriodLabel(range: DateRange): string {
@@ -270,7 +275,7 @@ function finalizeReport(params: {
     periodLabel: params.periodLabel,
     generatedBy: params.user.nomeCompleto,
     generatedByRole: getRoleLabel(params.user.perfil),
-    generatedAt: new Date(),
+    generatedAt: getAppNow(),
     appliedFilters: makeAppliedFilters(params.searchParams, params.moduleId, reportDefinition.id),
     summary: params.summary,
     columns: params.columns,
@@ -280,18 +285,18 @@ function finalizeReport(params: {
 }
 
 function rangeFromWeek(params: ReportSearchParams): DateRange {
-  const year = Number(getParam(params, "ano")) || new Date().getFullYear();
+  const year = Number(getParam(params, "ano")) || getAppMonthYear(getAppDate()).ano;
   const week = Number(getParam(params, "semana"));
   const month = Number(getParam(params, "mes"));
   if (week && week >= 1 && week <= 53) {
-    const start = new Date(year, 0, 1 + (week - 1) * 7);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    const firstWeekDate = parseAppDateInput(`${year}-01-01`) ?? getAppDate();
+    const firstWeekStart = new Date(firstWeekDate);
+    firstWeekStart.setUTCDate(firstWeekStart.getUTCDate() + (week - 1) * 7);
+    const { start, end } = getAppWeekDateRange(firstWeekStart);
     return { start, end, startInput: formatDateInput(start), endInput: formatDateInput(end) };
   }
   if (month && month >= 1 && month <= 12) {
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0);
+    const { start, end } = getAppMonthDateRange(month, year);
     return { start, end, startInput: formatDateInput(start), endInput: formatDateInput(end) };
   }
   return getDateRange(params);
@@ -567,8 +572,7 @@ async function generateChamadosReport(moduleId: ReportModuleId, reportId: string
 }
 
 async function countGeneralModuleRows(range: DateRange) {
-  const dateTimeEnd = new Date(range.end);
-  dateTimeEnd.setHours(23, 59, 59, 999);
+  const dateTimeEnd = getEndOfAppDay(range.end);
   const [hort, temp, oleo, receb, buffet, diario, semanal, chamados] = await Promise.all([
     prisma.higienizacaoHortifruti.findMany({ where: { data: { gte: range.start, lte: range.end } } }),
     prisma.controleTemperaturaEquipamento.findMany({ where: { data: { gte: range.start, lte: range.end } } }),

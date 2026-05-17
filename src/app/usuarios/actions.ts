@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { getCurrentUserForAction } from "@/lib/auth-session";
+import { getAppNow, parseAppDateInput } from "@/lib/date-time";
 import {
   ensureCanManageUsers,
   ensureCanResetPassword,
@@ -23,27 +24,11 @@ function getInputValue(formData: FormData, key: string): string {
 }
 
 function parseDateOnly(value: string): Date | null {
-  const [year, month, day] = value.split("-").map((item) => Number(item));
-  if (!year || !month || !day) {
-    return null;
-  }
-
-  const date = new Date(year, month - 1, day);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+  return parseAppDateInput(value);
 }
 
 function parseRole(value: string): UserRole | null {
-  if (
-    value === "DEV" ||
-    value === "GESTOR" ||
-    value === "SUPERVISOR" ||
-    value === "RESPONSAVEL_TECNICO" ||
-    value === "FUNCIONARIO"
-  ) {
+  if (value === "DEV" || value === "GERENTE" || value === "NUTRICIONISTA" || value === "COLABORADOR") {
     return value;
   }
 
@@ -121,6 +106,15 @@ async function getTargetUserForManagement(userId: number) {
   });
 }
 
+function assertNotDevUser(target: {
+  perfil: string;
+  isDevDefinitivo?: boolean;
+}) {
+  if (target.isDevDefinitivo || target.perfil === "DEV") {
+    throw new Error("O usuário DEV é técnico e não pode ser gerenciado pela tela de usuários.");
+  }
+}
+
 export async function createUserAction(formData: FormData) {
   try {
     const actor = await getCurrentUserForAction();
@@ -137,6 +131,10 @@ export async function createUserAction(formData: FormData) {
 
     if (!nomeCompleto || !nomeUsuario || !perfil || !senhaInicial) {
       throw new Error("Preencha todos os campos obrigatórios de criação.");
+    }
+
+    if (perfil === "DEV") {
+      throw new Error("O usuário DEV deve ser criado apenas pelo bootstrap técnico.");
     }
 
     const passwordRuleError = validatePasswordRules(senhaInicial);
@@ -162,7 +160,7 @@ export async function createUserAction(formData: FormData) {
         dataAdmissao,
         observacoesInternas,
         obrigarTrocaSenha,
-        ultimaAlteracaoSenha: new Date()
+        ultimaAlteracaoSenha: getAppNow()
       }
     });
 
@@ -205,6 +203,8 @@ export async function updateUserAction(formData: FormData) {
     if (!target) {
       throw new Error("Usuário não encontrado.");
     }
+
+    assertNotDevUser(target);
 
     if (target.isDevDefinitivo) {
       if (nomeUsuario !== target.nomeUsuario) {
@@ -285,6 +285,8 @@ export async function toggleUserStatusAction(formData: FormData) {
       throw new Error("Usuário não encontrado.");
     }
 
+    assertNotDevUser(target);
+
     if (target.id === actor.id && status === "INATIVO") {
       throw new Error("Você não pode inativar o próprio usuário.");
     }
@@ -324,12 +326,13 @@ export async function resetUserPasswordAction(formData: FormData) {
 
     const target = await prisma.usuario.findUnique({
       where: { id: userId },
-      select: { id: true, perfil: true, nomeCompleto: true }
+      select: { id: true, perfil: true, nomeCompleto: true, isDevDefinitivo: true }
     });
     if (!target) {
       throw new Error("Usuário não encontrado.");
     }
 
+    assertNotDevUser(target);
     ensureCanResetPassword(actor.perfil, target.perfil as UserRole);
 
     const senhaTemporariaInformada = getInputValue(formData, "senhaTemporaria");
@@ -344,7 +347,7 @@ export async function resetUserPasswordAction(formData: FormData) {
       data: {
         senhaHash: hashPassword(senhaTemporaria),
         obrigarTrocaSenha: true,
-        ultimaAlteracaoSenha: new Date()
+        ultimaAlteracaoSenha: getAppNow()
       }
     });
 
@@ -379,6 +382,8 @@ export async function deleteUserAction(formData: FormData) {
     if (!target) {
       throw new Error("Usuário não encontrado.");
     }
+
+    assertNotDevUser(target);
 
     if (target.id === actor.id) {
       throw new Error("Você não pode remover o próprio usuário.");
@@ -428,7 +433,7 @@ export async function handleResetRequestAction(formData: FormData) {
       where: { id: requestId },
       include: {
         usuario: {
-          select: { id: true, perfil: true, nomeCompleto: true }
+          select: { id: true, perfil: true, nomeCompleto: true, isDevDefinitivo: true }
         }
       }
     });
@@ -449,7 +454,7 @@ export async function handleResetRequestAction(formData: FormData) {
             observacaoInterna ||
             "Solicitação cancelada: usuário não identificado no sistema.",
           tratadoPorId: actor.id,
-          tratadoEm: new Date()
+          tratadoEm: getAppNow()
         }
       });
       redirectWithFeedback(
@@ -459,6 +464,7 @@ export async function handleResetRequestAction(formData: FormData) {
       );
     }
 
+    assertNotDevUser(solicitacao.usuario);
     ensureCanResetPassword(actor.perfil, solicitacao.usuario.perfil as UserRole);
 
     const senhaTemporaria = senhaTemporariaInformada || generateTemporaryPassword();
@@ -473,7 +479,7 @@ export async function handleResetRequestAction(formData: FormData) {
         data: {
           senhaHash: hashPassword(senhaTemporaria),
           obrigarTrocaSenha: true,
-          ultimaAlteracaoSenha: new Date()
+          ultimaAlteracaoSenha: getAppNow()
         }
       });
       await tx.solicitacaoRedefinicaoSenha.update({
@@ -482,7 +488,7 @@ export async function handleResetRequestAction(formData: FormData) {
           status: "ATENDIDA",
           observacaoInterna: observacaoInterna,
           tratadoPorId: actor.id,
-          tratadoEm: new Date()
+          tratadoEm: getAppNow()
         }
       });
     });

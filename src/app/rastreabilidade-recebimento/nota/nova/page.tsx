@@ -13,7 +13,7 @@ const INPUT_CLASS =
 
 export default async function NovaNotaRecebimentoPage() {
   const authUser = await getCurrentUser();
-  if (authUser?.perfil === "FUNCIONARIO") {
+  if (authUser?.perfil === "COLABORADOR") {
     redirect("/acesso-negado");
   }
 

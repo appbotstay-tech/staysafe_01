@@ -81,7 +81,7 @@ export default async function HigienizacaoHortifrutiPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const isFuncionario = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
@@ -148,13 +148,14 @@ export default async function HigienizacaoHortifrutiPage({
     : null;
 
   const now = getCurrentSystemDateTime();
+  const currentPeriod = getMonthYear(getTodaySystemDate());
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : currentPeriod.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const registro of registros) {

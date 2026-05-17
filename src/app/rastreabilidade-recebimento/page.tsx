@@ -32,6 +32,7 @@ import {
   formatDateTimeDisplay,
   getCurrentSystemDateTime,
   getMonthDateRange,
+  getMonthYear,
   parseDateInput,
   parsePositiveInt
 } from "./utils";
@@ -105,7 +106,7 @@ function getNotaStatusClass(status: StatusNotaRecebimento): string {
 }
 
 function canImportXml(role: string | null): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 function parsePendingStatusFilter(value: string): StatusNotaRecebimento | null {
@@ -122,7 +123,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const isFuncionario = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const permitirImportacao = canImportXml(authUser?.perfil ?? null);
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
@@ -147,11 +148,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
 
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
+  const periodoAtual = getMonthYear(now);
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : periodoAtual.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? periodoAtual.ano;
 
   const whereNotasPendentes: Prisma.RastreabilidadeRecebimentoNotaWhereInput = {
     statusNota: filtroStatus ?? { in: PENDING_NOTE_STATUSES }

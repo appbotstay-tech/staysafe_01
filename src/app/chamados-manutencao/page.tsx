@@ -8,6 +8,13 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { getCurrentUser } from "@/lib/auth-session";
+import {
+  formatAppDateTime,
+  getAppNow,
+  getEndOfAppDay,
+  getStartOfAppDay,
+  parseAppDateInput
+} from "@/lib/date-time";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 import { canUpdateMaintenanceTicket, getRoleLabel } from "@/lib/rbac";
@@ -31,13 +38,7 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 function formatDateTimeDisplay(date: Date): string {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hour}:${minute}`;
+  return formatAppDateTime(date);
 }
 
 function parseStatus(value: string): StatusChamadoManutencao | null {
@@ -94,8 +95,8 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
-  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
-  const now = new Date();
+  const isFuncionario = authUser?.perfil === "COLABORADOR";
+  const now = getAppNow();
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -124,12 +125,9 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
     where.origem = parseOrigem(filtroOrigem);
   }
   if (filtroData) {
-    const date = new Date(`${filtroData}T00:00:00`);
-    if (!Number.isNaN(date.getTime())) {
-      const dayStart = date;
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
-      where.dataHoraCriacao = { gte: dayStart, lte: dayEnd };
+    const date = parseAppDateInput(filtroData);
+    if (date) {
+      where.dataHoraCriacao = { gte: getStartOfAppDay(date), lte: getEndOfAppDay(date) };
     }
   }
   if (isFuncionario && authUser) {

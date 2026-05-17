@@ -23,6 +23,7 @@ import {
   getClassificacaoLabel,
   getCurrentSystemDateTime,
   getMonthDateRange,
+  getMonthYear,
   getStatusItemLabel,
   getTodaySystemDate,
   parsePositiveInt
@@ -79,6 +80,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
 
   const now = getCurrentSystemDateTime();
   const today = getTodaySystemDate();
+  const currentPeriod = getMonthYear(today);
   const todayInput = formatDateInput(today);
 
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
@@ -86,8 +88,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : currentPeriod.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
   const [servicos, registrosDia, fechamentoAtual] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({

@@ -10,42 +10,42 @@ export const modules: AppModule[] = [
   {
     name: "Higienização de Hortifruti",
     href: "/higienizacao-hortifruti",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Controle de Temperatura de Equipamentos",
     href: "/controle-temperatura-equipamentos",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Controle de Qualidade do Óleo",
     href: "/controle-qualidade-oleo",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Rastreabilidade de Recebimento",
     href: "/rastreabilidade-recebimento",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Controle de Buffet / Amostras",
     href: "/controle-buffet-amostras",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Plano de Limpeza",
     href: "/plano-limpeza",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Chamados de Manutenção",
     href: "/chamados-manutencao",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO", "FUNCIONARIO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
     name: "Relatórios e Auditoria",
     href: "/relatorios",
-    allowedRoles: ["DEV", "GESTOR", "SUPERVISOR", "RESPONSAVEL_TECNICO"]
+    allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA"]
   },
 ];
 

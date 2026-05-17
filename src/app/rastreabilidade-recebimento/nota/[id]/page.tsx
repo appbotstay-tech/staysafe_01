@@ -67,11 +67,11 @@ function getNotaStatusClass(status: StatusNotaRecebimento): string {
 }
 
 function canEditImportedXmlFields(role: string | undefined): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 function canDeleteRecebimentoNote(role: string | undefined): boolean {
-  return role === "DEV" || role === "GESTOR";
+  return role === "DEV" || role === "GERENTE";
 }
 
 function formatCnpj(value: string): string {

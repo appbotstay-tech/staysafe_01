@@ -71,7 +71,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const isFuncionario = authUser?.perfil === "FUNCIONARIO";
+  const isFuncionario = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
@@ -229,11 +229,12 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
+  const periodoAtual = getMonthYear(now);
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : periodoAtual.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? periodoAtual.ano;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const summary of summaries) {

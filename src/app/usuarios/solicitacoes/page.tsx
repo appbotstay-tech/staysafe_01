@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { formatAppDateTime } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { canViewResetRequests, getRoleLabel, type UserRole } from "@/lib/rbac";
 
@@ -23,12 +24,7 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 function formatDateTime(date: Date): string {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${day}/${month}/${year} ${hour}:${minute}`;
+  return formatAppDateTime(date);
 }
 
 export const dynamic = "force-dynamic";
@@ -48,6 +44,12 @@ export default async function SolicitacoesRedefinicaoPage({
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const solicitacoes = await prisma.solicitacaoRedefinicaoSenha.findMany({
+    where: {
+      NOT: [
+        { usuario: { is: { perfil: "DEV" } } },
+        { usuario: { is: { isDevDefinitivo: true } } }
+      ]
+    },
     include: {
       usuario: {
         select: { nomeCompleto: true, nomeUsuario: true, perfil: true }

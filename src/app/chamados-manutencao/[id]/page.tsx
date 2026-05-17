@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 
 import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 import { getCurrentUser } from "@/lib/auth-session";
+import { formatAppDateTime } from "@/lib/date-time";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 import { canUpdateMaintenanceTicket } from "@/lib/rbac";
@@ -44,13 +45,7 @@ function formatDateTimeDisplay(date: Date | null): string {
     return "-";
   }
 
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hour}:${minute}`;
+  return formatAppDateTime(date);
 }
 
 function getStatusLabel(status: StatusChamadoManutencao): string {
@@ -103,7 +98,7 @@ export default async function ChamadoManutencaoDetalhePage({
   if (!chamado) {
     notFound();
   }
-  if (authUser?.perfil === "FUNCIONARIO" && chamado.criadoPorId !== authUser.id) {
+  if (authUser?.perfil === "COLABORADOR" && chamado.criadoPorId !== authUser.id) {
     notFound();
   }
 

@@ -37,6 +37,7 @@ import {
   getMonthDateRange,
   getMonthYear,
   getStatusLabel,
+  getTodaySystemDate,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -115,6 +116,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
 
   const now = getCurrentSystemDateTime();
+  const currentPeriod = getMonthYear(getTodaySystemDate());
   const todayInput = formatDateInput(now);
 
   const filtroDataRaw = firstParam(params.filtroData).trim();
@@ -217,8 +219,8 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   const fechamentoMes =
     fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
       ? fechamentoMesRaw
-      : now.getMonth() + 1;
-  const fechamentoAno = fechamentoAnoRaw ?? now.getFullYear();
+      : currentPeriod.mes;
+  const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const registro of registros) {

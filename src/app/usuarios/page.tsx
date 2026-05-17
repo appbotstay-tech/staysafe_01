@@ -3,8 +3,15 @@ import { redirect } from "next/navigation";
 
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { formatAppDateInput } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
-import { canManageUsers, getRoleLabel, USER_ROLE_VALUES, type UserRole } from "@/lib/rbac";
+import {
+  canManageUsers,
+  CUSTOMER_USER_ROLE_VALUES,
+  getRoleLabel,
+  USER_ROLE_VALUES,
+  type UserRole
+} from "@/lib/rbac";
 
 import {
   createUserAction,
@@ -29,14 +36,7 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 function formatDateInput(date: Date | null): string {
-  if (!date) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return date ? formatAppDateInput(date) : "";
 }
 
 function normalizeRoleInput(value: string, fallback: UserRole): UserRole {
@@ -65,6 +65,10 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
   const deleteId = Number(firstParam(params.deleteId));
 
   const usuarios = await prisma.usuario.findMany({
+    where: {
+      isDevDefinitivo: false,
+      perfil: { not: "DEV" }
+    },
     orderBy: [{ createdAt: "desc" }]
   });
   const usuarioEdicao =
@@ -88,7 +92,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
     ? hasEditDraft
       ? normalizeRoleInput(firstParam(params.editPerfil), usuarioEdicao.perfil as UserRole)
       : (usuarioEdicao.perfil as UserRole)
-    : "FUNCIONARIO";
+    : "COLABORADOR";
   const editStatus = usuarioEdicao
     ? hasEditDraft
       ? normalizeStatusInput(
@@ -155,7 +159,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Perfil *
             <select name="perfil" required className={INPUT_CLASS}>
-              {USER_ROLE_VALUES.map((role) => (
+              {CUSTOMER_USER_ROLE_VALUES.map((role) => (
                 <option key={role} value={role}>
                   {getRoleLabel(role)}
                 </option>
@@ -226,7 +230,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
               <label className="text-sm text-slate-700 dark:text-slate-200">
                 Perfil *
                 <select name="perfil" defaultValue={editPerfil} required className={INPUT_CLASS}>
-                  {USER_ROLE_VALUES.map((role) => (
+                  {CUSTOMER_USER_ROLE_VALUES.map((role) => (
                     <option key={role} value={role}>
                       {getRoleLabel(role)}
                     </option>

@@ -14,7 +14,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "auth:bootstrap-dev": "node --experimental-strip-types prisma/bootstrap-dev-admin.ts",
-    "buffet:reset-kplatz": "node --experimental-strip-types prisma/reset-buffet-amostras-kplatz.ts"
+    "buffet:reset-kplatz": "node --experimental-strip-types prisma/reset-buffet-amostras-kplatz.ts",
+    "reset:kplatz-inicio": "node --no-warnings --experimental-strip-types prisma/reset-kplatz-inicio-operacao.ts"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"

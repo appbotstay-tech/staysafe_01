@@ -29,6 +29,7 @@ import {
   getWeekStartDateForDate
 } from "@/app/plano-limpeza/utils";
 import type { AuthenticatedUser } from "@/lib/auth-session";
+import { getEndOfAppDay, getStartOfAppDay } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -326,17 +327,7 @@ function enumerateDateRange(range: DateOnlyRange): Date[] {
 }
 
 function dateOnlyToLocalDateTime(date: Date, endOfDay: boolean): Date {
-  const [year, month, day] = formatDateInput(date).split("-").map(Number);
-
-  return new Date(
-    year,
-    month - 1,
-    day,
-    endOfDay ? 23 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0
-  );
+  return endOfDay ? getEndOfAppDay(date) : getStartOfAppDay(date);
 }
 
 function hasOpenPendenciesBeforeRange(range: DateOnlyRange, openRange: DateOnlyRange): boolean {
@@ -406,7 +397,7 @@ function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
 }
 
 function getProfileView(user: AuthenticatedUser): DashboardProfileView {
-  if (user.perfil === "FUNCIONARIO") {
+  if (user.perfil === "COLABORADOR") {
     return {
       role: user.perfil,
       title: "Resumo BPMA",
@@ -415,7 +406,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
     };
   }
 
-  if (user.perfil === "SUPERVISOR") {
+  if (user.perfil === "NUTRICIONISTA") {
     return {
       role: user.perfil,
       title: "Resumo BPMA",
@@ -424,16 +415,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
     };
   }
 
-  if (user.perfil === "RESPONSAVEL_TECNICO") {
-    return {
-      role: user.perfil,
-      title: "Resumo BPMA",
-      subtitle: "",
-      showManagement: true
-    };
-  }
-
-  if (user.perfil === "GESTOR") {
+  if (user.perfil === "GERENTE") {
     return {
       role: user.perfil,
       title: "Resumo BPMA",
@@ -1527,7 +1509,7 @@ async function buildMaintenanceStats(params: {
   const moduleInfo = MODULES.chamados;
   const stats = moduleStatsBase(moduleInfo);
   const funcionarioScope =
-    params.user.perfil === "FUNCIONARIO" ? { criadoPorId: params.user.id } : {};
+    params.user.perfil === "COLABORADOR" ? { criadoPorId: params.user.id } : {};
 
   const [abertos, emAndamento, concluidos] = await Promise.all([
     prisma.chamadoManutencao.findMany({
@@ -1726,7 +1708,7 @@ export async function getOperationalDashboardData(params: {
     id: "chamados",
     title: "Chamados de Manutenção",
     description:
-      params.user.perfil === "FUNCIONARIO"
+      params.user.perfil === "COLABORADOR"
         ? "Seus chamados abertos, em andamento e concluídos no período."
         : "Chamados abertos, em andamento e concluídos no período.",
     href: MODULES.chamados.href,
@@ -1788,7 +1770,7 @@ export async function getOperationalDashboardData(params: {
       weekly: formatRangeLabel(ranges.weekly),
       monthly: `${String(ranges.mes).padStart(2, "0")}/${ranges.ano}`,
       maintenance:
-        params.user.perfil === "FUNCIONARIO"
+        params.user.perfil === "COLABORADOR"
           ? "Chamados criados pelo usuário logado"
           : `Chamados abertos atuais e concluídos em ${formatRangeLabel(ranges.daily)}`
     }
