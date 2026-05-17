@@ -15,6 +15,19 @@ export type DashboardNormalizedStatus =
 
 export type DashboardDetailKind = "pending" | "completed";
 
+export type DashboardInsightId =
+  | "risco-operacional"
+  | "alertas-operacionais"
+  | "nao-conformidades"
+  | "acoes-corretivas";
+
+export type DashboardAlertSeverity = "Crítico" | "Atenção" | "Informativo";
+
+export type DashboardRiskStatus =
+  | "Operação em dia"
+  | "Atenção necessária"
+  | "Risco crítico";
+
 export type DashboardDetailItem = {
   id: string;
   moduleId: string;
@@ -25,6 +38,38 @@ export type DashboardDetailItem = {
   responsible?: string;
   dateTime?: string;
   href: string;
+};
+
+export type DashboardInsightItem = DashboardDetailItem & {
+  severity: DashboardAlertSeverity;
+  occurrenceType: string;
+  correctiveAction?: string;
+  hasEvidence?: boolean;
+  relatedTicketStatus?: string;
+};
+
+export type DashboardInsightSummary = {
+  id: DashboardInsightId;
+  title: string;
+  description: string;
+  total: number;
+  critical: number;
+  attention: number;
+  informative: number;
+  resolved?: number;
+  withCorrectiveAction?: number;
+  withoutCorrectiveAction?: number;
+  status?: DashboardRiskStatus;
+  level?: DashboardAlertSeverity;
+  details: DashboardInsightItem[];
+};
+
+export type DashboardEvolutionMetric = {
+  id: string;
+  label: string;
+  value: string;
+  description: string;
+  severity: DashboardAlertSeverity;
 };
 
 export type DashboardSummaryCard = {
@@ -70,6 +115,9 @@ export type DashboardData = {
   generatedAt: string;
   profileView: DashboardProfileView;
   cards: DashboardSummaryCard[];
+  riskOverview: DashboardInsightSummary | null;
+  insightSummaries: DashboardInsightSummary[];
+  evolution: DashboardEvolutionMetric[];
   myPendencies: DashboardDetailItem[];
   moduleSummaries: DashboardModuleSummary[];
   scope: {
@@ -85,4 +133,10 @@ export type DashboardDetailsResponse = {
   kind: DashboardDetailKind;
   total: number;
   details: DashboardDetailItem[];
+};
+
+export type DashboardInsightDetailsResponse = {
+  sectionId: DashboardInsightId;
+  total: number;
+  details: DashboardInsightItem[];
 };

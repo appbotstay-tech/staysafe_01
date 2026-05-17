@@ -1,9 +1,14 @@
 import {
+  ConformidadeRecebimento,
+  OrigemChamadoManutencao,
+  PrioridadeChamadoManutencao,
   StatusChamadoManutencao,
   StatusItemBuffetAmostra,
   StatusNotaRecebimento,
   StatusPlanoLimpeza,
   StatusQualidadeOleo,
+  StatusRecebimento,
+  StatusTemperaturaBuffetAmostra,
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento,
   TipoPlanoLimpeza,
@@ -28,10 +33,16 @@ import { prisma } from "@/lib/prisma";
 
 import {
   DASHBOARD_PERIODS,
+  type DashboardAlertSeverity,
   type DashboardData,
   type DashboardDetailKind,
   type DashboardDetailItem,
   type DashboardDetailsResponse,
+  type DashboardEvolutionMetric,
+  type DashboardInsightDetailsResponse,
+  type DashboardInsightId,
+  type DashboardInsightItem,
+  type DashboardInsightSummary,
   type DashboardModuleSummary,
   type DashboardNormalizedStatus,
   type DashboardPeriod,
@@ -170,6 +181,63 @@ function addDetail(list: DashboardDetailItem[], item: DashboardDetailItem): void
   }
 }
 
+function createInsightSummary(params: {
+  id: DashboardInsightId;
+  title: string;
+  description: string;
+  status?: DashboardInsightSummary["status"];
+  level?: DashboardAlertSeverity;
+}): DashboardInsightSummary {
+  return {
+    id: params.id,
+    title: params.title,
+    description: params.description,
+    total: 0,
+    critical: 0,
+    attention: 0,
+    informative: 0,
+    status: params.status,
+    level: params.level,
+    details: []
+  };
+}
+
+function addInsightItem(
+  summary: DashboardInsightSummary,
+  item: DashboardInsightItem
+): void {
+  summary.total += 1;
+
+  if (item.severity === "Crítico") {
+    summary.critical += 1;
+  } else if (item.severity === "Atenção") {
+    summary.attention += 1;
+  } else {
+    summary.informative += 1;
+  }
+
+  if (item.status === "Concluído" || item.status === "Cancelado") {
+    summary.resolved = (summary.resolved ?? 0) + 1;
+  }
+
+  if (item.correctiveAction) {
+    summary.withCorrectiveAction = (summary.withCorrectiveAction ?? 0) + 1;
+  } else if (item.status !== "Concluído" && item.status !== "Cancelado") {
+    summary.withoutCorrectiveAction = (summary.withoutCorrectiveAction ?? 0) + 1;
+  }
+
+  if (summary.details.length < DETAIL_LIMIT) {
+    summary.details.push(item);
+  }
+}
+
+function stripInsightDetails(summary: DashboardInsightSummary): DashboardInsightSummary {
+  return {
+    ...summary,
+    details: []
+  };
+}
+
 function combineDetails(
   stats: ModuleStats[],
   field: "pendingDetails" | "completedDetails"
@@ -273,6 +341,17 @@ function dateOnlyToLocalDateTime(date: Date, endOfDay: boolean): Date {
 
 function hasOpenPendenciesBeforeRange(range: DateOnlyRange, openRange: DateOnlyRange): boolean {
   return openRange.start.getTime() < range.start.getTime();
+}
+
+function daysBetweenDates(start: Date, end: Date): number {
+  const diff = dateOnlyToLocalDateTime(end, false).getTime() -
+    dateOnlyToLocalDateTime(start, false).getTime();
+
+  return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)));
+}
+
+function hasUsefulText(value: string | null | undefined): value is string {
+  return Boolean(value && value.trim().length > 0);
 }
 
 function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
@@ -469,6 +548,23 @@ async function safeSummaryCard(
   } catch (error) {
     console.error(`[dashboard] Falha ao consultar ${fallback.title}`, error);
     return buildSummaryCard(fallback);
+  }
+}
+
+async function safeInsightSummary(
+  title: string,
+  build: () => Promise<DashboardInsightSummary>
+): Promise<DashboardInsightSummary> {
+  try {
+    return await build();
+  } catch (error) {
+    console.error(`[dashboard] Falha ao consultar ${title}`, error);
+
+    return createInsightSummary({
+      id: title === "Ações Corretivas" ? "acoes-corretivas" : "nao-conformidades",
+      title,
+      description: "Dados indisponíveis no momento."
+    });
   }
 }
 
@@ -1749,6 +1845,16 @@ export async function getOperationalDashboardData(params: {
     buildModuleSummary(weeklyCleaningStats),
     buildModuleSummary(maintenanceStats)
   ];
+  const insights = await buildOperationalInsights({
+    user: params.user,
+    profileView,
+    ranges,
+    dailyCard,
+    weeklyCard,
+    monthlyCard,
+    maintenanceCard,
+    includeDetails
+  });
 
   return {
     period: params.period,
@@ -1756,6 +1862,9 @@ export async function getOperationalDashboardData(params: {
     generatedAt: formatDateTimeDisplay(now),
     profileView,
     cards,
+    riskOverview: insights.riskOverview,
+    insightSummaries: insights.insightSummaries,
+    evolution: insights.evolution,
     myPendencies: myPendencies.details,
     moduleSummaries,
     scope: {
@@ -1767,6 +1876,962 @@ export async function getOperationalDashboardData(params: {
           ? "Chamados criados pelo usuário logado"
           : `Chamados abertos atuais e concluídos em ${formatRangeLabel(ranges.daily)}`
     }
+  };
+}
+
+async function buildNonConformitySummary(params: {
+  ranges: DashboardRanges;
+}): Promise<DashboardInsightSummary> {
+  const summary = createInsightSummary({
+    id: "nao-conformidades",
+    title: "Não Conformidades",
+    description: "Ocorrências sanitárias e operacionais calculadas a partir dos registros."
+  });
+
+  const [
+    temperaturas,
+    oleos,
+    recebimentos,
+    notasPendentes,
+    buffetRegistros,
+    limpezasDiarias,
+    limpezasSemanais,
+    chamadosOperacionais
+  ] = await Promise.all([
+    prisma.controleTemperaturaEquipamento.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        status: { not: StatusTemperaturaEquipamento.CONFORME }
+      },
+      select: {
+        id: true,
+        data: true,
+        equipamento: true,
+        turno: true,
+        status: true,
+        acaoCorretiva: true,
+        fotoBase64: true,
+        fotoMimeType: true,
+        responsavel: true,
+        createdAt: true
+      },
+      orderBy: [{ createdAt: "desc" }]
+    }),
+    prisma.controleQualidadeOleoRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        OR: [
+          { status: { in: [StatusQualidadeOleo.ATENCAO, StatusQualidadeOleo.ULTIMA_UTILIZACAO, StatusQualidadeOleo.DESCARTAR] } },
+          { temperaturaCritica: true }
+        ]
+      },
+      select: {
+        id: true,
+        data: true,
+        fitaOleo: true,
+        status: true,
+        temperaturaCritica: true,
+        orientacao: true,
+        responsavel: true,
+        createdAt: true
+      },
+      orderBy: [{ createdAt: "desc" }]
+    }),
+    prisma.rastreabilidadeRecebimentoRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        OR: [
+          { statusGeral: StatusRecebimento.NAO_CONFORME },
+          { temperaturaStatus: ConformidadeRecebimento.NAO_CONFORME },
+          { transporteEntregador: ConformidadeRecebimento.NAO_CONFORME },
+          { aspectoSensorial: ConformidadeRecebimento.NAO_CONFORME },
+          { embalagem: ConformidadeRecebimento.NAO_CONFORME },
+          { acaoCorretiva: { not: null } }
+        ]
+      },
+      select: {
+        id: true,
+        data: true,
+        produto: true,
+        fornecedor: true,
+        notaFiscal: true,
+        statusGeral: true,
+        temperaturaStatus: true,
+        transporteEntregador: true,
+        aspectoSensorial: true,
+        embalagem: true,
+        acaoCorretiva: true,
+        responsavelRecebimento: true,
+        notaId: true,
+        updatedAt: true
+      },
+      orderBy: [{ updatedAt: "desc" }]
+    }),
+    prisma.rastreabilidadeRecebimentoNota.findMany({
+      where: {
+        data: { gte: params.ranges.openPendencies.start, lte: params.ranges.daily.end },
+        statusNota: { not: StatusNotaRecebimento.FINALIZADA }
+      },
+      select: {
+        id: true,
+        data: true,
+        fornecedor: true,
+        notaFiscal: true,
+        statusNota: true,
+        responsavelGeral: true,
+        updatedAt: true
+      },
+      orderBy: [{ data: "asc" }]
+    }),
+    prisma.controleBuffetAmostraRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        OR: [
+          { statusTemperatura: { in: [StatusTemperaturaBuffetAmostra.ALERTA, StatusTemperaturaBuffetAmostra.CRITICO] } },
+          { acaoCorretiva: { not: null } }
+        ]
+      },
+      select: {
+        id: true,
+        data: true,
+        servicoId: true,
+        itemNome: true,
+        status: true,
+        statusTemperatura: true,
+        acaoCorretiva: true,
+        responsavelNome: true,
+        dataHoraRegistro: true,
+        servico: { select: { nome: true } }
+      },
+      orderBy: [{ dataHoraRegistro: "desc" }]
+    }),
+    prisma.planoLimpezaDiarioRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.openPendencies.start, lte: params.ranges.daily.end },
+        status: { not: StatusPlanoLimpeza.CONCLUIDO }
+      },
+      select: {
+        id: true,
+        data: true,
+        area: true,
+        turno: true,
+        status: true,
+        assinaturaResponsavel: true,
+        updatedAt: true
+      },
+      orderBy: [{ data: "asc" }, { updatedAt: "desc" }]
+    }),
+    prisma.planoLimpezaSemanalExecucao.findMany({
+      where: {
+        dataExecucao: {
+          gte: params.ranges.openPendencies.start,
+          lte: params.ranges.weekly.end
+        },
+        status: { not: StatusPlanoLimpeza.CONCLUIDO }
+      },
+      select: {
+        id: true,
+        dataExecucao: true,
+        area: true,
+        status: true,
+        assinaturaResponsavel: true,
+        item: { select: { oQueLimpar: true } },
+        updatedAt: true
+      },
+      orderBy: [{ dataExecucao: "asc" }, { updatedAt: "desc" }]
+    }),
+    prisma.chamadoManutencao.findMany({
+      where: {
+        status: { in: [StatusChamadoManutencao.ABERTO, StatusChamadoManutencao.EM_ANDAMENTO] },
+        origem: { not: OrigemChamadoManutencao.MANUAL }
+      },
+      select: {
+        id: true,
+        titulo: true,
+        areaLocal: true,
+        origem: true,
+        prioridade: true,
+        status: true,
+        criadoPorNome: true,
+        dataHoraCriacao: true
+      },
+      orderBy: [{ dataHoraCriacao: "asc" }]
+    })
+  ]);
+
+  for (const record of temperaturas) {
+    const hasEvidence = Boolean(record.fotoBase64 && record.fotoMimeType);
+    addInsightItem(summary, {
+      id: `nc-temperatura:${record.id}`,
+      moduleId: MODULES.temperatura.id,
+      moduleName: MODULES.temperatura.name,
+      title: `${record.equipamento} | ${temperatureShiftLabel(record.turno)}`,
+      description: hasEvidence
+        ? "Temperatura fora da faixa registrada."
+        : "Temperatura fora da faixa com foto obrigatória ausente.",
+      status: "Não conformidade",
+      responsible: record.responsavel,
+      dateTime: formatDateTimeDisplay(record.createdAt),
+      href: `${MODULES.temperatura.href}?filtroData=${formatDateInput(record.data)}&filtroEquipamento=${encodeURIComponent(record.equipamento)}`,
+      severity: record.status === StatusTemperaturaEquipamento.CRITICO || !hasEvidence ? "Crítico" : "Atenção",
+      occurrenceType: record.status === StatusTemperaturaEquipamento.CRITICO ? "Temperatura crítica" : "Temperatura em alerta",
+      correctiveAction: record.acaoCorretiva ?? undefined,
+      hasEvidence
+    });
+  }
+
+  for (const record of oleos) {
+    const critical =
+      record.status === StatusQualidadeOleo.DESCARTAR || record.temperaturaCritica;
+    addInsightItem(summary, {
+      id: `nc-oleo:${record.id}`,
+      moduleId: MODULES.oleo.id,
+      moduleName: MODULES.oleo.name,
+      title: record.fitaOleo ? `Fita ${record.fitaOleo}` : "Registro do óleo",
+      description: record.temperaturaCritica
+        ? "Temperatura do óleo acima do limite."
+        : record.orientacao,
+      status: "Não conformidade",
+      responsible: record.responsavel,
+      dateTime: formatDateTimeDisplay(record.createdAt),
+      href: `${MODULES.oleo.href}?filtroData=${formatDateInput(record.data)}`,
+      severity: critical ? "Crítico" : "Atenção",
+      occurrenceType: critical ? "Óleo fora do padrão crítico" : "Óleo fora do padrão",
+      correctiveAction: record.orientacao,
+      hasEvidence: false
+    });
+  }
+
+  for (const record of recebimentos) {
+    const failures = [
+      record.temperaturaStatus === ConformidadeRecebimento.NAO_CONFORME ? "temperatura" : "",
+      record.transporteEntregador === ConformidadeRecebimento.NAO_CONFORME ? "transporte" : "",
+      record.aspectoSensorial === ConformidadeRecebimento.NAO_CONFORME ? "aspecto" : "",
+      record.embalagem === ConformidadeRecebimento.NAO_CONFORME ? "embalagem" : ""
+    ].filter(Boolean);
+    addInsightItem(summary, {
+      id: `nc-recebimento:${record.id}`,
+      moduleId: MODULES.rastreabilidade.id,
+      moduleName: MODULES.rastreabilidade.name,
+      title: `${record.produto} | NF ${record.notaFiscal}`,
+      description:
+        failures.length > 0
+          ? `Não conforme em: ${failures.join(", ")}.`
+          : `Fornecedor: ${record.fornecedor}.`,
+      status: "Não conformidade",
+      responsible: record.responsavelRecebimento ?? undefined,
+      dateTime: formatDateDisplay(record.data),
+      href: record.notaId
+        ? `${MODULES.rastreabilidade.href}/nota/${record.notaId}`
+        : MODULES.rastreabilidade.href,
+      severity: failures.includes("temperatura") || failures.includes("embalagem") ? "Crítico" : "Atenção",
+      occurrenceType: "Recebimento não conforme",
+      correctiveAction: record.acaoCorretiva ?? undefined,
+      hasEvidence: false
+    });
+  }
+
+  for (const note of notasPendentes) {
+    const ageInDays = daysBetweenDates(note.data, params.ranges.daily.end);
+    if (ageInDays < 2) {
+      continue;
+    }
+
+    addInsightItem(summary, {
+      id: `nc-nota-pendente:${note.id}`,
+      moduleId: MODULES.rastreabilidade.id,
+      moduleName: MODULES.rastreabilidade.name,
+      title: `NF ${note.notaFiscal} | ${note.fornecedor}`,
+      description: `Nota aguardando conferência há ${ageInDays} dia(s).`,
+      status: noteStatusLabel(note.statusNota),
+      responsible: note.responsavelGeral ?? undefined,
+      dateTime: formatDateDisplay(note.data),
+      href: `${MODULES.rastreabilidade.href}/nota/${note.id}`,
+      severity: ageInDays >= 5 ? "Crítico" : "Atenção",
+      occurrenceType: "Nota sem conferência"
+    });
+  }
+
+  for (const record of buffetRegistros) {
+    const discarded = hasUsefulText(record.acaoCorretiva) &&
+      record.acaoCorretiva.toLocaleLowerCase("pt-BR").includes("descart");
+    addInsightItem(summary, {
+      id: `nc-buffet:${record.id}`,
+      moduleId: MODULES.buffet.id,
+      moduleName: MODULES.buffet.name,
+      title: `${record.servico.nome} | ${record.itemNome}`,
+      description:
+        record.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO
+          ? "Temperatura crítica no item do serviço."
+          : "Ocorrência com temperatura ou ação corretiva.",
+      status:
+        record.status === StatusItemBuffetAmostra.ASSINADO
+          ? "Concluído"
+          : buffetStatusLabel(record.status),
+      responsible: record.responsavelNome,
+      dateTime: formatDateTimeDisplay(record.dataHoraRegistro),
+      href: `${MODULES.buffet.href}/servico/${record.servicoId}?data=${formatDateInput(record.data)}`,
+      severity:
+        record.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO || discarded
+          ? "Crítico"
+          : "Atenção",
+      occurrenceType: discarded ? "Alimento descartado" : "Buffet/amostra fora da regra",
+      correctiveAction: record.acaoCorretiva ?? undefined,
+      hasEvidence: false
+    });
+  }
+
+  for (const record of limpezasDiarias) {
+    addInsightItem(summary, {
+      id: `nc-limpeza-diaria:${record.id}`,
+      moduleId: MODULES.limpezaDiaria.id,
+      moduleName: MODULES.limpezaDiaria.name,
+      title: `${record.area} | ${getTurnoLabel(record.turno)}`,
+      description:
+        record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+          ? "Limpeza aguardando supervisão."
+          : "Limpeza não realizada ou sem assinatura do responsável.",
+      status: cleaningStatusLabel(record.status),
+      responsible: record.assinaturaResponsavel || undefined,
+      dateTime: formatDateDisplay(record.data),
+      href: `${MODULES.limpezaDiaria.href}?filtroData=${formatDateInput(record.data)}&filtroArea=${encodeURIComponent(record.area)}`,
+      severity: record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR ? "Atenção" : "Atenção",
+      occurrenceType: "Limpeza pendente"
+    });
+  }
+
+  for (const record of limpezasSemanais) {
+    addInsightItem(summary, {
+      id: `nc-limpeza-semanal:${record.id}`,
+      moduleId: MODULES.limpezaSemanal.id,
+      moduleName: MODULES.limpezaSemanal.name,
+      title: `${record.area} | ${record.item.oQueLimpar}`,
+      description:
+        record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+          ? "Item semanal aguardando supervisão."
+          : "Item semanal pendente.",
+      status: cleaningStatusLabel(record.status),
+      responsible: record.assinaturaResponsavel || undefined,
+      dateTime: formatDateDisplay(record.dataExecucao),
+      href: `${MODULES.limpezaSemanal.href}?filtroData=${formatDateInput(record.dataExecucao)}&filtroArea=${encodeURIComponent(record.area)}`,
+      severity: "Atenção",
+      occurrenceType: "Limpeza semanal pendente"
+    });
+  }
+
+  for (const chamado of chamadosOperacionais) {
+    addInsightItem(summary, {
+      id: `nc-chamado:${chamado.id}`,
+      moduleId: MODULES.chamados.id,
+      moduleName: MODULES.chamados.name,
+      title: chamado.titulo,
+      description: `${chamado.areaLocal} | Origem: ${chamado.origem}.`,
+      status: maintenanceStatusLabel(chamado.status),
+      responsible: chamado.criadoPorNome,
+      dateTime: formatDateTimeDisplay(chamado.dataHoraCriacao),
+      href: `${MODULES.chamados.href}/${chamado.id}`,
+      severity: chamado.prioridade === PrioridadeChamadoManutencao.ALTA ? "Crítico" : "Atenção",
+      occurrenceType: "Chamado operacional aberto",
+      relatedTicketStatus: maintenanceStatusLabel(chamado.status)
+    });
+  }
+
+  return summary;
+}
+
+async function buildCorrectiveActionsSummary(params: {
+  ranges: DashboardRanges;
+}): Promise<DashboardInsightSummary> {
+  const summary = createInsightSummary({
+    id: "acoes-corretivas",
+    title: "Ações Corretivas",
+    description: "Registros do período que possuem ação corretiva preenchida."
+  });
+
+  const [temperaturas, recebimentos, buffetRegistros] = await Promise.all([
+    prisma.controleTemperaturaEquipamento.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        acaoCorretiva: { not: null }
+      },
+      select: {
+        id: true,
+        data: true,
+        equipamento: true,
+        turno: true,
+        status: true,
+        acaoCorretiva: true,
+        fotoBase64: true,
+        fotoMimeType: true,
+        responsavel: true,
+        createdAt: true
+      },
+      orderBy: [{ createdAt: "desc" }]
+    }),
+    prisma.rastreabilidadeRecebimentoRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        acaoCorretiva: { not: null }
+      },
+      select: {
+        id: true,
+        data: true,
+        produto: true,
+        fornecedor: true,
+        notaFiscal: true,
+        acaoCorretiva: true,
+        responsavelRecebimento: true,
+        statusGeral: true,
+        notaId: true,
+        updatedAt: true
+      },
+      orderBy: [{ updatedAt: "desc" }]
+    }),
+    prisma.controleBuffetAmostraRegistro.findMany({
+      where: {
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
+        acaoCorretiva: { not: null }
+      },
+      select: {
+        id: true,
+        data: true,
+        servicoId: true,
+        itemNome: true,
+        status: true,
+        statusTemperatura: true,
+        acaoCorretiva: true,
+        responsavelNome: true,
+        dataHoraRegistro: true,
+        servico: { select: { nome: true } }
+      },
+      orderBy: [{ dataHoraRegistro: "desc" }]
+    })
+  ]);
+
+  const temperaturaIds = temperaturas.map((record) => String(record.id));
+  const buffetIds = buffetRegistros.map((record) => String(record.id));
+  const receivingIds = recebimentos.map((record) => String(record.id));
+  const relatedTickets = await prisma.chamadoManutencao.findMany({
+    where: {
+      contextoRegistroId: {
+        in: [...temperaturaIds, ...buffetIds, ...receivingIds]
+      }
+    },
+    select: {
+      contextoRegistroId: true,
+      status: true
+    }
+  });
+  const ticketStatusByRecordId = new Map(
+    relatedTickets.map((ticket) => [
+      ticket.contextoRegistroId ?? "",
+      maintenanceStatusLabel(ticket.status)
+    ])
+  );
+
+  for (const record of temperaturas) {
+    if (!hasUsefulText(record.acaoCorretiva)) {
+      continue;
+    }
+
+    addInsightItem(summary, {
+      id: `ac-temperatura:${record.id}`,
+      moduleId: MODULES.temperatura.id,
+      moduleName: MODULES.temperatura.name,
+      title: `${record.equipamento} | ${temperatureShiftLabel(record.turno)}`,
+      description: "Temperatura fora da faixa com ação corretiva.",
+      status: temperatureStatusLabel(record.status),
+      responsible: record.responsavel,
+      dateTime: formatDateTimeDisplay(record.createdAt),
+      href: `${MODULES.temperatura.href}?filtroData=${formatDateInput(record.data)}&filtroEquipamento=${encodeURIComponent(record.equipamento)}`,
+      severity: record.status === StatusTemperaturaEquipamento.CRITICO ? "Crítico" : "Atenção",
+      occurrenceType: "Ação corretiva de temperatura",
+      correctiveAction: record.acaoCorretiva,
+      hasEvidence: Boolean(record.fotoBase64 && record.fotoMimeType),
+      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+    });
+  }
+
+  for (const record of recebimentos) {
+    if (!hasUsefulText(record.acaoCorretiva)) {
+      continue;
+    }
+
+    addInsightItem(summary, {
+      id: `ac-recebimento:${record.id}`,
+      moduleId: MODULES.rastreabilidade.id,
+      moduleName: MODULES.rastreabilidade.name,
+      title: `${record.produto} | NF ${record.notaFiscal}`,
+      description: `Fornecedor: ${record.fornecedor}.`,
+      status:
+        record.statusGeral === StatusRecebimento.CONFORME
+          ? "Concluído"
+          : "Não conformidade",
+      responsible: record.responsavelRecebimento ?? undefined,
+      dateTime: formatDateDisplay(record.data),
+      href: record.notaId
+        ? `${MODULES.rastreabilidade.href}/nota/${record.notaId}`
+        : MODULES.rastreabilidade.href,
+      severity: record.statusGeral === StatusRecebimento.NAO_CONFORME ? "Atenção" : "Informativo",
+      occurrenceType: "Ação corretiva de recebimento",
+      correctiveAction: record.acaoCorretiva,
+      hasEvidence: false,
+      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+    });
+  }
+
+  for (const record of buffetRegistros) {
+    if (!hasUsefulText(record.acaoCorretiva)) {
+      continue;
+    }
+
+    const discarded = record.acaoCorretiva.toLocaleLowerCase("pt-BR").includes("descart");
+    addInsightItem(summary, {
+      id: `ac-buffet:${record.id}`,
+      moduleId: MODULES.buffet.id,
+      moduleName: MODULES.buffet.name,
+      title: `${record.servico.nome} | ${record.itemNome}`,
+      description: "Item de buffet/amostra com ação corretiva registrada.",
+      status:
+        record.status === StatusItemBuffetAmostra.ASSINADO
+          ? "Concluído"
+          : buffetStatusLabel(record.status),
+      responsible: record.responsavelNome,
+      dateTime: formatDateTimeDisplay(record.dataHoraRegistro),
+      href: `${MODULES.buffet.href}/servico/${record.servicoId}?data=${formatDateInput(record.data)}`,
+      severity:
+        discarded || record.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO
+          ? "Crítico"
+          : "Atenção",
+      occurrenceType: discarded ? "Descarte registrado" : "Ação corretiva de buffet/amostras",
+      correctiveAction: record.acaoCorretiva,
+      hasEvidence: false,
+      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+    });
+  }
+
+  return summary;
+}
+
+function buildFuncionarioAlerts(params: {
+  dailyCard: DashboardSummaryCard;
+  weeklyCard: DashboardSummaryCard;
+  maintenanceCard: DashboardSummaryCard;
+}): DashboardInsightSummary {
+  const summary = createInsightSummary({
+    id: "alertas-operacionais",
+    title: "Alertas Operacionais",
+    description: "Alertas operacionais vinculados às suas tarefas e chamados."
+  });
+
+  const addFromDetails = (items: DashboardDetailItem[], occurrenceType: string) => {
+    for (const item of items) {
+      addInsightItem(summary, {
+        ...item,
+        id: `alerta-funcionario:${item.id}`,
+        severity: item.status === "Não conformidade" ? "Crítico" : "Atenção",
+        occurrenceType
+      });
+    }
+  };
+
+  addFromDetails(params.dailyCard.pendingDetails, "Tarefa diária pendente");
+  addFromDetails(params.weeklyCard.pendingDetails, "Tarefa semanal pendente");
+  addFromDetails(params.maintenanceCard.pendingDetails, "Meu chamado pendente");
+
+  if (summary.total === 0) {
+    addInsightItem(summary, {
+      id: "alerta-funcionario:sem-pendencias",
+      moduleId: "dashboard",
+      moduleName: "Dashboard",
+      title: "Nenhum alerta operacional prioritário",
+      description: "Não há pendências críticas vinculadas ao seu perfil neste período.",
+      status: "Concluído",
+      href: "/",
+      severity: "Informativo",
+      occurrenceType: "Operação sem alerta"
+    });
+  }
+
+  return summary;
+}
+
+function buildManagementAlerts(params: {
+  nonConformities: DashboardInsightSummary;
+  correctiveActions: DashboardInsightSummary;
+  dailyCard: DashboardSummaryCard;
+  weeklyCard: DashboardSummaryCard;
+  monthlyCard: DashboardSummaryCard | null;
+  maintenanceCard: DashboardSummaryCard;
+}): DashboardInsightSummary {
+  const summary = createInsightSummary({
+    id: "alertas-operacionais",
+    title: "Alertas Operacionais",
+    description: "Situações que precisam de acompanhamento rápido."
+  });
+
+  for (const item of params.nonConformities.details) {
+    addInsightItem(summary, {
+      ...item,
+      id: `alerta-nc:${item.id}`,
+      occurrenceType: item.occurrenceType
+    });
+  }
+
+  if ((params.dailyCard.waitingResponsible ?? 0) > 0) {
+    addInsightItem(summary, {
+      id: "alerta-diario-responsavel",
+      moduleId: MODULES.limpezaDiaria.id,
+      moduleName: MODULES.limpezaDiaria.name,
+      title: `${params.dailyCard.waitingResponsible} registro(s) aguardando responsável`,
+      description: "Há rotinas diárias sem assinatura ou preenchimento.",
+      status: "Aguardando responsável",
+      href: MODULES.limpezaDiaria.href,
+      severity: "Atenção",
+      occurrenceType: "Assinatura pendente"
+    });
+  }
+
+  const waitingSupervisor =
+    (params.dailyCard.waitingSupervisor ?? 0) + (params.weeklyCard.waitingSupervisor ?? 0);
+  if (waitingSupervisor > 0) {
+    addInsightItem(summary, {
+      id: "alerta-supervisor",
+      moduleId: "assinaturas",
+      moduleName: "Assinaturas",
+      title: `${waitingSupervisor} registro(s) aguardando supervisor`,
+      description: "Existem tarefas operacionais aguardando validação de supervisor.",
+      status: "Aguardando supervisor",
+      href: MODULES.limpezaDiaria.href,
+      severity: "Atenção",
+      occurrenceType: "Supervisão pendente"
+    });
+  }
+
+  if (params.monthlyCard && params.monthlyCard.pending > 0) {
+    addInsightItem(summary, {
+      id: "alerta-fechamento",
+      moduleId: "fechamentos",
+      moduleName: "Fechamentos Mensais",
+      title: `${params.monthlyCard.pending} fechamento(s) pendente(s)`,
+      description: "Há módulos aguardando assinatura mensal.",
+      status: "Pendente",
+      href: "/",
+      severity: "Atenção",
+      occurrenceType: "Fechamento pendente"
+    });
+  }
+
+  if (params.maintenanceCard.pending > 0) {
+    addInsightItem(summary, {
+      id: "alerta-chamados",
+      moduleId: MODULES.chamados.id,
+      moduleName: MODULES.chamados.name,
+      title: `${params.maintenanceCard.pending} chamado(s) aberto(s) ou em andamento`,
+      description: "Chamados pendentes de tratativa permanecem ativos.",
+      status: "Pendente",
+      href: MODULES.chamados.href,
+      severity: params.maintenanceCard.pending >= 5 ? "Crítico" : "Atenção",
+      occurrenceType: "Chamado pendente"
+    });
+  }
+
+  if (params.correctiveActions.total > 0) {
+    addInsightItem(summary, {
+      id: "alerta-acoes-corretivas",
+      moduleId: "acoes-corretivas",
+      moduleName: "Ações Corretivas",
+      title: `${params.correctiveActions.total} ação(ões) corretiva(s) no período`,
+      description: "Acompanhe se as ações foram suficientes para encerrar as ocorrências.",
+      status: "Não conformidade",
+      href: "/",
+      severity: params.correctiveActions.critical > 0 ? "Crítico" : "Atenção",
+      occurrenceType: "Ação corretiva registrada"
+    });
+  }
+
+  if (summary.total === 0) {
+    addInsightItem(summary, {
+      id: "alerta-operacao-em-dia",
+      moduleId: "dashboard",
+      moduleName: "Dashboard",
+      title: "Operação sem alertas críticos",
+      description: "Nenhum alerta operacional relevante foi encontrado no período.",
+      status: "Concluído",
+      href: "/",
+      severity: "Informativo",
+      occurrenceType: "Operação em dia"
+    });
+  }
+
+  return summary;
+}
+
+function buildRiskOverview(params: {
+  alertSummary: DashboardInsightSummary;
+  nonConformities: DashboardInsightSummary;
+  dailyCard: DashboardSummaryCard;
+  weeklyCard: DashboardSummaryCard;
+  maintenanceCard: DashboardSummaryCard;
+}): DashboardInsightSummary {
+  const criticalFactors =
+    params.alertSummary.critical +
+    params.nonConformities.critical +
+    (params.dailyCard.percentPending >= 40 ? 1 : 0) +
+    (params.maintenanceCard.pending >= 5 ? 1 : 0);
+  const attentionFactors =
+    params.alertSummary.attention +
+    params.nonConformities.attention +
+    params.dailyCard.pending +
+    params.weeklyCard.pending +
+    params.maintenanceCard.pending;
+  const status =
+    criticalFactors > 0
+      ? "Risco crítico"
+      : attentionFactors > 0
+        ? "Atenção necessária"
+        : "Operação em dia";
+  const level: DashboardAlertSeverity =
+    status === "Risco crítico"
+      ? "Crítico"
+      : status === "Atenção necessária"
+        ? "Atenção"
+        : "Informativo";
+
+  const summary = createInsightSummary({
+    id: "risco-operacional",
+    title: "Status da Operação",
+    description: "Consolidação simples de risco operacional com base nos alertas do período.",
+    status,
+    level
+  });
+
+  if (params.nonConformities.critical > 0) {
+    addInsightItem(summary, {
+      id: "risco-nc-criticas",
+      moduleId: "nao-conformidades",
+      moduleName: "Não Conformidades",
+      title: `${params.nonConformities.critical} não conformidade(s) crítica(s)`,
+      description: "Há ocorrências críticas em temperatura, buffet, óleo, recebimento ou chamados.",
+      status: "Não conformidade",
+      href: "/",
+      severity: "Crítico",
+      occurrenceType: "Fator de risco"
+    });
+  }
+
+  if (params.dailyCard.percentPending >= 40) {
+    addInsightItem(summary, {
+      id: "risco-pendencia-diaria",
+      moduleId: "tarefas-diarias",
+      moduleName: "Tarefas Diárias",
+      title: `${params.dailyCard.percentPending}% das rotinas diárias pendentes`,
+      description: "Volume de pendências diárias acima do limite preventivo.",
+      status: "Pendente",
+      href: "/",
+      severity: "Crítico",
+      occurrenceType: "Acúmulo de pendências"
+    });
+  }
+
+  if (params.maintenanceCard.pending >= 5) {
+    addInsightItem(summary, {
+      id: "risco-chamados",
+      moduleId: MODULES.chamados.id,
+      moduleName: MODULES.chamados.name,
+      title: `${params.maintenanceCard.pending} chamado(s) pendente(s)`,
+      description: "Quantidade alta de chamados abertos ou em andamento.",
+      status: "Pendente",
+      href: MODULES.chamados.href,
+      severity: "Crítico",
+      occurrenceType: "Chamados acumulados"
+    });
+  }
+
+  if (status === "Atenção necessária") {
+    addInsightItem(summary, {
+      id: "risco-atencao",
+      moduleId: "dashboard",
+      moduleName: "Dashboard",
+      title: `${attentionFactors} fator(es) de atenção`,
+      description: "Existem pendências, ações corretivas ou alertas a acompanhar.",
+      status: "Pendente",
+      href: "/",
+      severity: "Atenção",
+      occurrenceType: "Fator de atenção"
+    });
+  }
+
+  if (status === "Operação em dia") {
+    addInsightItem(summary, {
+      id: "risco-operacao-em-dia",
+      moduleId: "dashboard",
+      moduleName: "Dashboard",
+      title: "Operação em dia",
+      description: "Sem fatores críticos ou pendências relevantes no período.",
+      status: "Concluído",
+      href: "/",
+      severity: "Informativo",
+      occurrenceType: "Risco baixo"
+    });
+  }
+
+  return summary;
+}
+
+function buildEvolutionMetrics(params: {
+  dailyCard: DashboardSummaryCard;
+  weeklyCard: DashboardSummaryCard;
+  monthlyCard: DashboardSummaryCard | null;
+  maintenanceCard: DashboardSummaryCard;
+  nonConformities: DashboardInsightSummary | null;
+  correctiveActions: DashboardInsightSummary | null;
+}): DashboardEvolutionMetric[] {
+  const nonConformityTotal = params.nonConformities?.total ?? 0;
+  const correctiveTotal = params.correctiveActions?.total ?? 0;
+
+  return [
+    {
+      id: "tarefas-diarias",
+      label: "Rotinas diárias",
+      value: `${params.dailyCard.percentCompleted}%`,
+      description: `${params.dailyCard.completed} de ${params.dailyCard.total} concluídas`,
+      severity:
+        params.dailyCard.percentCompleted >= 90
+          ? "Informativo"
+          : params.dailyCard.percentCompleted >= 60
+            ? "Atenção"
+            : "Crítico"
+    },
+    {
+      id: "tarefas-semanais",
+      label: "Rotinas semanais",
+      value: `${params.weeklyCard.percentCompleted}%`,
+      description: `${params.weeklyCard.completed} de ${params.weeklyCard.total} concluídas`,
+      severity:
+        params.weeklyCard.percentCompleted >= 90
+          ? "Informativo"
+          : params.weeklyCard.percentCompleted >= 60
+            ? "Atenção"
+            : "Crítico"
+    },
+    {
+      id: "nao-conformidades-periodo",
+      label: "Não conformidades",
+      value: String(nonConformityTotal),
+      description: `${params.nonConformities?.critical ?? 0} crítica(s) no período`,
+      severity:
+        (params.nonConformities?.critical ?? 0) > 0
+          ? "Crítico"
+          : nonConformityTotal > 0
+            ? "Atenção"
+            : "Informativo"
+    },
+    {
+      id: "acoes-corretivas-periodo",
+      label: "Ações corretivas",
+      value: String(correctiveTotal),
+      description: `${params.correctiveActions?.withCorrectiveAction ?? 0} registro(s) com ação preenchida`,
+      severity: correctiveTotal > 0 ? "Atenção" : "Informativo"
+    },
+    {
+      id: "chamados-periodo",
+      label: "Chamados",
+      value: String(params.maintenanceCard.pending),
+      description: `${params.maintenanceCard.completed} concluído(s) no período`,
+      severity:
+        params.maintenanceCard.pending >= 5
+          ? "Crítico"
+          : params.maintenanceCard.pending > 0
+            ? "Atenção"
+            : "Informativo"
+    },
+    {
+      id: "fechamentos-periodo",
+      label: "Fechamentos",
+      value: params.monthlyCard ? `${params.monthlyCard.percentCompleted}%` : "-",
+      description: params.monthlyCard
+        ? `${params.monthlyCard.pending} pendente(s) no mês`
+        : "Não exibido para este perfil",
+      severity:
+        !params.monthlyCard || params.monthlyCard.pending === 0
+          ? "Informativo"
+          : "Atenção"
+    }
+  ];
+}
+
+async function buildOperationalInsights(params: {
+  user: AuthenticatedUser;
+  profileView: DashboardProfileView;
+  ranges: DashboardRanges;
+  dailyCard: DashboardSummaryCard;
+  weeklyCard: DashboardSummaryCard;
+  monthlyCard: DashboardSummaryCard | null;
+  maintenanceCard: DashboardSummaryCard;
+  includeDetails: boolean;
+}): Promise<{
+  riskOverview: DashboardInsightSummary | null;
+  insightSummaries: DashboardInsightSummary[];
+  evolution: DashboardEvolutionMetric[];
+}> {
+  if (!params.profileView.showManagement) {
+    const alerts = buildFuncionarioAlerts({
+      dailyCard: params.dailyCard,
+      weeklyCard: params.weeklyCard,
+      maintenanceCard: params.maintenanceCard
+    });
+
+    return {
+      riskOverview: null,
+      insightSummaries: [params.includeDetails ? alerts : stripInsightDetails(alerts)],
+      evolution: buildEvolutionMetrics({
+        dailyCard: params.dailyCard,
+        weeklyCard: params.weeklyCard,
+        monthlyCard: null,
+        maintenanceCard: params.maintenanceCard,
+        nonConformities: null,
+        correctiveActions: null
+      })
+    };
+  }
+
+  const [nonConformities, correctiveActions] = await Promise.all([
+    safeInsightSummary("Não Conformidades", () =>
+      buildNonConformitySummary({ ranges: params.ranges })
+    ),
+    safeInsightSummary("Ações Corretivas", () =>
+      buildCorrectiveActionsSummary({ ranges: params.ranges })
+    )
+  ]);
+  const alerts = buildManagementAlerts({
+    nonConformities,
+    correctiveActions,
+    dailyCard: params.dailyCard,
+    weeklyCard: params.weeklyCard,
+    monthlyCard: params.monthlyCard,
+    maintenanceCard: params.maintenanceCard
+  });
+  const riskOverview = buildRiskOverview({
+    alertSummary: alerts,
+    nonConformities,
+    dailyCard: params.dailyCard,
+    weeklyCard: params.weeklyCard,
+    maintenanceCard: params.maintenanceCard
+  });
+  const summaries = [alerts, nonConformities, correctiveActions];
+
+  return {
+    riskOverview: params.includeDetails ? riskOverview : stripInsightDetails(riskOverview),
+    insightSummaries: params.includeDetails ? summaries : summaries.map(stripInsightDetails),
+    evolution: buildEvolutionMetrics({
+      dailyCard: params.dailyCard,
+      weeklyCard: params.weeklyCard,
+      monthlyCard: params.monthlyCard,
+      maintenanceCard: params.maintenanceCard,
+      nonConformities,
+      correctiveActions
+    })
   };
 }
 
@@ -1793,5 +2858,27 @@ export async function getDashboardCardDetails(params: {
     kind: params.kind,
     total,
     details
+  };
+}
+
+export async function getDashboardInsightDetails(params: {
+  user: AuthenticatedUser;
+  period: DashboardPeriod;
+  sectionId: DashboardInsightId;
+}): Promise<DashboardInsightDetailsResponse> {
+  const dashboard = await getOperationalDashboardData({
+    user: params.user,
+    period: params.period,
+    includeDetails: true
+  });
+  const section =
+    dashboard.riskOverview?.id === params.sectionId
+      ? dashboard.riskOverview
+      : dashboard.insightSummaries.find((item) => item.id === params.sectionId);
+
+  return {
+    sectionId: params.sectionId,
+    total: section?.total ?? 0,
+    details: section?.details ?? []
   };
 }
