@@ -87,12 +87,58 @@ function redirectWithFeedback(
   if (feedbackType === "success") {
     url.searchParams.delete("new");
     url.searchParams.delete("editId");
+    url.searchParams.delete("editAreaId");
     url.searchParams.delete("editItemId");
+    [
+      "nome",
+      "detalhamentoLimpeza",
+      "ordem",
+      "ativo",
+      "turnoManha",
+      "turnoTarde",
+      "turnoNoite",
+      "area",
+      "oQueLimpar",
+      "quando",
+      "quem"
+    ].forEach((key) => url.searchParams.delete(key));
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);
 
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
+}
+
+function buildDailyAreaConfigErrorReturnTo(returnTo: string, formData: FormData): string {
+  const url = new URL(returnTo, "http://localhost");
+  const areaId = getInputValue(formData, "areaId");
+  if (areaId) {
+    url.searchParams.set("editAreaId", areaId);
+  }
+
+  for (const key of ["nome", "detalhamentoLimpeza", "ordem", "ativo"]) {
+    url.searchParams.set(key, getInputValue(formData, key));
+  }
+
+  for (const key of ["turnoManha", "turnoTarde", "turnoNoite"]) {
+    url.searchParams.set(key, formData.get(key) === "on" ? "true" : "false");
+  }
+
+  return `${url.pathname}?${url.searchParams.toString()}`;
+}
+
+function buildWeeklyConfigItemErrorReturnTo(returnTo: string, formData: FormData): string {
+  const url = new URL(returnTo, "http://localhost");
+  const itemId = getInputValue(formData, "itemId");
+  if (itemId) {
+    url.searchParams.set("editItemId", itemId);
+  }
+
+  for (const key of ["area", "ordem", "oQueLimpar", "quando", "quem", "ativo"]) {
+    url.searchParams.set(key, getInputValue(formData, key));
+  }
+
+  return `${url.pathname}?${url.searchParams.toString()}`;
 }
 
 function revalidateModulePaths() {
@@ -295,7 +341,11 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
     redirectWithFeedback(returnTo, "success", "Área do Plano Diário Atualizada com Sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+    redirectWithFeedback(
+      buildDailyAreaConfigErrorReturnTo(returnTo, formData),
+      "error",
+      getErrorMessage(error)
+    );
   }
 }
 
@@ -703,7 +753,11 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
     redirectWithFeedback(returnTo, "success", "Item do Plano Semanal Atualizado com Sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+    redirectWithFeedback(
+      buildWeeklyConfigItemErrorReturnTo(returnTo, formData),
+      "error",
+      getErrorMessage(error)
+    );
   }
 }
 

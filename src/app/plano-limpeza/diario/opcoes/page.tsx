@@ -61,6 +61,26 @@ function getTurnosLabel(area: {
   return labels.length > 0 ? labels.join(", ") : "Sem Turnos";
 }
 
+function getDraftValue(
+  params: SearchParams,
+  key: string,
+  fallback: string
+): string {
+  const value = firstParam(params[key]).trim();
+  return value || fallback;
+}
+
+function getDraftBoolean(
+  params: SearchParams,
+  key: string,
+  fallback: boolean
+): boolean {
+  const value = firstParam(params[key]).trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
 export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -70,6 +90,9 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
   const areas = await prisma.planoLimpezaDiarioArea.findMany({
     orderBy: [{ ordem: "asc" }, { nome: "asc" }]
   });
+  const areaEmEdicao = editAreaId
+    ? areas.find((area) => area.id === editAreaId) ?? null
+    : null;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -154,84 +177,7 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
         </h2>
 
         <ul className="space-y-3">
-          {areas.map((area) => {
-            const isEditing = editAreaId === area.id;
-
-            if (isEditing) {
-              return (
-                <li key={area.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                  <form action={updateDailyAreaConfigAction} className="grid gap-3 md:grid-cols-2">
-                    <input type="hidden" name="returnTo" value={PAGE_PATH} />
-                    <input type="hidden" name="areaId" value={String(area.id)} />
-
-                    <label className="text-sm text-slate-700 dark:text-slate-200">
-                      Nome da Área *
-                      <input
-                        type="text"
-                        name="nome"
-                        required
-                        defaultValue={area.nome}
-                        className={INPUT_CLASS}
-                      />
-                    </label>
-
-                    <label className="text-sm text-slate-700 dark:text-slate-200">
-                      Ordem *
-                      <input
-                        type="number"
-                        min={1}
-                        name="ordem"
-                        required
-                        defaultValue={area.ordem}
-                        className={INPUT_CLASS}
-                      />
-                    </label>
-
-                    <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-                      Status
-                      <select
-                        name="ativo"
-                        defaultValue={area.ativo ? "true" : "false"}
-                        className={INPUT_CLASS}
-                      >
-                        <option value="true">Ativo</option>
-                        <option value="false">Inativo</option>
-                      </select>
-                    </label>
-
-                    <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-                      O que deve ser limpo
-                      <textarea
-                        name="detalhamentoLimpeza"
-                        rows={3}
-                        defaultValue={area.detalhamentoLimpeza ?? ""}
-                        className={INPUT_CLASS}
-                        placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
-                      />
-                    </label>
-
-                    <div className="md:col-span-2">
-                      <TurnoCheckboxes
-                        turnoManhaDefault={area.turnoManha}
-                        turnoTardeDefault={area.turnoTarde}
-                        turnoNoiteDefault={area.turnoNoite}
-                      />
-                    </div>
-
-                    <div className="btn-group md:col-span-2">
-                      <button type="submit" className="btn-primary">
-                        Salvar
-                      </button>
-                      <Link href={PAGE_PATH} className="btn-secondary">
-                        Cancelar
-                      </Link>
-                    </div>
-                  </form>
-                </li>
-              );
-            }
-
-            return (
+          {areas.map((area) => (
               <li key={area.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div>
@@ -252,7 +198,7 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   </div>
 
                   <div className="btn-group">
-                    <Link href={`${PAGE_PATH}?editAreaId=${area.id}`} className="btn-action">
+                    <Link href={`${PAGE_PATH}?editAreaId=${area.id}`} className="btn-action" scroll={false}>
                       Editar
                     </Link>
 
@@ -267,10 +213,108 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   </div>
                 </div>
               </li>
-            );
-          })}
+          ))}
         </ul>
       </section>
+
+      {areaEmEdicao ? (
+        <div className="bpma-modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar área do plano diário">
+          <section className="bpma-modal-panel max-w-3xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Editar Área do Plano Diário
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Ajuste a área, os turnos e o detalhamento da limpeza.
+                </p>
+              </div>
+              <Link href={PAGE_PATH} className="btn-secondary shrink-0" scroll={false}>
+                Fechar
+              </Link>
+            </div>
+            {feedback && feedbackType === "error" ? (
+              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                {feedback}
+              </p>
+            ) : null}
+
+            <form action={updateDailyAreaConfigAction} className="grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="returnTo" value={`${PAGE_PATH}?editAreaId=${areaEmEdicao.id}`} />
+              <input type="hidden" name="areaId" value={String(areaEmEdicao.id)} />
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Nome da Área *
+                <input
+                  type="text"
+                  name="nome"
+                  required
+                  defaultValue={getDraftValue(params, "nome", areaEmEdicao.nome)}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Ordem *
+                <input
+                  type="number"
+                  min={1}
+                  name="ordem"
+                  required
+                  defaultValue={getDraftValue(params, "ordem", String(areaEmEdicao.ordem))}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                Status
+                <select
+                  name="ativo"
+                  defaultValue={
+                    getDraftBoolean(params, "ativo", areaEmEdicao.ativo) ? "true" : "false"
+                  }
+                  className={INPUT_CLASS}
+                >
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                O que deve ser limpo
+                <textarea
+                  name="detalhamentoLimpeza"
+                  rows={4}
+                  defaultValue={getDraftValue(
+                    params,
+                    "detalhamentoLimpeza",
+                    areaEmEdicao.detalhamentoLimpeza ?? ""
+                  )}
+                  className={INPUT_CLASS}
+                  placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
+                />
+              </label>
+
+              <div className="md:col-span-2">
+                <TurnoCheckboxes
+                  turnoManhaDefault={getDraftBoolean(params, "turnoManha", areaEmEdicao.turnoManha)}
+                  turnoTardeDefault={getDraftBoolean(params, "turnoTarde", areaEmEdicao.turnoTarde)}
+                  turnoNoiteDefault={getDraftBoolean(params, "turnoNoite", areaEmEdicao.turnoNoite)}
+                />
+              </div>
+
+              <div className="btn-group md:col-span-2">
+                <button type="submit" className="btn-primary">
+                  Salvar
+                </button>
+                <Link href={PAGE_PATH} className="btn-secondary" scroll={false}>
+                  Cancelar
+                </Link>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

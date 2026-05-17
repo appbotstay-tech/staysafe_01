@@ -27,6 +27,26 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function getDraftValue(
+  params: SearchParams,
+  key: string,
+  fallback: string
+): string {
+  const value = firstParam(params[key]).trim();
+  return value || fallback;
+}
+
+function getDraftBoolean(
+  params: SearchParams,
+  key: string,
+  fallback: boolean
+): boolean {
+  const value = firstParam(params[key]).trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
 export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -40,6 +60,9 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
   const areaOptions = Array.from(new Set([...WEEKLY_AREAS, ...itens.map((item) => item.area)])).sort(
     (a, b) => a.localeCompare(b, "pt-BR")
   );
+  const itemEmEdicao = editItemId
+    ? itens.find((item) => item.id === editItemId) ?? null
+    : null;
 
   const itensPorArea = new Map<string, typeof itens>();
   for (const area of areaOptions) {
@@ -174,64 +197,6 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                 ) : (
                   <ul className="space-y-3">
                     {itensArea.map((item, index) => {
-                      const isEditing = editItemId === item.id;
-
-                      if (isEditing) {
-                        return (
-                          <li key={item.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                            <form action={updateWeeklyConfigItemAction} className="grid gap-3 md:grid-cols-2">
-                              <input type="hidden" name="returnTo" value={PAGE_PATH} />
-                              <input type="hidden" name="itemId" value={String(item.id)} />
-
-                              <label className="text-sm text-slate-700 dark:text-slate-200">
-                                Área *
-                                <select name="area" defaultValue={item.area} required className={INPUT_CLASS}>
-                                  {areaOptions.map((areaOption) => (
-                                    <option key={areaOption} value={areaOption}>
-                                      {areaOption}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="text-sm text-slate-700 dark:text-slate-200">
-                                Ordem *
-                                <input type="number" min={1} name="ordem" defaultValue={item.ordem} required className={INPUT_CLASS} />
-                              </label>
-                              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-                                O que limpar? *
-                                <input type="text" name="oQueLimpar" defaultValue={item.oQueLimpar} required className={INPUT_CLASS} />
-                              </label>
-                              <label className="text-sm text-slate-700 dark:text-slate-200">
-                                Quando limpar? *
-                                <select name="quando" defaultValue={item.quando} required className={INPUT_CLASS}>
-                                  {WEEKLY_DAY_OPTIONS.map((day) => (
-                                    <option key={day.value} value={day.value}>
-                                      {day.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="text-sm text-slate-700 dark:text-slate-200">
-                                Quem? *
-                                <input type="text" name="quem" defaultValue={item.quem} required className={INPUT_CLASS} />
-                              </label>
-                              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-                                Status
-                                <select name="ativo" defaultValue={item.ativo ? "true" : "false"} className={INPUT_CLASS}>
-                                  <option value="true">Ativo</option>
-                                  <option value="false">Inativo</option>
-                                </select>
-                              </label>
-
-                              <div className="btn-group md:col-span-2">
-                                <button type="submit" className="btn-primary">Salvar</button>
-                                <Link href={PAGE_PATH} className="btn-secondary">Cancelar</Link>
-                              </div>
-                            </form>
-                          </li>
-                        );
-                      }
-
                       return (
                         <li key={item.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -248,7 +213,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                           </p>
 
                           <div className="btn-group mt-3">
-                            <Link href={`${PAGE_PATH}?editItemId=${item.id}`} className="btn-action">
+                            <Link href={`${PAGE_PATH}?editItemId=${item.id}`} className="btn-action" scroll={false}>
                               Editar
                             </Link>
                             <form action={moveWeeklyConfigItemAction}>
@@ -290,6 +255,116 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
           })}
         </div>
       </section>
+
+      {itemEmEdicao ? (
+        <div className="bpma-modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar item do plano semanal">
+          <section className="bpma-modal-panel max-w-3xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Editar Item do Plano Semanal
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Ajuste área, ordem, frequência e responsável do item.
+                </p>
+              </div>
+              <Link href={PAGE_PATH} className="btn-secondary shrink-0" scroll={false}>
+                Fechar
+              </Link>
+            </div>
+            {feedback && feedbackType === "error" ? (
+              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                {feedback}
+              </p>
+            ) : null}
+
+            <form action={updateWeeklyConfigItemAction} className="grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="returnTo" value={`${PAGE_PATH}?editItemId=${itemEmEdicao.id}`} />
+              <input type="hidden" name="itemId" value={String(itemEmEdicao.id)} />
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Área *
+                <select
+                  name="area"
+                  defaultValue={getDraftValue(params, "area", itemEmEdicao.area)}
+                  required
+                  className={INPUT_CLASS}
+                >
+                  {areaOptions.map((areaOption) => (
+                    <option key={areaOption} value={areaOption}>
+                      {areaOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Ordem *
+                <input
+                  type="number"
+                  min={1}
+                  name="ordem"
+                  defaultValue={getDraftValue(params, "ordem", String(itemEmEdicao.ordem))}
+                  required
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                O que limpar? *
+                <input
+                  type="text"
+                  name="oQueLimpar"
+                  defaultValue={getDraftValue(params, "oQueLimpar", itemEmEdicao.oQueLimpar)}
+                  required
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Quando limpar? *
+                <select
+                  name="quando"
+                  defaultValue={getDraftValue(params, "quando", itemEmEdicao.quando)}
+                  required
+                  className={INPUT_CLASS}
+                >
+                  {WEEKLY_DAY_OPTIONS.map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Quem? *
+                <input
+                  type="text"
+                  name="quem"
+                  defaultValue={getDraftValue(params, "quem", itemEmEdicao.quem)}
+                  required
+                  className={INPUT_CLASS}
+                />
+              </label>
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                Status
+                <select
+                  name="ativo"
+                  defaultValue={
+                    getDraftBoolean(params, "ativo", itemEmEdicao.ativo) ? "true" : "false"
+                  }
+                  className={INPUT_CLASS}
+                >
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </label>
+
+              <div className="btn-group md:col-span-2">
+                <button type="submit" className="btn-primary">Salvar</button>
+                <Link href={PAGE_PATH} className="btn-secondary" scroll={false}>Cancelar</Link>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
