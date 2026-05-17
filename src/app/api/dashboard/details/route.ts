@@ -23,6 +23,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const period = parseDashboardPeriod(url.searchParams.get("period") ?? "");
+  const startDate = url.searchParams.get("startDate") ?? undefined;
+  const endDate = url.searchParams.get("endDate") ?? undefined;
   const cardId = url.searchParams.get("cardId") ?? "";
   const kind = parseKind(url.searchParams.get("kind"));
 
@@ -34,6 +36,8 @@ export async function GET(request: Request) {
     const details = await getDashboardCardDetails({
       user,
       period,
+      startDate,
+      endDate,
       cardId,
       kind
     });

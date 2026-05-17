@@ -70,7 +70,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
     );
   }
 
-  const [registros, fechamento] = await Promise.all([
+  const [registros, fechamento, areaConfigs] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
       where: { data: dateDb },
       orderBy: [{ turno: "asc" }, { area: "asc" }]
@@ -83,8 +83,17 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
           ano: getMonthYear(dateDb).ano
         }
       }
+    }),
+    prisma.planoLimpezaDiarioArea.findMany({
+      select: {
+        nome: true,
+        detalhamentoLimpeza: true
+      }
     })
   ]);
+  const detalhamentoPorArea = new Map(
+    areaConfigs.map((item) => [item.nome, item.detalhamentoLimpeza])
+  );
 
   const periodClosed = fechamento?.status === StatusFechamentoPlanoLimpeza.ASSINADO;
   const summary = consolidateDailyRecordsByDay(registros, formatDateInput)[0];
@@ -259,10 +268,22 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
                   </td>
                 </tr>
               ) : (
-                registros.map((registro) => (
+                registros.map((registro) => {
+                  const detalhamentoLimpeza = detalhamentoPorArea.get(registro.area);
+
+                  return (
                   <tr key={registro.id}>
                     <td className="px-3 py-2">{getTurnoLabel(registro.turno)}</td>
-                    <td className="px-3 py-2">{registro.area}</td>
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-slate-900 dark:text-slate-100">
+                        {registro.area}
+                      </p>
+                      {detalhamentoLimpeza ? (
+                        <p className="mt-1 max-w-md whitespace-pre-line break-words text-xs text-slate-600 dark:text-slate-300">
+                          <strong>O que deve ser limpo:</strong> {detalhamentoLimpeza}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">{registro.assinaturaResponsavel || "-"}</td>
                     <td className="px-3 py-2">{registro.assinaturaSupervisor || "-"}</td>
                     <td className="px-3 py-2">
@@ -273,7 +294,8 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
                     </td>
                     <td className="px-3 py-2">{registro.observacaoSupervisor || "-"}</td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

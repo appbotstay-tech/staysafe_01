@@ -12,6 +12,7 @@ type DailySignChecklistModalProps = {
   returnTo: string;
   usuarioAssinando: string;
   dataHoraAtual: string;
+  detalhamentoLimpeza?: string | null;
   record: {
     id: number;
     data: Date;
@@ -29,6 +30,7 @@ export function DailySignChecklistModal({
   returnTo,
   usuarioAssinando,
   dataHoraAtual,
+  detalhamentoLimpeza,
   record,
   etapa
 }: DailySignChecklistModalProps) {
@@ -56,6 +58,16 @@ export function DailySignChecklistModal({
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Área</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">{record.area}</p>
           </div>
+          {detalhamentoLimpeza ? (
+            <div className="md:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                O que deve ser limpo
+              </p>
+              <p className="whitespace-pre-line break-words text-slate-700 dark:text-slate-200">
+                {detalhamentoLimpeza}
+              </p>
+            </div>
+          ) : null}
           <div className="md:col-span-2">
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Status Atual</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">

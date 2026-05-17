@@ -485,7 +485,18 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
 
 async function generateDiarioReport(moduleId: ReportModuleId, reportId: string, params: ReportSearchParams, user: AuthenticatedUser) {
   const range = getDateRange(params);
-  const records = await prisma.planoLimpezaDiarioRegistro.findMany({ where: { data: { gte: range.start, lte: range.end } }, orderBy: [{ data: "asc" }, { area: "asc" }, { turno: "asc" }] });
+  const [records, areaConfigs] = await Promise.all([
+    prisma.planoLimpezaDiarioRegistro.findMany({ where: { data: { gte: range.start, lte: range.end } }, orderBy: [{ data: "asc" }, { area: "asc" }, { turno: "asc" }] }),
+    prisma.planoLimpezaDiarioArea.findMany({
+      select: {
+        nome: true,
+        detalhamentoLimpeza: true
+      }
+    })
+  ]);
+  const detalhamentoPorArea = new Map(
+    areaConfigs.map((item) => [item.nome, item.detalhamentoLimpeza])
+  );
   const filtered = records.filter((item) => {
     if (reportId === "pendencias" && item.status !== StatusPlanoLimpeza.PENDENTE) return false;
     if (reportId === "aguardando-supervisor" && item.status !== StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) return false;
@@ -506,8 +517,8 @@ async function generateDiarioReport(moduleId: ReportModuleId, reportId: string, 
       { label: "Aguardando supervisor", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR).length },
       { label: "Concluídas", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length }
     ],
-    columns: columns([["data", "Data"], ["area", "Área"], ["turno", "Turno"], ["responsavel", "Responsável"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"], ["dataHoraAssinatura", "Data/hora da assinatura"]]),
-    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), area: item.area, turno: labelTurnoLimpeza(item.turno), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacao ?? item.observacaoResponsavel ?? item.observacaoSupervisor), dataHoraAssinatura: item.status === StatusPlanoLimpeza.CONCLUIDO ? formatDateTimeDisplay(item.updatedAt) : "-" }))
+    columns: columns([["data", "Data"], ["area", "Área"], ["detalhamentoLimpeza", "O que deve ser limpo"], ["turno", "Turno"], ["responsavel", "Responsável"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"], ["dataHoraAssinatura", "Data/hora da assinatura"]]),
+    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), area: item.area, detalhamentoLimpeza: valueOrDash(detalhamentoPorArea.get(item.area)), turno: labelTurnoLimpeza(item.turno), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacao ?? item.observacaoResponsavel ?? item.observacaoSupervisor), dataHoraAssinatura: item.status === StatusPlanoLimpeza.CONCLUIDO ? formatDateTimeDisplay(item.updatedAt) : "-" }))
   });
 }
 

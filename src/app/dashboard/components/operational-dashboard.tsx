@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { ThemeToggleButton } from "@/app/plano-limpeza/theme-toggle-button";
+
 import type {
   DashboardData,
   DashboardDetailItem,
@@ -17,7 +19,8 @@ import type {
 const PERIOD_OPTIONS: Array<{ value: DashboardPeriod; label: string }> = [
   { value: "hoje", label: "Hoje" },
   { value: "semana", label: "Semana Atual" },
-  { value: "mes", label: "Mês Atual" }
+  { value: "mes", label: "Mês Atual" },
+  { value: "personalizado", label: "Data personalizada" }
 ];
 
 const MAIN_CARD_IDS = new Set(["diarias", "semanais", "mensal", "chamados"]);
@@ -72,9 +75,31 @@ type ModuleSnapshot = {
 function detailCacheKey(
   period: DashboardPeriod,
   cardId: string,
-  kind: DashboardDetailKind
+  kind: DashboardDetailKind,
+  startDate?: string,
+  endDate?: string
 ): string {
-  return `${period}:${cardId}:${kind}`;
+  return `${period}:${startDate ?? ""}:${endDate ?? ""}:${cardId}:${kind}`;
+}
+
+function dashboardPeriodHref(period: DashboardPeriod, data: DashboardData): string {
+  const params = new URLSearchParams({ period });
+
+  if (period === "personalizado") {
+    if (data.customStartDate) params.set("startDate", data.customStartDate);
+    if (data.customEndDate) params.set("endDate", data.customEndDate);
+  }
+
+  return `/?${params.toString()}`;
+}
+
+function appendCustomRangeParams(query: URLSearchParams, data: DashboardData): void {
+  if (data.period !== "personalizado") {
+    return;
+  }
+
+  if (data.customStartDate) query.set("startDate", data.customStartDate);
+  if (data.customEndDate) query.set("endDate", data.customEndDate);
 }
 
 function calculatePercent(value: number, total: number): number {
@@ -487,7 +512,13 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
   const mainCards = data.cards.filter((card) => MAIN_CARD_IDS.has(card.id));
 
   const loadDetails = async (cardId: string, kind: DashboardDetailKind) => {
-    const key = detailCacheKey(data.period, cardId, kind);
+    const key = detailCacheKey(
+      data.period,
+      cardId,
+      kind,
+      data.customStartDate,
+      data.customEndDate
+    );
     const current = detailCache[key];
 
     if (current?.loaded || current?.loading) {
@@ -510,6 +541,7 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         cardId,
         kind
       });
+      appendCustomRangeParams(query, data);
       const response = await fetch(`/api/dashboard/details?${query.toString()}`, {
         method: "GET"
       });
@@ -565,18 +597,55 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {PERIOD_OPTIONS.map((option) => (
-              <Link
-                key={option.value}
-                href={`/?period=${option.value}`}
-                className={data.period === option.value ? "btn-primary" : "btn-secondary"}
-              >
-                {option.label}
-              </Link>
-            ))}
+          <div className="flex flex-col gap-3 lg:items-end">
+            <div className="flex flex-wrap gap-2">
+              {PERIOD_OPTIONS.map((option) => (
+                <Link
+                  key={option.value}
+                  href={dashboardPeriodHref(option.value, data)}
+                  className={data.period === option.value ? "btn-primary" : "btn-secondary"}
+                >
+                  {option.label}
+                </Link>
+              ))}
+              <ThemeToggleButton />
+            </div>
+
+            {data.period === "personalizado" ? (
+              <form method="get" className="grid w-full gap-2 sm:w-auto sm:grid-cols-[1fr_1fr_auto]">
+                <input type="hidden" name="period" value="personalizado" />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Data inicial
+                  <input
+                    type="date"
+                    name="startDate"
+                    defaultValue={data.customStartDate ?? ""}
+                    className="bpma-input mt-1"
+                  />
+                </label>
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Data final
+                  <input
+                    type="date"
+                    name="endDate"
+                    defaultValue={data.customEndDate ?? ""}
+                    className="bpma-input mt-1"
+                  />
+                </label>
+                <div className="sm:flex sm:items-end">
+                  <button type="submit" className="btn-primary w-full sm:w-auto">
+                    Aplicar
+                  </button>
+                </div>
+              </form>
+            ) : null}
           </div>
         </div>
+        {data.filterError ? (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            {data.filterError}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -587,7 +656,15 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
             expanded={expanded}
             detailsState={
               expanded?.cardId === card.id
-                ? detailCache[detailCacheKey(data.period, card.id, expanded.kind)]
+                ? detailCache[
+                    detailCacheKey(
+                      data.period,
+                      card.id,
+                      expanded.kind,
+                      data.customStartDate,
+                      data.customEndDate
+                    )
+                  ]
                 : undefined
             }
             onToggle={toggleExpanded}

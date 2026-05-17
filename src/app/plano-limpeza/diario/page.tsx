@@ -149,6 +149,9 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const areaOptions = Array.from(
     new Set([...areaConfigs.map((item) => item.nome), ...areasHistoricas.map((item) => item.area)])
   ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const detalhamentoPorArea = new Map(
+    areaConfigs.map((item) => [item.nome, item.detalhamentoLimpeza])
+  );
 
   const signId = parsePositiveInt(firstParam(params.signId));
   const registroParaAssinatura = signId
@@ -432,6 +435,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                   const periodo = getMonthYear(registro.data);
                   const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
                   const etapa = getDailySignStage(registro);
+                  const detalhamentoLimpeza = detalhamentoPorArea.get(registro.area);
                   const hrefAssinar = (() => {
                     const q = new URLSearchParams(paramsRetorno);
                     q.set("signId", String(registro.id));
@@ -442,7 +446,16 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                     <tr key={registro.id}>
                       <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
                       <td className="px-3 py-2">{getTurnoLabel(registro.turno)}</td>
-                      <td className="px-3 py-2">{registro.area}</td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-slate-900 dark:text-slate-100">
+                          {registro.area}
+                        </p>
+                        {detalhamentoLimpeza ? (
+                          <p className="mt-1 max-w-md whitespace-pre-line break-words text-xs text-slate-600 dark:text-slate-300">
+                            <strong>O que deve ser limpo:</strong> {detalhamentoLimpeza}
+                          </p>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">{registro.assinaturaResponsavel || "-"}</td>
                       <td className="px-3 py-2">{registro.assinaturaSupervisor || "-"}</td>
                       <td className="px-3 py-2">
@@ -578,17 +591,28 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {dia.detalhes.map((detalhe) => (
+                                {dia.detalhes.map((detalhe) => {
+                                  const detalhamentoLimpeza = detalhamentoPorArea.get(detalhe.area);
+
+                                  return (
                                   <tr key={detalhe.id}>
                                     <td className="px-2 py-1">{getTurnoLabel(detalhe.turno)}</td>
-                                    <td className="px-2 py-1">{detalhe.area}</td>
+                                    <td className="px-2 py-1">
+                                      <p>{detalhe.area}</p>
+                                      {detalhamentoLimpeza ? (
+                                        <p className="mt-1 max-w-sm whitespace-pre-line break-words text-[11px] text-slate-500 dark:text-slate-400">
+                                          {detalhamentoLimpeza}
+                                        </p>
+                                      ) : null}
+                                    </td>
                                     <td className="px-2 py-1">{detalhe.assinaturaResponsavel || "-"}</td>
                                     <td className="px-2 py-1">{detalhe.assinaturaSupervisor || "-"}</td>
                                     <td className="px-2 py-1">
                                       <StatusBadge status={detalhe.status} />
                                     </td>
                                   </tr>
-                                ))}
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -661,6 +685,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           closeHref={returnTo}
           returnTo={returnTo}
           record={registroParaAssinatura}
+          detalhamentoLimpeza={detalhamentoPorArea.get(registroParaAssinatura.area) ?? null}
           etapa={etapaAssinatura}
           usuarioAssinando={responsavelLogado}
           dataHoraAtual={formatDateTimeDisplay(now)}

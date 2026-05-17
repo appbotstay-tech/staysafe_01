@@ -1,6 +1,6 @@
 import type { UserRole } from "@/lib/rbac";
 
-export const DASHBOARD_PERIODS = ["hoje", "semana", "mes"] as const;
+export const DASHBOARD_PERIODS = ["hoje", "semana", "mes", "personalizado"] as const;
 
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
 
@@ -112,6 +112,9 @@ export type DashboardProfileView = {
 export type DashboardData = {
   period: DashboardPeriod;
   periodLabel: string;
+  customStartDate?: string;
+  customEndDate?: string;
+  filterError?: string;
   generatedAt: string;
   profileView: DashboardProfileView;
   cards: DashboardSummaryCard[];

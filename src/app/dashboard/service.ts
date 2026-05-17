@@ -29,7 +29,7 @@ import {
   getWeekStartDateForDate
 } from "@/app/plano-limpeza/utils";
 import type { AuthenticatedUser } from "@/lib/auth-session";
-import { getEndOfAppDay, getStartOfAppDay } from "@/lib/date-time";
+import { getEndOfAppDay, getStartOfAppDay, parseAppDateInput } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -103,9 +103,13 @@ type DateOnlyRange = {
 
 type DashboardRanges = {
   periodLabel: string;
+  customStartDate?: string;
+  customEndDate?: string;
+  filterError?: string;
   daily: DateOnlyRange;
   weekly: DateOnlyRange;
   monthly: DateOnlyRange;
+  monthlyLabel: string;
   openPendencies: DateOnlyRange;
   dateTime: {
     start: Date;
@@ -128,6 +132,11 @@ type ModuleStats = {
   note?: string;
   pendingDetails: DashboardDetailItem[];
   completedDetails: DashboardDetailItem[];
+};
+
+export type DashboardDateFilterInput = {
+  startDate?: string;
+  endDate?: string;
 };
 
 export function parseDashboardPeriod(value: string): DashboardPeriod {
@@ -314,6 +323,42 @@ function minDateOnly(a: Date, b: Date): Date {
   return a.getTime() <= b.getTime() ? a : b;
 }
 
+function maxDateOnly(a: Date, b: Date): Date {
+  return a.getTime() >= b.getTime() ? a : b;
+}
+
+function enumerateMonthRanges(range: DateOnlyRange): Array<{
+  mes: number;
+  ano: number;
+  range: DateOnlyRange;
+}> {
+  const months: Array<{ mes: number; ano: number; range: DateOnlyRange }> = [];
+  let mes = range.start.getUTCMonth() + 1;
+  let ano = range.start.getUTCFullYear();
+  const endMes = range.end.getUTCMonth() + 1;
+  const endAno = range.end.getUTCFullYear();
+
+  while (ano < endAno || (ano === endAno && mes <= endMes)) {
+    const monthRange = getMonthDateRange(mes, ano);
+    months.push({
+      mes,
+      ano,
+      range: {
+        start: maxDateOnly(range.start, monthRange.start),
+        end: minDateOnly(range.end, monthRange.end)
+      }
+    });
+
+    mes += 1;
+    if (mes > 12) {
+      mes = 1;
+      ano += 1;
+    }
+  }
+
+  return months;
+}
+
 function enumerateDateRange(range: DateOnlyRange): Date[] {
   const dates: Date[] = [];
   const cursor = new Date(range.start);
@@ -356,11 +401,98 @@ function maintenanceContextKey(
   return `${context}:${recordId}`;
 }
 
-function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
+function getCustomDateRange(
+  filter: DashboardDateFilterInput | undefined,
+  today: Date
+): {
+  range: DateOnlyRange;
+  startDate: string;
+  endDate: string;
+  error?: string;
+} {
+  const defaultDate = formatDateInput(today);
+  const startDate = filter?.startDate?.trim() || defaultDate;
+  const endDate = filter?.endDate?.trim() || defaultDate;
+  const start = parseAppDateInput(startDate);
+  const end = parseAppDateInput(endDate);
+  const fallbackRange = { start: today, end: today };
+
+  if (!filter?.startDate?.trim() && !filter?.endDate?.trim()) {
+    return {
+      range: fallbackRange,
+      startDate,
+      endDate
+    };
+  }
+
+  if (!filter?.startDate?.trim() || !filter?.endDate?.trim()) {
+    return {
+      range: fallbackRange,
+      startDate,
+      endDate,
+      error: "Informe data inicial e data final para usar a data personalizada."
+    };
+  }
+
+  if (!start || !end) {
+    return {
+      range: fallbackRange,
+      startDate,
+      endDate,
+      error: "Informe datas válidas no filtro personalizado."
+    };
+  }
+
+  if (start.getTime() > end.getTime()) {
+    return {
+      range: fallbackRange,
+      startDate,
+      endDate,
+      error: "A data inicial não pode ser maior que a data final."
+    };
+  }
+
+  return {
+    range: { start, end },
+    startDate,
+    endDate
+  };
+}
+
+function getRanges(
+  period: DashboardPeriod,
+  now: Date,
+  customFilter?: DashboardDateFilterInput
+): DashboardRanges {
   const today = getTodaySystemDate();
   const { mes, ano } = getMonthYear(today);
   const currentWeek = getCurrentWeekDateRange(now);
   const currentMonth = getMonthDateRange(mes, ano);
+
+  if (period === "personalizado") {
+    const customRange = getCustomDateRange(customFilter, today);
+    const dateTimeStart = dateOnlyToLocalDateTime(customRange.range.start, false);
+    const dateTimeEnd = dateOnlyToLocalDateTime(customRange.range.end, true);
+    const customMonth = getMonthYear(customRange.range.start);
+
+    return {
+      periodLabel: `Data personalizada: ${formatRangeLabel(customRange.range)}`,
+      customStartDate: customRange.startDate,
+      customEndDate: customRange.endDate,
+      filterError: customRange.error,
+      daily: customRange.range,
+      weekly: customRange.range,
+      monthly: customRange.range,
+      monthlyLabel: formatRangeLabel(customRange.range),
+      openPendencies: customRange.range,
+      dateTime: {
+        start: dateTimeStart,
+        end: dateTimeEnd.getTime() > now.getTime() ? now : dateTimeEnd
+      },
+      mes: customMonth.mes,
+      ano: customMonth.ano
+    };
+  }
 
   const daily =
     period === "semana"
@@ -383,6 +515,7 @@ function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
     daily,
     weekly,
     monthly: currentMonth,
+    monthlyLabel: `${String(mes).padStart(2, "0")}/${ano}`,
     openPendencies: {
       start: currentMonth.start,
       end: minDateOnly(currentMonth.end, today)
@@ -1337,156 +1470,163 @@ async function buildWeeklyCleaningStats(
 }
 
 async function buildMonthlyClosingCard(params: {
-  mes: number;
-  ano: number;
   range: DateOnlyRange;
 }): Promise<DashboardSummaryCard> {
-  const [
-    fechamentoHortifruti,
-    fechamentoTemperatura,
-    fechamentoOleo,
-    fechamentoRastreabilidade,
-    fechamentoLimpezaDiaria,
-    fechamentoLimpezaSemanal,
-    fechamentoBuffet,
-    countHortifruti,
-    countTemperatura,
-    countOleo,
-    countRastreabilidade,
-    countLimpezaDiaria,
-    countLimpezaSemanal,
-    countBuffet
-  ] = await Promise.all([
-    prisma.higienizacaoHortifrutiFechamento.findUnique({
-      where: { mes_ano: { mes: params.mes, ano: params.ano } }
-    }),
-    prisma.controleTemperaturaEquipamentoFechamento.findUnique({
-      where: { mes_ano: { mes: params.mes, ano: params.ano } }
-    }),
-    prisma.controleQualidadeOleoFechamento.findUnique({
-      where: { mes_ano: { mes: params.mes, ano: params.ano } }
-    }),
-    prisma.rastreabilidadeRecebimentoFechamento.findUnique({
-      where: { mes_ano: { mes: params.mes, ano: params.ano } }
-    }),
-    prisma.planoLimpezaFechamento.findUnique({
-      where: {
-        tipo_mes_ano: {
-          tipo: TipoPlanoLimpeza.DIARIO,
-          mes: params.mes,
-          ano: params.ano
-        }
-      }
-    }),
-    prisma.planoLimpezaFechamento.findUnique({
-      where: {
-        tipo_mes_ano: {
-          tipo: TipoPlanoLimpeza.SEMANAL,
-          mes: params.mes,
-          ano: params.ano
-        }
-      }
-    }),
-    prisma.controleBuffetAmostraFechamento.findUnique({
-      where: { mes_ano: { mes: params.mes, ano: params.ano } }
-    }),
-    prisma.higienizacaoHortifruti.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.controleTemperaturaEquipamento.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.controleQualidadeOleoRegistro.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.rastreabilidadeRecebimentoNota.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.planoLimpezaDiarioRegistro.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.planoLimpezaSemanalExecucao.count({
-      where: { dataExecucao: { gte: params.range.start, lte: params.range.end } }
-    }),
-    prisma.controleBuffetAmostraRegistro.count({
-      where: { data: { gte: params.range.start, lte: params.range.end } }
-    })
-  ]);
-
-  const closureModules = [
-    {
-      id: "fechamento-hortifruti",
-      name: MODULES.hortifruti.name,
-      href: MODULES.hortifruti.href,
-      status: fechamentoHortifruti?.status,
-      count: countHortifruti
-    },
-    {
-      id: "fechamento-temperatura",
-      name: MODULES.temperatura.name,
-      href: MODULES.temperatura.href,
-      status: fechamentoTemperatura?.status,
-      count: countTemperatura
-    },
-    {
-      id: "fechamento-oleo",
-      name: MODULES.oleo.name,
-      href: MODULES.oleo.href,
-      status: fechamentoOleo?.status,
-      count: countOleo
-    },
-    {
-      id: "fechamento-rastreabilidade",
-      name: MODULES.rastreabilidade.name,
-      href: MODULES.rastreabilidade.href,
-      status: fechamentoRastreabilidade?.status,
-      count: countRastreabilidade
-    },
-    {
-      id: "fechamento-limpeza-diaria",
-      name: MODULES.limpezaDiaria.name,
-      href: MODULES.limpezaDiaria.href,
-      status: fechamentoLimpezaDiaria?.status,
-      count: countLimpezaDiaria
-    },
-    {
-      id: "fechamento-limpeza-semanal",
-      name: MODULES.limpezaSemanal.name,
-      href: MODULES.limpezaSemanal.href,
-      status: fechamentoLimpezaSemanal?.status,
-      count: countLimpezaSemanal
-    },
-    {
-      id: "fechamento-buffet",
-      name: MODULES.buffet.name,
-      href: MODULES.buffet.href,
-      status: fechamentoBuffet?.status,
-      count: countBuffet
-    }
-  ];
-
   const completedDetails: DashboardDetailItem[] = [];
   const pendingDetails: DashboardDetailItem[] = [];
+  let totalClosures = 0;
+  let completedClosures = 0;
+  let pendingClosures = 0;
 
-  for (const item of closureModules) {
-    const detail: DashboardDetailItem = {
-      id: item.id,
-      moduleId: item.id,
-      moduleName: "Fechamentos Mensais",
-      title: item.name,
-      description:
-        item.count > 0
-          ? `${item.count} registro(s) no mês atual.`
-          : "Sem registros no mês atual.",
-      status: item.status === "ASSINADO" ? "Concluído" : "Pendente",
-      dateTime: `${String(params.mes).padStart(2, "0")}/${params.ano}`,
-      href: item.href
-    };
+  for (const month of enumerateMonthRanges(params.range)) {
+    const [
+      fechamentoHortifruti,
+      fechamentoTemperatura,
+      fechamentoOleo,
+      fechamentoRastreabilidade,
+      fechamentoLimpezaDiaria,
+      fechamentoLimpezaSemanal,
+      fechamentoBuffet,
+      countHortifruti,
+      countTemperatura,
+      countOleo,
+      countRastreabilidade,
+      countLimpezaDiaria,
+      countLimpezaSemanal,
+      countBuffet
+    ] = await Promise.all([
+      prisma.higienizacaoHortifrutiFechamento.findUnique({
+        where: { mes_ano: { mes: month.mes, ano: month.ano } }
+      }),
+      prisma.controleTemperaturaEquipamentoFechamento.findUnique({
+        where: { mes_ano: { mes: month.mes, ano: month.ano } }
+      }),
+      prisma.controleQualidadeOleoFechamento.findUnique({
+        where: { mes_ano: { mes: month.mes, ano: month.ano } }
+      }),
+      prisma.rastreabilidadeRecebimentoFechamento.findUnique({
+        where: { mes_ano: { mes: month.mes, ano: month.ano } }
+      }),
+      prisma.planoLimpezaFechamento.findUnique({
+        where: {
+          tipo_mes_ano: {
+            tipo: TipoPlanoLimpeza.DIARIO,
+            mes: month.mes,
+            ano: month.ano
+          }
+        }
+      }),
+      prisma.planoLimpezaFechamento.findUnique({
+        where: {
+          tipo_mes_ano: {
+            tipo: TipoPlanoLimpeza.SEMANAL,
+            mes: month.mes,
+            ano: month.ano
+          }
+        }
+      }),
+      prisma.controleBuffetAmostraFechamento.findUnique({
+        where: { mes_ano: { mes: month.mes, ano: month.ano } }
+      }),
+      prisma.higienizacaoHortifruti.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.controleTemperaturaEquipamento.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.controleQualidadeOleoRegistro.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.rastreabilidadeRecebimentoNota.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.planoLimpezaDiarioRegistro.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.planoLimpezaSemanalExecucao.count({
+        where: { dataExecucao: { gte: month.range.start, lte: month.range.end } }
+      }),
+      prisma.controleBuffetAmostraRegistro.count({
+        where: { data: { gte: month.range.start, lte: month.range.end } }
+      })
+    ]);
 
-    if (item.status === "ASSINADO") {
-      addDetail(completedDetails, detail);
-    } else {
-      addDetail(pendingDetails, detail);
+    const monthLabel = `${String(month.mes).padStart(2, "0")}/${month.ano}`;
+    const closureModules = [
+      {
+        id: "fechamento-hortifruti",
+        name: MODULES.hortifruti.name,
+        href: MODULES.hortifruti.href,
+        status: fechamentoHortifruti?.status,
+        count: countHortifruti
+      },
+      {
+        id: "fechamento-temperatura",
+        name: MODULES.temperatura.name,
+        href: MODULES.temperatura.href,
+        status: fechamentoTemperatura?.status,
+        count: countTemperatura
+      },
+      {
+        id: "fechamento-oleo",
+        name: MODULES.oleo.name,
+        href: MODULES.oleo.href,
+        status: fechamentoOleo?.status,
+        count: countOleo
+      },
+      {
+        id: "fechamento-rastreabilidade",
+        name: MODULES.rastreabilidade.name,
+        href: MODULES.rastreabilidade.href,
+        status: fechamentoRastreabilidade?.status,
+        count: countRastreabilidade
+      },
+      {
+        id: "fechamento-limpeza-diaria",
+        name: MODULES.limpezaDiaria.name,
+        href: MODULES.limpezaDiaria.href,
+        status: fechamentoLimpezaDiaria?.status,
+        count: countLimpezaDiaria
+      },
+      {
+        id: "fechamento-limpeza-semanal",
+        name: MODULES.limpezaSemanal.name,
+        href: MODULES.limpezaSemanal.href,
+        status: fechamentoLimpezaSemanal?.status,
+        count: countLimpezaSemanal
+      },
+      {
+        id: "fechamento-buffet",
+        name: MODULES.buffet.name,
+        href: MODULES.buffet.href,
+        status: fechamentoBuffet?.status,
+        count: countBuffet
+      }
+    ];
+
+    for (const item of closureModules) {
+      totalClosures += 1;
+      const detail: DashboardDetailItem = {
+        id: `${item.id}:${monthLabel}`,
+        moduleId: item.id,
+        moduleName: "Fechamentos Mensais",
+        title: `${item.name} | ${monthLabel}`,
+        description:
+          item.count > 0
+            ? `${item.count} registro(s) no período.`
+            : "Sem registros no período.",
+        status: item.status === "ASSINADO" ? "Concluído" : "Pendente",
+        dateTime: monthLabel,
+        href: item.href
+      };
+
+      if (item.status === "ASSINADO") {
+        completedClosures += 1;
+        addDetail(completedDetails, detail);
+      } else {
+        pendingClosures += 1;
+        addDetail(pendingDetails, detail);
+      }
     }
   }
 
@@ -1494,9 +1634,9 @@ async function buildMonthlyClosingCard(params: {
     id: "mensal",
     title: "Fechamentos Mensais",
     description: "Assinaturas mensais dos módulos com fechamento implementado.",
-    total: closureModules.length,
-    completed: completedDetails.length,
-    pending: pendingDetails.length,
+    total: totalClosures,
+    completed: completedClosures,
+    pending: pendingClosures,
     pendingDetails,
     completedDetails
   });
@@ -1621,11 +1761,16 @@ async function buildMaintenanceStats(params: {
 export async function getOperationalDashboardData(params: {
   user: AuthenticatedUser;
   period: DashboardPeriod;
+  startDate?: string;
+  endDate?: string;
   includeDetails?: boolean;
   includeInsights?: boolean;
 }): Promise<DashboardData> {
   const now = getCurrentSystemDateTime();
-  const ranges = getRanges(params.period, now);
+  const ranges = getRanges(params.period, now, {
+    startDate: params.startDate,
+    endDate: params.endDate
+  });
   const profileView = getProfileView(params.user);
   const includeDetails = params.includeDetails ?? false;
   const includeInsights = params.includeInsights ?? false;
@@ -1671,8 +1816,6 @@ export async function getOperationalDashboardData(params: {
           },
           () =>
             buildMonthlyClosingCard({
-              mes: ranges.mes,
-              ano: ranges.ano,
               range: ranges.monthly
             })
         )
@@ -1691,7 +1834,7 @@ export async function getOperationalDashboardData(params: {
   const dailyCard = combineStatsToCard({
     id: "diarias",
     title: "Tarefas Diárias",
-    description: `Rotinas de ${formatRangeLabel(ranges.daily)} e pendências abertas do mês.`,
+    description: `Rotinas de ${formatRangeLabel(ranges.daily)} e pendências abertas relevantes.`,
     href: "/",
     stats: dailyStats
   });
@@ -1699,7 +1842,7 @@ export async function getOperationalDashboardData(params: {
   const weeklyCard = combineStatsToCard({
     id: "semanais",
     title: "Tarefas Semanais",
-    description: `Plano semanal de ${formatRangeLabel(ranges.weekly)} e pendências abertas do mês.`,
+    description: `Plano semanal de ${formatRangeLabel(ranges.weekly)} e pendências abertas relevantes.`,
     href: MODULES.limpezaSemanal.href,
     stats: [weeklyCleaningStats]
   });
@@ -1757,6 +1900,9 @@ export async function getOperationalDashboardData(params: {
   return {
     period: params.period,
     periodLabel: ranges.periodLabel,
+    customStartDate: ranges.customStartDate,
+    customEndDate: ranges.customEndDate,
+    filterError: ranges.filterError,
     generatedAt: formatDateTimeDisplay(now),
     profileView,
     cards,
@@ -1768,7 +1914,7 @@ export async function getOperationalDashboardData(params: {
     scope: {
       daily: formatRangeLabel(ranges.daily),
       weekly: formatRangeLabel(ranges.weekly),
-      monthly: `${String(ranges.mes).padStart(2, "0")}/${ranges.ano}`,
+      monthly: ranges.monthlyLabel,
       maintenance:
         params.user.perfil === "COLABORADOR"
           ? "Chamados criados pelo usuário logado"
@@ -2754,12 +2900,16 @@ async function buildOperationalInsights(params: {
 export async function getDashboardCardDetails(params: {
   user: AuthenticatedUser;
   period: DashboardPeriod;
+  startDate?: string;
+  endDate?: string;
   cardId: string;
   kind: DashboardDetailKind;
 }): Promise<DashboardDetailsResponse> {
   const dashboard = await getOperationalDashboardData({
     user: params.user,
     period: params.period,
+    startDate: params.startDate,
+    endDate: params.endDate,
     includeDetails: true
   });
   const card = dashboard.cards.find((item) => item.id === params.cardId);
@@ -2780,11 +2930,15 @@ export async function getDashboardCardDetails(params: {
 export async function getDashboardInsightDetails(params: {
   user: AuthenticatedUser;
   period: DashboardPeriod;
+  startDate?: string;
+  endDate?: string;
   sectionId: DashboardInsightId;
 }): Promise<DashboardInsightDetailsResponse> {
   const dashboard = await getOperationalDashboardData({
     user: params.user,
     period: params.period,
+    startDate: params.startDate,
+    endDate: params.endDate,
     includeDetails: true,
     includeInsights: true
   });

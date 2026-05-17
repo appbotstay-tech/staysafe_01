@@ -26,7 +26,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   const params = await searchParams;
   const period = parseDashboardPeriod(firstParam(params.period));
-  const dashboardData = await getOperationalDashboardData({ user, period });
+  const dashboardData = await getOperationalDashboardData({
+    user,
+    period,
+    startDate: firstParam(params.startDate),
+    endDate: firstParam(params.endDate)
+  });
 
   return <OperationalDashboard data={dashboardData} />;
 }

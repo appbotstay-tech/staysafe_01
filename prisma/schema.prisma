@@ -571,15 +571,16 @@ model PlanoLimpezaDiarioRegistro {
 }
 
 model PlanoLimpezaDiarioArea {
-  id         Int      @id @default(autoincrement())
-  nome       String   @unique
-  turnoManha Boolean  @default(true)
-  turnoTarde Boolean  @default(true)
-  turnoNoite Boolean  @default(true)
-  ativo      Boolean  @default(true)
-  ordem      Int      @default(1)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                   Int      @id @default(autoincrement())
+  nome                 String   @unique
+  detalhamentoLimpeza  String?  @db.Text
+  turnoManha           Boolean  @default(true)
+  turnoTarde           Boolean  @default(true)
+  turnoNoite           Boolean  @default(true)
+  ativo                Boolean  @default(true)
+  ordem                Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([ativo, ordem, nome])
   @@map("plano_limpeza_diario_area")

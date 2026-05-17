@@ -222,6 +222,7 @@ export async function createDailyAreaConfigAction(formData: FormData) {
     ensureCanManageOptions(actor.perfil);
 
     const nome = getInputValue(formData, "nome");
+    const detalhamentoLimpeza = getInputValue(formData, "detalhamentoLimpeza");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
     const turnos = buildDailyTurnoFlags(formData);
 
@@ -231,6 +232,7 @@ export async function createDailyAreaConfigAction(formData: FormData) {
     await prisma.planoLimpezaDiarioArea.create({
       data: {
         nome,
+        detalhamentoLimpeza: detalhamentoLimpeza || null,
         ordem,
         turnoManha: turnos.turnoManha,
         turnoTarde: turnos.turnoTarde,
@@ -268,6 +270,7 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
     }
 
     const nome = getInputValue(formData, "nome");
+    const detalhamentoLimpeza = getInputValue(formData, "detalhamentoLimpeza");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
     const turnos = buildDailyTurnoFlags(formData);
@@ -279,6 +282,7 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
       where: { id: areaId },
       data: {
         nome,
+        detalhamentoLimpeza: detalhamentoLimpeza || null,
         ordem,
         ativo,
         turnoManha: turnos.turnoManha,

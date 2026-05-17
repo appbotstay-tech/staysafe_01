@@ -122,6 +122,16 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
             <input type="number" min={1} name="ordem" defaultValue={areas.length + 1} required className={INPUT_CLASS} />
           </label>
 
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+            O que deve ser limpo
+            <textarea
+              name="detalhamentoLimpeza"
+              rows={3}
+              className={INPUT_CLASS}
+              placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
+            />
+          </label>
+
           <div className="md:col-span-2">
             <TurnoCheckboxes
               turnoManhaDefault
@@ -189,6 +199,17 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                       </select>
                     </label>
 
+                    <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                      O que deve ser limpo
+                      <textarea
+                        name="detalhamentoLimpeza"
+                        rows={3}
+                        defaultValue={area.detalhamentoLimpeza ?? ""}
+                        className={INPUT_CLASS}
+                        placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
+                      />
+                    </label>
+
                     <div className="md:col-span-2">
                       <TurnoCheckboxes
                         turnoManhaDefault={area.turnoManha}
@@ -220,6 +241,11 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                     <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
                       <strong>Turnos:</strong> {getTurnosLabel(area)}
                     </p>
+                    {area.detalhamentoLimpeza ? (
+                      <p className="mt-2 max-w-3xl whitespace-pre-line break-words text-sm text-slate-700 dark:text-slate-200">
+                        <strong>O que deve ser limpo:</strong> {area.detalhamentoLimpeza}
+                      </p>
+                    ) : null}
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {area.ativo ? "Ativo" : "Inativo"}
                     </p>

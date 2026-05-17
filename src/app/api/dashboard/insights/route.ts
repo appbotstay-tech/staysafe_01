@@ -30,6 +30,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const period = parseDashboardPeriod(url.searchParams.get("period") ?? "");
+  const startDate = url.searchParams.get("startDate") ?? undefined;
+  const endDate = url.searchParams.get("endDate") ?? undefined;
   const sectionId = parseSectionId(url.searchParams.get("sectionId"));
 
   if (!sectionId) {
@@ -40,6 +42,8 @@ export async function GET(request: Request) {
     const details = await getDashboardInsightDetails({
       user,
       period,
+      startDate,
+      endDate,
       sectionId
     });
 
