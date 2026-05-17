@@ -320,6 +320,38 @@ function dateOnlyKey(date: Date): string {
   return formatDateInput(date);
 }
 
+function temperatureMeasurementKey(record: {
+  data: Date;
+  equipamento: string;
+  turno: TurnoTemperaturaEquipamento;
+}): string {
+  return `${dateOnlyKey(record.data)}|${record.equipamento}|${record.turno}`;
+}
+
+function dedupeTemperatureMeasurements<
+  T extends {
+    data: Date;
+    equipamento: string;
+    turno: TurnoTemperaturaEquipamento;
+    createdAt: Date;
+  }
+>(records: T[]): T[] {
+  const latestByMeasurement = new Map<string, T>();
+  const orderedRecords = [...records].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+
+  for (const record of orderedRecords) {
+    const key = temperatureMeasurementKey(record);
+
+    if (!latestByMeasurement.has(key)) {
+      latestByMeasurement.set(key, record);
+    }
+  }
+
+  return Array.from(latestByMeasurement.values());
+}
+
 function minDateOnly(a: Date, b: Date): Date {
   return a.getTime() <= b.getTime() ? a : b;
 }
@@ -896,12 +928,13 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
       orderBy: [{ createdAt: "desc" }]
     })
   ]);
+  const registrosUnicos = dedupeTemperatureMeasurements(registros);
 
   const keyFor = (date: Date, equipamento: string, turno: TurnoTemperaturaEquipamento) =>
     `${dateOnlyKey(date)}|${equipamento}|${turno}`;
-  const recordsByKey = new Map<string, (typeof registros)[number]>();
+  const recordsByKey = new Map<string, (typeof registrosUnicos)[number]>();
 
-  for (const record of registros) {
+  for (const record of registrosUnicos) {
     const key = keyFor(record.data, record.equipamento, record.turno);
     if (!recordsByKey.has(key)) {
       recordsByKey.set(key, record);
@@ -954,7 +987,7 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
     }
   }
 
-  for (const record of registros) {
+  for (const record of registrosUnicos) {
     const key = keyFor(record.data, record.equipamento, record.turno);
     if (expectedKeys.has(key)) {
       continue;
@@ -1965,8 +1998,7 @@ async function buildNonConformitySummary(params: {
   ] = await Promise.all([
     prisma.controleTemperaturaEquipamento.findMany({
       where: {
-        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
-        status: { not: StatusTemperaturaEquipamento.CONFORME }
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end }
       },
       select: {
         id: true,
@@ -2134,7 +2166,11 @@ async function buildNonConformitySummary(params: {
     })
   ]);
 
-  for (const record of temperaturas) {
+  const temperaturasNaoConformes = dedupeTemperatureMeasurements(temperaturas).filter(
+    (record) => record.status !== StatusTemperaturaEquipamento.CONFORME
+  );
+
+  for (const record of temperaturasNaoConformes) {
     const hasEvidence = Boolean(record.fotoBase64 && record.fotoMimeType);
     addInsightItem(summary, {
       id: `nc-temperatura:${record.id}`,
@@ -2325,8 +2361,7 @@ async function buildCorrectiveActionsSummary(params: {
   const [temperaturas, recebimentos, buffetRegistros] = await Promise.all([
     prisma.controleTemperaturaEquipamento.findMany({
       where: {
-        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end },
-        acaoCorretiva: { not: null }
+        data: { gte: params.ranges.daily.start, lte: params.ranges.daily.end }
       },
       select: {
         id: true,
@@ -2389,7 +2424,12 @@ async function buildCorrectiveActionsSummary(params: {
     })
   ]);
 
-  const temperaturaIds = temperaturas.map((record) => String(record.id));
+  const temperaturasComAcao = dedupeTemperatureMeasurements(temperaturas).filter(
+    (record) =>
+      record.status !== StatusTemperaturaEquipamento.CONFORME &&
+      hasUsefulText(record.acaoCorretiva)
+  );
+  const temperaturaIds = temperaturasComAcao.map((record) => String(record.id));
   const buffetIds = buffetRegistros.map((record) => String(record.id));
   const receivingIds = recebimentos.map((record) => String(record.id));
   const relatedTickets = await prisma.chamadoManutencao.findMany({
@@ -2416,11 +2456,7 @@ async function buildCorrectiveActionsSummary(params: {
     }
   }
 
-  for (const record of temperaturas) {
-    if (!hasUsefulText(record.acaoCorretiva)) {
-      continue;
-    }
-
+  for (const record of temperaturasComAcao) {
     addInsightItem(summary, {
       id: `ac-temperatura:${record.id}`,
       moduleId: MODULES.temperatura.id,
@@ -2433,7 +2469,7 @@ async function buildCorrectiveActionsSummary(params: {
       href: `${MODULES.temperatura.href}?filtroData=${formatDateInput(record.data)}&filtroEquipamento=${encodeURIComponent(record.equipamento)}`,
       severity: record.status === StatusTemperaturaEquipamento.CRITICO ? "Crítico" : "Atenção",
       occurrenceType: "Ação corretiva de temperatura",
-      correctiveAction: record.acaoCorretiva,
+      correctiveAction: record.acaoCorretiva ?? undefined,
       hasEvidence: Boolean(record.fotoBase64 && record.fotoMimeType),
       relatedTicketStatus:
         ticketStatusByRecordContext.get(

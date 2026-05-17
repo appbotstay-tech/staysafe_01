@@ -65,13 +65,32 @@ export function ImageUploadField({
       return;
     }
 
-    const handleSubmit = (event: Event) => {
+    const getStatusValue = () => {
       const statusField = form.elements.namedItem(requiredStatusFieldName) as
         | HTMLInputElement
         | null;
-      const statusValue = statusField?.value ?? "";
-      const isRequiredByStatus = requiredStatusValues.includes(statusValue);
-      const hasFile = Boolean(input.files?.length) || Boolean(existingImageDataUrl);
+
+      return statusField?.value ?? "";
+    };
+
+    const hasUpload = () => Boolean(input.files?.length) || Boolean(existingImageDataUrl);
+
+    const clearValidation = () => {
+      input.setCustomValidity("");
+      setValidationError("");
+    };
+
+    const clearValidationWhenRequirementChanged = () => {
+      const isRequiredByStatus = requiredStatusValues.includes(getStatusValue());
+
+      if (!isRequiredByStatus || hasUpload()) {
+        clearValidation();
+      }
+    };
+
+    const handleSubmit = (event: Event) => {
+      const isRequiredByStatus = requiredStatusValues.includes(getStatusValue());
+      const hasFile = hasUpload();
 
       if (isRequiredByStatus && !hasFile) {
         input.setCustomValidity(requiredMessage);
@@ -82,14 +101,18 @@ export function ImageUploadField({
         return;
       }
 
-      input.setCustomValidity("");
-      setValidationError("");
+      clearValidation();
     };
 
     form.addEventListener("submit", handleSubmit);
+    form.addEventListener("input", clearValidationWhenRequirementChanged);
+    form.addEventListener("change", clearValidationWhenRequirementChanged);
+    clearValidationWhenRequirementChanged();
 
     return () => {
       form.removeEventListener("submit", handleSubmit);
+      form.removeEventListener("input", clearValidationWhenRequirementChanged);
+      form.removeEventListener("change", clearValidationWhenRequirementChanged);
     };
   }, [
     existingImageDataUrl,

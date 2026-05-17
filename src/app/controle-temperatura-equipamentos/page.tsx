@@ -42,6 +42,7 @@ import {
   getMonthYear,
   getShiftLabel,
   getStatusLabel,
+  getTodaySystemDate,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -304,6 +305,37 @@ export default async function ControleTemperaturaEquipamentosPage({
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
   const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
   const modalError = feedback && feedbackType === "error" ? feedback : "";
+  const dataFormulario =
+    registroEmEdicao?.data ?? parseDateInput(todayDateInput) ?? getTodaySystemDate();
+  const turnoFormulario =
+    registroEmEdicao?.turno ??
+    (getCurrentShift(now) === "MANHA"
+      ? TurnoTemperaturaEquipamento.MANHA
+      : TurnoTemperaturaEquipamento.TARDE);
+  const registrosDuplicidadeFormulario = mostrarFormulario
+    ? await prisma.controleTemperaturaEquipamento.findMany({
+        where: {
+          data: dataFormulario,
+          turno: turnoFormulario,
+          ...(registroEmEdicao ? { id: { not: registroEmEdicao.id } } : {})
+        },
+        select: {
+          id: true,
+          equipamento: true
+        },
+        orderBy: [{ createdAt: "desc" }]
+      })
+    : [];
+  const registrosDuplicidadeForm = registrosDuplicidadeFormulario.map((registro) => {
+    const query = new URLSearchParams(parametrosRetorno);
+    query.set("editId", String(registro.id));
+
+    return {
+      id: registro.id,
+      equipamento: registro.equipamento,
+      href: buildPathWithParams(query)
+    };
+  });
   const deleteReturnTo = (() => {
     const query = new URLSearchParams(parametrosRetorno);
     if (registroParaExcluir) {
@@ -437,11 +469,7 @@ export default async function ControleTemperaturaEquipamentosPage({
                 Turno
               </p>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {registroEmEdicao
-                  ? getShiftLabel(registroEmEdicao.turno)
-                  : getCurrentShift(now) === TurnoTemperaturaEquipamento.MANHA
-                    ? "Manhã"
-                    : "Tarde"}
+                {getShiftLabel(turnoFormulario)}
               </p>
             </div>
 
@@ -449,6 +477,7 @@ export default async function ControleTemperaturaEquipamentosPage({
               equipamentoOptions={equipamentoFormOptions}
               equipamentosCategoria={equipamentosCategoria}
               regrasCategoria={regrasCategoriaForm}
+              registrosDuplicidade={registrosDuplicidadeForm}
               defaultEquipamento={registroEmEdicao?.equipamento ?? ""}
               defaultTemperatura={
                 registroEmEdicao

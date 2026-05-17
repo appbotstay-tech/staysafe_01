@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SearchableOptionField } from "./searchable-option-field";
+import { normalizeOption } from "./options";
 import {
   CategoriaTemperatura,
   findMatchingTemperatureRule,
@@ -20,10 +21,17 @@ type RegraCategoriaComTipo = RegraTemperaturaCategoria & {
   categoria: CategoriaTemperatura;
 };
 
+type RegistroDuplicidade = {
+  id: number;
+  equipamento: string;
+  href: string;
+};
+
 type AutomaticCorrectiveActionFieldsProps = {
   equipamentoOptions: string[];
   equipamentosCategoria: EquipamentoCategoria[];
   regrasCategoria: RegraCategoriaComTipo[];
+  registrosDuplicidade?: RegistroDuplicidade[];
   defaultEquipamento?: string;
   defaultTemperatura?: string;
   defaultAcaoCorretiva?: string | null;
@@ -34,11 +42,13 @@ export function AutomaticCorrectiveActionFields({
   equipamentoOptions,
   equipamentosCategoria,
   regrasCategoria,
+  registrosDuplicidade = [],
   defaultEquipamento = "",
   defaultTemperatura = "",
   defaultAcaoCorretiva = null,
   inputClassName
 }: AutomaticCorrectiveActionFieldsProps) {
+  const statusInputRef = useRef<HTMLInputElement | null>(null);
   const [equipamentoSelecionado, setEquipamentoSelecionado] = useState(defaultEquipamento);
   const [temperaturaInput, setTemperaturaInput] = useState(defaultTemperatura);
 
@@ -100,6 +110,88 @@ export function AutomaticCorrectiveActionFields({
     temperaturaInput
   ]);
 
+  const registroDuplicado = useMemo(() => {
+    const equipamentoNormalizado = normalizeOption(equipamentoSelecionado);
+
+    if (!equipamentoNormalizado) {
+      return null;
+    }
+
+    return (
+      registrosDuplicidade.find(
+        (registro) => normalizeOption(registro.equipamento) === equipamentoNormalizado
+      ) ?? null
+    );
+  }, [equipamentoSelecionado, registrosDuplicidade]);
+
+  useEffect(() => {
+    const input = statusInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [avaliacao.statusValue]);
+
+  useEffect(() => {
+    const input = statusInputRef.current;
+    const form = input?.form;
+    if (!input || !form) {
+      return;
+    }
+
+    const handleSubmit = (event: Event) => {
+      if (!registroDuplicado) {
+        input.setCustomValidity("");
+        return;
+      }
+
+      input.setCustomValidity(
+        "Este equipamento já possui aferição registrada para esta data e turno. Para alterar as informações, edite o registro existente."
+      );
+      event.preventDefault();
+      event.stopPropagation();
+      input.reportValidity();
+    };
+
+    const submitButtons = Array.from(
+      form.querySelectorAll<HTMLButtonElement>('button[type="submit"]')
+    );
+
+    for (const button of submitButtons) {
+      if (registroDuplicado) {
+        button.disabled = true;
+        button.classList.add("cursor-not-allowed", "opacity-60");
+      } else if (button.dataset.temperatureDuplicateDisabled === "true") {
+        button.disabled = false;
+        button.classList.remove("cursor-not-allowed", "opacity-60");
+        delete button.dataset.temperatureDuplicateDisabled;
+      }
+
+      if (registroDuplicado) {
+        button.dataset.temperatureDuplicateDisabled = "true";
+      }
+    }
+
+    if (!registroDuplicado) {
+      input.setCustomValidity("");
+    }
+
+    form.addEventListener("submit", handleSubmit);
+
+    return () => {
+      form.removeEventListener("submit", handleSubmit);
+      for (const button of submitButtons) {
+        if (button.dataset.temperatureDuplicateDisabled === "true") {
+          button.disabled = false;
+          button.classList.remove("cursor-not-allowed", "opacity-60");
+          delete button.dataset.temperatureDuplicateDisabled;
+        }
+      }
+    };
+  }, [registroDuplicado]);
+
   return (
     <>
       <label className="text-sm text-slate-700 dark:text-slate-200">
@@ -132,7 +224,13 @@ export function AutomaticCorrectiveActionFields({
 
       <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
         Ação Corretiva (Automática)
-        <input type="hidden" name="statusCalculado" value={avaliacao.statusValue} readOnly />
+        <input
+          ref={statusInputRef}
+          type="hidden"
+          name="statusCalculado"
+          value={avaliacao.statusValue}
+          readOnly
+        />
         <input type="hidden" name="acaoCorretiva" value={avaliacao.acaoCorretiva} readOnly />
         <input
           type="text"
@@ -147,6 +245,17 @@ export function AutomaticCorrectiveActionFields({
             : "Preencha equipamento e temperatura para calcular automaticamente."}
         </span>
       </label>
+
+      {registroDuplicado ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-2 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          <p>
+            Já existe registro deste equipamento para o turno selecionado.
+          </p>
+          <a href={registroDuplicado.href} className="mt-2 inline-flex text-sm font-medium underline">
+            Abrir registro existente
+          </a>
+        </div>
+      ) : null}
     </>
   );
 }

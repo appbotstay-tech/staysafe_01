@@ -47,6 +47,8 @@ import {
 const MODULE_PATH = "/controle-temperatura-equipamentos";
 const HISTORY_PATH = "/controle-temperatura-equipamentos/historico";
 const OPTIONS_PATH = "/controle-temperatura-equipamentos/opcoes";
+const DUPLICATE_MEASUREMENT_MESSAGE =
+  "Este equipamento já possui aferição registrada para esta data e turno. Para alterar as informações, edite o registro existente.";
 
 type FeedbackType = "success" | "error";
 
@@ -104,6 +106,27 @@ function revalidateModulePaths() {
   revalidatePath(MODULE_PATH);
   revalidatePath(HISTORY_PATH);
   revalidatePath(OPTIONS_PATH);
+}
+
+async function ensureUniqueTemperatureMeasurement(params: {
+  equipamento: string;
+  data: Date;
+  turno: TurnoTemperaturaEquipamento;
+  ignoreId?: number;
+}) {
+  const existing = await prisma.controleTemperaturaEquipamento.findFirst({
+    where: {
+      equipamento: params.equipamento,
+      data: params.data,
+      turno: params.turno,
+      ...(params.ignoreId ? { id: { not: params.ignoreId } } : {})
+    },
+    select: { id: true }
+  });
+
+  if (existing) {
+    throw new Error(DUPLICATE_MEASUREMENT_MESSAGE);
+  }
 }
 
 async function isMonthSigned(mes: number, ano: number): Promise<boolean> {
@@ -297,6 +320,12 @@ export async function createRegistroAction(formData: FormData) {
         ? TurnoTemperaturaEquipamento.MANHA
         : TurnoTemperaturaEquipamento.TARDE;
 
+    await ensureUniqueTemperatureMeasurement({
+      equipamento: payload.equipamento,
+      data,
+      turno
+    });
+
     const fotoDesvio = await parseImageUploadFromFormData({
       formData,
       key: "fotoDesvio",
@@ -353,6 +382,13 @@ export async function updateRegistroAction(formData: FormData) {
     }
 
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
+    await ensureUniqueTemperatureMeasurement({
+      equipamento: payload.equipamento,
+      data: existing.data,
+      turno: existing.turno,
+      ignoreId: existing.id
+    });
+
     const fotoDesvio = await parseImageUploadFromFormData({
       formData,
       key: "fotoDesvio"
