@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type {
+  DashboardAlertSeverity,
   DashboardData,
-  DashboardDetailsResponse,
   DashboardDetailItem,
   DashboardDetailKind,
-  DashboardAlertSeverity,
+  DashboardDetailsResponse,
   DashboardInsightDetailsResponse,
   DashboardInsightId,
   DashboardInsightItem,
@@ -24,6 +24,23 @@ const PERIOD_OPTIONS: Array<{ value: DashboardPeriod; label: string }> = [
   { value: "semana", label: "Semana Atual" },
   { value: "mes", label: "Mês Atual" }
 ];
+
+const MAIN_CARD_IDS = new Set(["diarias", "semanais", "mensal", "chamados"]);
+const CLEANING_MODULE_IDS = new Set(["limpeza-diaria", "limpeza-semanal"]);
+const MODULE_ORDER = [
+  "hortifruti",
+  "temperatura",
+  "oleo",
+  "rastreabilidade",
+  "buffet",
+  "plano-limpeza",
+  "chamados"
+];
+const MODULE_LABELS: Record<string, string> = {
+  temperatura: "Controle de Temperatura de Equipamentos",
+  rastreabilidade: "Rastreabilidade de Recebimento",
+  "plano-limpeza": "Plano de Limpeza"
+};
 
 type OperationalDashboardProps = {
   data: DashboardData;
@@ -50,6 +67,21 @@ type InsightLoadState = {
   error?: string;
 };
 
+type ModuleVisualStatus = "Concluído" | "Atenção" | "Crítico" | "Sem dados";
+
+type ModuleSnapshot = {
+  id: string;
+  name: string;
+  href: string;
+  total: number;
+  completed: number;
+  pending: number;
+  percentCompleted: number;
+  percentPending: number;
+  status: ModuleVisualStatus;
+  note?: string;
+};
+
 function detailCacheKey(
   period: DashboardPeriod,
   cardId: string,
@@ -60,6 +92,97 @@ function detailCacheKey(
 
 function insightCacheKey(period: DashboardPeriod, sectionId: DashboardInsightId): string {
   return `${period}:${sectionId}`;
+}
+
+function calculatePercent(value: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return Math.round((value / total) * 100);
+}
+
+function displayModuleName(moduleSummary: Pick<DashboardModuleSummary, "id" | "name">): string {
+  return MODULE_LABELS[moduleSummary.id] ?? moduleSummary.name;
+}
+
+function moduleVisualStatus(total: number, pending: number, percentPending: number): ModuleVisualStatus {
+  if (total === 0) {
+    return "Sem dados";
+  }
+
+  if (pending === 0) {
+    return "Concluído";
+  }
+
+  if (pending >= 8 || percentPending >= 50) {
+    return "Crítico";
+  }
+
+  return "Atenção";
+}
+
+function buildModuleSnapshot(params: {
+  id: string;
+  name: string;
+  href: string;
+  total: number;
+  completed: number;
+  pending: number;
+  note?: string;
+}): ModuleSnapshot {
+  const percentCompleted = calculatePercent(params.completed, params.total);
+  const percentPending = calculatePercent(params.pending, params.total);
+
+  return {
+    ...params,
+    percentCompleted,
+    percentPending,
+    status: moduleVisualStatus(params.total, params.pending, percentPending)
+  };
+}
+
+function buildModuleSnapshots(modules: DashboardModuleSummary[]): ModuleSnapshot[] {
+  const cleaningModules = modules.filter((moduleSummary) =>
+    CLEANING_MODULE_IDS.has(moduleSummary.id)
+  );
+  const regularModules = modules
+    .filter((moduleSummary) => !CLEANING_MODULE_IDS.has(moduleSummary.id))
+    .map((moduleSummary) =>
+      buildModuleSnapshot({
+        id: moduleSummary.id,
+        name: displayModuleName(moduleSummary),
+        href: moduleSummary.href,
+        total: moduleSummary.total,
+        completed: moduleSummary.completed,
+        pending: moduleSummary.pending,
+        note: moduleSummary.note
+      })
+    );
+
+  if (cleaningModules.length > 0) {
+    const total = cleaningModules.reduce((sum, moduleSummary) => sum + moduleSummary.total, 0);
+    const completed = cleaningModules.reduce(
+      (sum, moduleSummary) => sum + moduleSummary.completed,
+      0
+    );
+    const pending = cleaningModules.reduce((sum, moduleSummary) => sum + moduleSummary.pending, 0);
+
+    regularModules.push(
+      buildModuleSnapshot({
+        id: "plano-limpeza",
+        name: "Plano de Limpeza",
+        href: "/plano-limpeza",
+        total,
+        completed,
+        pending
+      })
+    );
+  }
+
+  return regularModules.sort(
+    (left, right) => MODULE_ORDER.indexOf(left.id) - MODULE_ORDER.indexOf(right.id)
+  );
 }
 
 function statusBadgeClass(status: DashboardNormalizedStatus): string {
@@ -98,13 +221,13 @@ function severityBadgeClass(severity: DashboardAlertSeverity): string {
   return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
 }
 
-function moduleStatusClass(status: DashboardModuleSummary["status"]): string {
+function moduleStatusClass(status: ModuleVisualStatus): string {
   if (status === "Concluído") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
   }
 
-  if (status === "Parcial") {
-    return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200";
+  if (status === "Crítico") {
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200";
   }
 
   if (status === "Sem dados") {
@@ -175,7 +298,7 @@ function DetailList({
                       {isInsightItem(item) && item.correctiveAction ? (
                         <span>Ação: {item.correctiveAction}</span>
                       ) : null}
-                      {isInsightItem(item) ? (
+                      {isInsightItem(item) && typeof item.hasEvidence === "boolean" ? (
                         <span>{item.hasEvidence ? "Com evidência" : "Sem evidência"}</span>
                       ) : null}
                       {isInsightItem(item) && item.relatedTicketStatus ? (
@@ -214,6 +337,53 @@ function DetailList({
   );
 }
 
+function CardDetails({
+  title,
+  state,
+  total,
+  details,
+  emptyText,
+  onClose
+}: {
+  title: string;
+  state?: DetailLoadState;
+  total: number;
+  details: DashboardDetailItem[];
+  emptyText: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-medium text-slate-600 underline-offset-4 hover:underline dark:text-slate-300"
+        >
+          Recolher
+        </button>
+      </div>
+      {state?.loading ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          Carregando detalhes...
+        </p>
+      ) : state?.error ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          {state.error}
+        </p>
+      ) : total > details.length ? (
+        <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          Mostrando {details.length} de {total} itens. Use Abrir para ver o módulo completo.
+        </p>
+      ) : null}
+      {!state?.loading && !state?.error ? (
+        <DetailList details={details} emptyText={emptyText} />
+      ) : null}
+    </div>
+  );
+}
+
 function SummaryCard({
   card,
   expanded,
@@ -233,42 +403,35 @@ function SummaryCard({
       : detailsState?.total ?? card.pending;
 
   return (
-    <article className="bpma-card-compact flex min-h-[18rem] flex-col gap-4">
-      <div className="space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {card.title}
-            </h2>
-            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              {card.description}
-            </p>
-          </div>
-          {card.href && card.href !== "/" ? (
-            <Link href={card.href} className="btn-secondary shrink-0 px-3 py-2 text-xs">
-              Abrir
-            </Link>
-          ) : null}
-        </div>
+    <article className="bpma-card-compact flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          {card.title}
+        </h2>
+        {card.href && card.href !== "/" ? (
+          <Link href={card.href} className="btn-secondary shrink-0 px-3 py-2 text-xs">
+            Abrir
+          </Link>
+        ) : null}
+      </div>
 
-        <div>
-          <div className="mb-2 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                {card.percentCompleted}%
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">concluídas</p>
-            </div>
-            <p className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
-              {card.completed} de {card.total}
+      <div>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+              {card.percentCompleted}%
             </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">concluídas</p>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-            <div
-              className="h-full rounded-full bg-emerald-500"
-              style={{ width: `${card.percentCompleted}%` }}
-            />
-          </div>
+          <p className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
+            {card.completed} de {card.total}
+          </p>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          <div
+            className="h-full rounded-full bg-emerald-500"
+            style={{ width: `${card.percentCompleted}%` }}
+          />
         </div>
       </div>
 
@@ -287,59 +450,23 @@ function SummaryCard({
           className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-amber-700 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900"
         >
           <span className="block text-lg font-semibold">{card.pending}</span>
-          <span className="text-xs">{card.percentPending}% pendentes</span>
+          <span className="text-xs">pendentes</span>
         </button>
       </div>
 
-      <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2">
-        {card.waitingResponsible ? (
-          <span>{card.waitingResponsible} aguardando responsável</span>
-        ) : null}
-        {card.waitingSupervisor ? (
-          <span>{card.waitingSupervisor} aguardando supervisor</span>
-        ) : null}
-        {card.inProgress ? <span>{card.inProgress} em andamento</span> : null}
-      </div>
-
       {expandedKind ? (
-        <div className="mt-auto border-t border-slate-200 pt-4 dark:border-slate-700">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {expandedKind === "completed" ? "Tarefas concluídas" : "Pendências encontradas"}
-            </h3>
-            <button
-              type="button"
-              onClick={() => onToggle(card.id, expandedKind)}
-              className="text-xs font-medium text-slate-600 underline-offset-4 hover:underline dark:text-slate-300"
-            >
-              Recolher
-            </button>
-          </div>
-          {detailsState?.loading ? (
-            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              Carregando detalhes...
-            </p>
-          ) : detailsState?.error ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              {detailsState.error}
-            </p>
-          ) : expandedTotal > expandedDetails.length ? (
-            <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              Mostrando {expandedDetails.length} de {expandedTotal} itens. Use Abrir para ver o
-              módulo completo.
-            </p>
-          ) : null}
-          {!detailsState?.loading && !detailsState?.error ? (
-            <DetailList
-              details={expandedDetails}
-              emptyText={
-                expandedKind === "completed"
-                  ? "Nenhuma tarefa concluída neste grupo."
-                  : "Nenhuma pendência neste grupo."
-              }
-            />
-          ) : null}
-        </div>
+        <CardDetails
+          title={expandedKind === "completed" ? "Concluídas" : "Pendências"}
+          state={detailsState}
+          total={expandedTotal}
+          details={expandedDetails}
+          emptyText={
+            expandedKind === "completed"
+              ? "Nenhuma tarefa concluída neste grupo."
+              : "Nenhuma pendência neste grupo."
+          }
+          onClose={() => onToggle(card.id, expandedKind)}
+        />
       ) : null}
     </article>
   );
@@ -358,7 +485,7 @@ function InsightDetails({
     <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Detalhes
+          Fatores do status
         </h3>
         <button
           type="button"
@@ -370,7 +497,7 @@ function InsightDetails({
       </div>
       {state?.loading ? (
         <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          Carregando detalhes...
+          Carregando fatores...
         </p>
       ) : state?.error ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -379,8 +506,7 @@ function InsightDetails({
       ) : state && state.total > state.details.length ? (
         <div>
           <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            Mostrando {state.details.length} de {state.total} itens. Use Abrir para ver o
-            módulo completo.
+            Mostrando {state.details.length} de {state.total} fatores.
           </p>
           <DetailList
             details={state.details}
@@ -397,61 +523,78 @@ function InsightDetails({
   );
 }
 
-function RiskOverviewCard({
+function buildRiskReasons(summary: DashboardInsightSummary, modules: ModuleSnapshot[]): string[] {
+  const reasons: string[] = [];
+  const modulesWithPending = modules
+    .filter((moduleSnapshot) => moduleSnapshot.pending > 0)
+    .sort((left, right) => right.pending - left.pending);
+
+  for (const moduleSnapshot of modulesWithPending) {
+    reasons.push(`${moduleSnapshot.pending} pendência(s) em ${moduleSnapshot.name}`);
+  }
+
+  if (summary.critical > 0) {
+    reasons.push(`${summary.critical} ocorrência(s) crítica(s)`);
+  }
+
+  if (summary.attention > 0) {
+    reasons.push(`${summary.attention} alerta(s) de atenção`);
+  }
+
+  return reasons.length > 0 ? reasons.slice(0, 3) : ["Sem fatores críticos no período."];
+}
+
+function CompactRiskCard({
   summary,
+  modules,
   expanded,
   detailsState,
   onToggle
 }: {
   summary: DashboardInsightSummary;
+  modules: ModuleSnapshot[];
   expanded: boolean;
   detailsState?: InsightLoadState;
   onToggle: (sectionId: DashboardInsightId) => void;
 }) {
   const level = summary.level ?? "Informativo";
+  const reasons = buildRiskReasons(summary, modules);
 
   return (
-    <section className="bpma-card">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="bpma-card-compact">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Risco Operacional
+            Status da Operação
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {summary.status ?? "Operação em dia"}
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-            {summary.description}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+              {summary.status ?? "Operação em dia"}
+            </h2>
+            <span
+              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${severityBadgeClass(
+                level
+              )}`}
+            >
+              {level}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex rounded-full border px-3 py-1 text-sm font-medium ${severityBadgeClass(
-              level
-            )}`}
-          >
-            {level}
-          </span>
-          <button type="button" onClick={() => onToggle(summary.id)} className="btn-secondary">
-            Ver fatores
-          </button>
-        </div>
+        <button type="button" onClick={() => onToggle(summary.id)} className="btn-secondary">
+          Ver fatores
+        </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          <p className="text-2xl font-bold">{summary.critical}</p>
-          <p className="text-xs">críticos</p>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <p className="text-2xl font-bold">{summary.attention}</p>
-          <p className="text-xs">atenção</p>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          <p className="text-2xl font-bold">{summary.informative}</p>
-          <p className="text-xs">informativos</p>
-        </div>
-      </div>
+      <ul className="mt-3 grid gap-2 text-sm text-slate-700 dark:text-slate-200 lg:grid-cols-3">
+        {reasons.map((reason) => (
+          <li
+            key={reason}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+          >
+            {reason}
+          </li>
+        ))}
+      </ul>
 
       {expanded ? (
         <InsightDetails
@@ -464,158 +607,183 @@ function RiskOverviewCard({
   );
 }
 
-function InsightSummaryCard({
-  summary,
-  expanded,
-  detailsState,
-  onToggle
-}: {
-  summary: DashboardInsightSummary;
-  expanded: boolean;
-  detailsState?: InsightLoadState;
-  onToggle: (sectionId: DashboardInsightId) => void;
-}) {
+function ModuleBarChart({ modules }: { modules: ModuleSnapshot[] }) {
   return (
-    <article className="bpma-card-compact">
-      <div className="flex items-start justify-between gap-3">
+    <section className="bpma-card">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {summary.title}
-          </h3>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-            {summary.description}
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Resumo por Módulo
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Concluídos e pendentes no período selecionado.
           </p>
         </div>
-        <button type="button" onClick={() => onToggle(summary.id)} className="btn-secondary">
-          Detalhar
-        </button>
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          <span className="block text-lg font-semibold">{summary.critical}</span>
-          <span className="text-xs">crítico</span>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <span className="block text-lg font-semibold">{summary.attention}</span>
-          <span className="text-xs">atenção</span>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          <span className="block text-lg font-semibold">{summary.total}</span>
-          <span className="text-xs">total</span>
+        <div className="flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-300">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            Concluídos
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            Pendentes
+          </span>
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2">
-        {summary.withCorrectiveAction ? (
-          <span>{summary.withCorrectiveAction} com ação corretiva</span>
-        ) : null}
-        {summary.withoutCorrectiveAction ? (
-          <span>{summary.withoutCorrectiveAction} sem ação corretiva</span>
-        ) : null}
-        {summary.resolved ? <span>{summary.resolved} concluídos/cancelados</span> : null}
-      </div>
+      <div className="mt-5 space-y-4">
+        {modules.map((moduleSnapshot) => {
+          const completedWidth = moduleSnapshot.total > 0 ? moduleSnapshot.percentCompleted : 0;
+          const pendingWidth = moduleSnapshot.total > 0 ? 100 - completedWidth : 0;
 
-      {expanded ? (
-        <InsightDetails
-          summary={summary}
-          state={detailsState}
-          onClose={() => onToggle(summary.id)}
-        />
-      ) : null}
-    </article>
+          return (
+            <div
+              key={moduleSnapshot.id}
+              className="grid gap-2 lg:grid-cols-[16rem_1fr_9rem] lg:items-center"
+            >
+              <div>
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {moduleSnapshot.name}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {moduleSnapshot.percentCompleted}% concluído
+                </p>
+              </div>
+              <div className="flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                <div
+                  className="h-full bg-emerald-500"
+                  style={{ width: `${completedWidth}%` }}
+                />
+                <div className="h-full bg-amber-500" style={{ width: `${pendingWidth}%` }} />
+              </div>
+              <p className="text-sm text-slate-700 dark:text-slate-200 lg:text-right">
+                {moduleSnapshot.completed} concl. | {moduleSnapshot.pending} pend.
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-function EvolutionSection({ metrics }: { metrics: DashboardData["evolution"] }) {
-  if (metrics.length === 0) {
-    return null;
-  }
-
+function ModuleSituationList({ modules }: { modules: ModuleSnapshot[] }) {
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-          Evolução do Período
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Situação por Módulo
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Leitura rápida dos principais indicadores do período selecionado.
+          Resumo compacto para decidir onde aprofundar.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {metrics.map((metric) => (
-          <div key={metric.id} className="bpma-card-compact">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                {metric.label}
-              </p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {modules.map((moduleSnapshot) => (
+          <article key={moduleSnapshot.id} className="bpma-card-compact flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {moduleSnapshot.name}
+              </h3>
               <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${severityBadgeClass(
-                  metric.severity
+                className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${moduleStatusClass(
+                  moduleSnapshot.status
                 )}`}
               >
-                {metric.severity}
+                {moduleSnapshot.status}
               </span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {metric.value}
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              {moduleSnapshot.pending} pendência(s)
             </p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {metric.description}
-            </p>
-          </div>
+            <Link href={moduleSnapshot.href} className="btn-secondary w-fit">
+              Abrir
+            </Link>
+          </article>
         ))}
       </div>
     </section>
   );
 }
 
-function MyPendenciesSection({ details }: { details: DashboardDetailItem[] }) {
+function CompactMyPendenciesCard({
+  card,
+  expanded,
+  detailsState,
+  onToggle
+}: {
+  card: DashboardSummaryCard;
+  expanded: ExpandedState;
+  detailsState?: DetailLoadState;
+  onToggle: (cardId: string, kind: DashboardDetailKind) => void;
+}) {
+  const isExpanded = expanded?.cardId === card.id && expanded.kind === "pending";
+  const waitingSignatures = (card.waitingResponsible ?? 0) + (card.waitingSupervisor ?? 0);
+
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-          Minhas Pendências
-        </h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Itens priorizados conforme o perfil logado.
-        </p>
+    <section className="bpma-card-compact">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Minhas Pendências
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Resumo das tarefas que podem precisar da sua ação.
+          </p>
+        </div>
+        <button type="button" onClick={() => onToggle(card.id, "pending")} className="btn-primary">
+          Ver minhas tarefas
+        </button>
       </div>
-      <DetailList
-        details={details}
-        emptyText="Nenhuma pendência prioritária para o seu perfil neste período."
-      />
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{card.pending}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">pendências no total</p>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <p className="text-2xl font-bold">{waitingSignatures}</p>
+          <p className="text-xs">aguardando assinatura</p>
+        </div>
+      </div>
+
+      {isExpanded ? (
+        <CardDetails
+          title="Minhas tarefas"
+          state={detailsState}
+          total={detailsState?.total ?? card.pending}
+          details={detailsState?.details ?? []}
+          emptyText="Nenhuma pendência prioritária para o seu perfil neste período."
+          onClose={() => onToggle(card.id, "pending")}
+        />
+      ) : null}
     </section>
   );
 }
 
-function ModuleSummaryCard({ moduleSummary }: { moduleSummary: DashboardModuleSummary }) {
+function EmployeeShortcuts({ modules }: { modules: ModuleSnapshot[] }) {
   return (
-    <Link href={moduleSummary.href} className="bpma-clickable-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {moduleSummary.name}
-        </h3>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${moduleStatusClass(
-            moduleSummary.status
-          )}`}
-        >
-          {moduleSummary.status}
-        </span>
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        Atalhos Operacionais
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {modules.map((moduleSnapshot) => (
+          <Link
+            key={moduleSnapshot.id}
+            href={moduleSnapshot.href}
+            className="bpma-clickable-card p-4"
+          >
+            <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {moduleSnapshot.name}
+            </span>
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Abrir módulo
+            </span>
+          </Link>
+        ))}
       </div>
-      <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-        {moduleSummary.completed} concluídos | {moduleSummary.pending} pendentes
-      </p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        {moduleSummary.percentCompleted}% concluído
-      </p>
-      {moduleSummary.note ? (
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          {moduleSummary.note}
-        </p>
-      ) : null}
-    </Link>
+    </section>
   );
 }
 
@@ -624,6 +792,14 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
   const [detailCache, setDetailCache] = useState<Record<string, DetailLoadState>>({});
   const [expandedInsight, setExpandedInsight] = useState<DashboardInsightId | null>(null);
   const [insightCache, setInsightCache] = useState<Record<string, InsightLoadState>>({});
+
+  const moduleSnapshots = useMemo(
+    () => buildModuleSnapshots(data.moduleSummaries),
+    [data.moduleSummaries]
+  );
+  const isManagementView = data.profileView.showManagement;
+  const mainCards = data.cards.filter((card) => MAIN_CARD_IDS.has(card.id));
+  const myPendenciesCard = data.cards.find((card) => card.id === "minhas-pendencias");
 
   const loadDetails = async (cardId: string, kind: DashboardDetailKind) => {
     const key = detailCacheKey(data.period, cardId, kind);
@@ -756,21 +932,18 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
   };
 
   return (
-    <div className="space-y-6 dark:text-slate-100">
-      <section className="bpma-card">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-5 dark:text-slate-100">
+      <section className="bpma-card-compact">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              BPMA App
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl dark:text-slate-100">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               {data.profileView.title}
             </h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
               {data.profileView.subtitle}
             </p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Atualizado em {data.generatedAt}
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              {data.periodLabel} | Atualizado em {data.generatedAt}
             </p>
           </div>
 
@@ -788,9 +961,10 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         </div>
       </section>
 
-      {data.riskOverview ? (
-        <RiskOverviewCard
+      {isManagementView && data.riskOverview ? (
+        <CompactRiskCard
           summary={data.riskOverview}
+          modules={moduleSnapshots}
           expanded={expandedInsight === data.riskOverview.id}
           detailsState={
             expandedInsight === data.riskOverview.id
@@ -801,10 +975,8 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         />
       ) : null}
 
-      <EvolutionSection metrics={data.evolution} />
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        {data.cards.map((card) => (
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {mainCards.map((card) => (
           <SummaryCard
             key={card.id}
             card={card}
@@ -819,52 +991,26 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
         ))}
       </section>
 
-      {data.insightSummaries.length > 0 ? (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-              Alertas e Indicadores Preventivos
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Não conformidades, ações corretivas e alertas calculados a partir dos módulos.
-            </p>
-          </div>
-          <div className="grid gap-4 xl:grid-cols-3">
-            {data.insightSummaries.map((summary) => (
-              <InsightSummaryCard
-                key={summary.id}
-                summary={summary}
-                expanded={expandedInsight === summary.id}
-                detailsState={
-                  expandedInsight === summary.id
-                    ? insightCache[insightCacheKey(data.period, summary.id)]
-                    : undefined
-                }
-                onToggle={toggleInsight}
-              />
-            ))}
-          </div>
-        </section>
+      {myPendenciesCard ? (
+        <CompactMyPendenciesCard
+          card={myPendenciesCard}
+          expanded={expanded}
+          detailsState={
+            expanded?.cardId === myPendenciesCard.id
+              ? detailCache[detailCacheKey(data.period, myPendenciesCard.id, expanded.kind)]
+              : undefined
+          }
+          onToggle={toggleExpanded}
+        />
       ) : null}
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-            Pendências por Módulo
-          </h2>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Diário: {data.scope.daily} | Semanal: {data.scope.weekly} | Mensal:{" "}
-            {data.scope.monthly}
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {data.moduleSummaries.map((module) => (
-            <ModuleSummaryCard key={module.id} moduleSummary={module} />
-          ))}
-        </div>
-      </section>
+      {isManagementView ? <ModuleBarChart modules={moduleSnapshots} /> : null}
 
-      <MyPendenciesSection details={data.myPendencies} />
+      {isManagementView ? (
+        <ModuleSituationList modules={moduleSnapshots} />
+      ) : (
+        <EmployeeShortcuts modules={moduleSnapshots} />
+      )}
     </div>
   );
 }

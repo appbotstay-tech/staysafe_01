@@ -354,6 +354,17 @@ function hasUsefulText(value: string | null | undefined): value is string {
   return Boolean(value && value.trim().length > 0);
 }
 
+function maintenanceContextKey(
+  context: string | null | undefined,
+  recordId: string | number | null | undefined
+): string | null {
+  if (!context || recordId === null || recordId === undefined) {
+    return null;
+  }
+
+  return `${context}:${recordId}`;
+}
+
 function getRanges(period: DashboardPeriod, now: Date): DashboardRanges {
   const today = getTodaySystemDate();
   const { mes, ano } = getMonthYear(today);
@@ -1816,6 +1827,12 @@ export async function getOperationalDashboardData(params: {
     monthlyCard,
     maintenanceStats
   });
+  const myPendenciesWaitingResponsible = myPendencies.details.filter(
+    (detail) => detail.status === "Aguardando responsável"
+  ).length;
+  const myPendenciesWaitingSupervisor = myPendencies.details.filter(
+    (detail) => detail.status === "Aguardando supervisor"
+  ).length;
 
   const myPendenciesCard = buildSummaryCard({
     id: "minhas-pendencias",
@@ -1824,6 +1841,8 @@ export async function getOperationalDashboardData(params: {
     total: myPendencies.total,
     completed: 0,
     pending: myPendencies.total,
+    waitingResponsible: myPendenciesWaitingResponsible,
+    waitingSupervisor: myPendenciesWaitingSupervisor,
     pendingDetails: myPendencies.details,
     completedDetails: []
   });
@@ -1865,7 +1884,7 @@ export async function getOperationalDashboardData(params: {
     riskOverview: insights.riskOverview,
     insightSummaries: insights.insightSummaries,
     evolution: insights.evolution,
-    myPendencies: myPendencies.details,
+    myPendencies: includeDetails ? myPendencies.details : [],
     moduleSummaries,
     scope: {
       daily: formatRangeLabel(ranges.daily),
@@ -2043,13 +2062,16 @@ async function buildNonConformitySummary(params: {
     prisma.chamadoManutencao.findMany({
       where: {
         status: { in: [StatusChamadoManutencao.ABERTO, StatusChamadoManutencao.EM_ANDAMENTO] },
-        origem: { not: OrigemChamadoManutencao.MANUAL }
+        origem: { not: OrigemChamadoManutencao.MANUAL },
+        contextoRegistroId: { not: null }
       },
       select: {
         id: true,
         titulo: true,
         areaLocal: true,
         origem: true,
+        contextoModulo: true,
+        contextoRegistroId: true,
         prioridade: true,
         status: true,
         criadoPorNome: true,
@@ -2097,8 +2119,7 @@ async function buildNonConformitySummary(params: {
       href: `${MODULES.oleo.href}?filtroData=${formatDateInput(record.data)}`,
       severity: critical ? "Crítico" : "Atenção",
       occurrenceType: critical ? "Óleo fora do padrão crítico" : "Óleo fora do padrão",
-      correctiveAction: record.orientacao,
-      hasEvidence: false
+      correctiveAction: record.orientacao
     });
   }
 
@@ -2126,8 +2147,7 @@ async function buildNonConformitySummary(params: {
         : MODULES.rastreabilidade.href,
       severity: failures.includes("temperatura") || failures.includes("embalagem") ? "Crítico" : "Atenção",
       occurrenceType: "Recebimento não conforme",
-      correctiveAction: record.acaoCorretiva ?? undefined,
-      hasEvidence: false
+      correctiveAction: record.acaoCorretiva ?? undefined
     });
   }
 
@@ -2176,8 +2196,7 @@ async function buildNonConformitySummary(params: {
           ? "Crítico"
           : "Atenção",
       occurrenceType: discarded ? "Alimento descartado" : "Buffet/amostra fora da regra",
-      correctiveAction: record.acaoCorretiva ?? undefined,
-      hasEvidence: false
+      correctiveAction: record.acaoCorretiva ?? undefined
     });
   }
 
@@ -2225,7 +2244,9 @@ async function buildNonConformitySummary(params: {
       moduleId: MODULES.chamados.id,
       moduleName: MODULES.chamados.name,
       title: chamado.titulo,
-      description: `${chamado.areaLocal} | Origem: ${chamado.origem}.`,
+      description: `${chamado.areaLocal} | Origem: ${chamado.origem} | Vínculo: ${
+        chamado.contextoRegistroId ?? chamado.contextoModulo ?? "módulo"
+      }.`,
       status: maintenanceStatusLabel(chamado.status),
       responsible: chamado.criadoPorNome,
       dateTime: formatDateTimeDisplay(chamado.dataHoraCriacao),
@@ -2318,16 +2339,22 @@ async function buildCorrectiveActionsSummary(params: {
       }
     },
     select: {
+      origem: true,
+      contextoModulo: true,
       contextoRegistroId: true,
       status: true
     }
   });
-  const ticketStatusByRecordId = new Map(
-    relatedTickets.map((ticket) => [
-      ticket.contextoRegistroId ?? "",
-      maintenanceStatusLabel(ticket.status)
-    ])
-  );
+  const ticketStatusByRecordContext = new Map<string, string>();
+  for (const ticket of relatedTickets) {
+    const key = maintenanceContextKey(
+      ticket.contextoModulo ?? ticket.origem,
+      ticket.contextoRegistroId
+    );
+    if (key && !ticketStatusByRecordContext.has(key)) {
+      ticketStatusByRecordContext.set(key, maintenanceStatusLabel(ticket.status));
+    }
+  }
 
   for (const record of temperaturas) {
     if (!hasUsefulText(record.acaoCorretiva)) {
@@ -2348,7 +2375,10 @@ async function buildCorrectiveActionsSummary(params: {
       occurrenceType: "Ação corretiva de temperatura",
       correctiveAction: record.acaoCorretiva,
       hasEvidence: Boolean(record.fotoBase64 && record.fotoMimeType),
-      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+      relatedTicketStatus:
+        ticketStatusByRecordContext.get(
+          maintenanceContextKey(OrigemChamadoManutencao.TEMPERATURA, record.id) ?? ""
+        )
     });
   }
 
@@ -2375,8 +2405,10 @@ async function buildCorrectiveActionsSummary(params: {
       severity: record.statusGeral === StatusRecebimento.NAO_CONFORME ? "Atenção" : "Informativo",
       occurrenceType: "Ação corretiva de recebimento",
       correctiveAction: record.acaoCorretiva,
-      hasEvidence: false,
-      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+      relatedTicketStatus:
+        ticketStatusByRecordContext.get(
+          maintenanceContextKey(OrigemChamadoManutencao.RECEBIMENTO, record.id) ?? ""
+        )
     });
   }
 
@@ -2405,8 +2437,10 @@ async function buildCorrectiveActionsSummary(params: {
           : "Atenção",
       occurrenceType: discarded ? "Descarte registrado" : "Ação corretiva de buffet/amostras",
       correctiveAction: record.acaoCorretiva,
-      hasEvidence: false,
-      relatedTicketStatus: ticketStatusByRecordId.get(String(record.id))
+      relatedTicketStatus:
+        ticketStatusByRecordContext.get(
+          maintenanceContextKey(OrigemChamadoManutencao.BUFFET_AMOSTRAS, record.id) ?? ""
+        )
     });
   }
 
@@ -2689,31 +2723,32 @@ function buildEvolutionMetrics(params: {
 }): DashboardEvolutionMetric[] {
   const nonConformityTotal = params.nonConformities?.total ?? 0;
   const correctiveTotal = params.correctiveActions?.total ?? 0;
+  const completionSeverity = (total: number, percentCompleted: number): DashboardAlertSeverity => {
+    if (total === 0) {
+      return "Informativo";
+    }
 
-  return [
+    if (percentCompleted >= 90) {
+      return "Informativo";
+    }
+
+    return percentCompleted >= 60 ? "Atenção" : "Crítico";
+  };
+
+  const metrics: DashboardEvolutionMetric[] = [
     {
       id: "tarefas-diarias",
       label: "Rotinas diárias",
       value: `${params.dailyCard.percentCompleted}%`,
       description: `${params.dailyCard.completed} de ${params.dailyCard.total} concluídas`,
-      severity:
-        params.dailyCard.percentCompleted >= 90
-          ? "Informativo"
-          : params.dailyCard.percentCompleted >= 60
-            ? "Atenção"
-            : "Crítico"
+      severity: completionSeverity(params.dailyCard.total, params.dailyCard.percentCompleted)
     },
     {
       id: "tarefas-semanais",
       label: "Rotinas semanais",
       value: `${params.weeklyCard.percentCompleted}%`,
       description: `${params.weeklyCard.completed} de ${params.weeklyCard.total} concluídas`,
-      severity:
-        params.weeklyCard.percentCompleted >= 90
-          ? "Informativo"
-          : params.weeklyCard.percentCompleted >= 60
-            ? "Atenção"
-            : "Crítico"
+      severity: completionSeverity(params.weeklyCard.total, params.weeklyCard.percentCompleted)
     },
     {
       id: "nao-conformidades-periodo",
@@ -2745,20 +2780,20 @@ function buildEvolutionMetrics(params: {
           : params.maintenanceCard.pending > 0
             ? "Atenção"
             : "Informativo"
-    },
-    {
-      id: "fechamentos-periodo",
-      label: "Fechamentos",
-      value: params.monthlyCard ? `${params.monthlyCard.percentCompleted}%` : "-",
-      description: params.monthlyCard
-        ? `${params.monthlyCard.pending} pendente(s) no mês`
-        : "Não exibido para este perfil",
-      severity:
-        !params.monthlyCard || params.monthlyCard.pending === 0
-          ? "Informativo"
-          : "Atenção"
     }
   ];
+
+  if (params.monthlyCard) {
+    metrics.push({
+      id: "fechamentos-periodo",
+      label: "Fechamentos",
+      value: `${params.monthlyCard.percentCompleted}%`,
+      description: `${params.monthlyCard.pending} pendente(s) no mês`,
+      severity: params.monthlyCard.pending === 0 ? "Informativo" : "Atenção"
+    });
+  }
+
+  return metrics;
 }
 
 async function buildOperationalInsights(params: {
@@ -2792,7 +2827,9 @@ async function buildOperationalInsights(params: {
         maintenanceCard: params.maintenanceCard,
         nonConformities: null,
         correctiveActions: null
-      })
+      }).filter((metric) =>
+        ["tarefas-diarias", "tarefas-semanais", "chamados-periodo"].includes(metric.id)
+      )
     };
   }
 
