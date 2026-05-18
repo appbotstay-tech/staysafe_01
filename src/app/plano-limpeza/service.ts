@@ -219,13 +219,14 @@ export async function ensureWeeklyChecklistForDateRange(params: {
 
   return prisma.$transaction(async (tx) => {
     const activeAreas = await tx.planoLimpezaSemanalArea.findMany({
-      where: { ativo: true },
+      where: { ativo: true, excluidoEm: null },
       select: { nome: true }
     });
     const activeAreaNames = new Set(activeAreas.map((area) => area.nome));
     const activeItems = await tx.planoLimpezaSemanalItem.findMany({
       where: {
         ativo: true,
+        excluidoEm: null,
         area: { in: Array.from(activeAreaNames) }
       },
       select: { id: true, area: true },

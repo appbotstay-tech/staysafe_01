@@ -601,12 +601,14 @@ model PlanoLimpezaSemanalItem {
   setorResponsavel   String?
   quem               String
   ativo              Boolean                       @default(true)
+  excluidoEm         DateTime?
   ordem              Int                           @default(1)
   createdAt          DateTime                      @default(now())
   updatedAt          DateTime                      @updatedAt
   execucoes          PlanoLimpezaSemanalExecucao[]
 
   @@index([area])
+  @@index([excluidoEm])
   @@index([ativo, area, ordem])
   @@map("plano_limpeza_semanal_item")
 }
@@ -615,10 +617,12 @@ model PlanoLimpezaSemanalArea {
   id        Int      @id @default(autoincrement())
   nome      String   @unique
   ativo     Boolean  @default(true)
+  excluidoEm DateTime?
   ordem     Int      @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([excluidoEm])
   @@index([ativo, ordem, nome])
   @@map("plano_limpeza_semanal_area")
 }

@@ -200,7 +200,7 @@ async function ensureWeeklyAreaName(value: string): Promise<string> {
     where: { nome: value }
   });
 
-  if (!area) {
+  if (!area || area.excluidoEm) {
     throw new Error("Selecione uma área semanal cadastrada.");
   }
 
@@ -706,7 +706,7 @@ async function normalizeWeeklyOrderForArea(
   area: string
 ) {
   const items = await tx.planoLimpezaSemanalItem.findMany({
-    where: { area },
+    where: { area, excluidoEm: null },
     orderBy: [{ ordem: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     select: { id: true, ordem: true }
   });
@@ -735,6 +735,7 @@ async function normalizeWeeklyOrderForAreas(
 
 async function normalizeWeeklyAreaOrder(tx: Prisma.TransactionClient) {
   const areas = await tx.planoLimpezaSemanalArea.findMany({
+    where: { excluidoEm: null },
     orderBy: [{ ordem: "asc" }, { nome: "asc" }, { id: "asc" }],
     select: { id: true, ordem: true }
   });
@@ -750,6 +751,52 @@ async function normalizeWeeklyAreaOrder(tx: Prisma.TransactionClient) {
       data: { ordem: expectedOrder }
     });
   }
+}
+
+function weeklyExecutionScopeForArea(
+  area: string,
+  itemIds: number[]
+): Prisma.PlanoLimpezaSemanalExecucaoWhereInput {
+  return {
+    OR: [
+      { area },
+      itemIds.length > 0 ? { itemId: { in: itemIds } } : { id: -1 }
+    ]
+  };
+}
+
+function disposableWeeklyExecutionWhere(
+  scope: Prisma.PlanoLimpezaSemanalExecucaoWhereInput
+): Prisma.PlanoLimpezaSemanalExecucaoWhereInput {
+  return {
+    AND: [
+      scope,
+      { status: StatusPlanoLimpeza.PENDENTE },
+      { assinaturaResponsavel: "" },
+      { assinaturaSupervisor: "" },
+      { observacaoResponsavel: null },
+      { observacaoSupervisor: null }
+    ]
+  };
+}
+
+function realWeeklyHistoryWhere(
+  scope: Prisma.PlanoLimpezaSemanalExecucaoWhereInput
+): Prisma.PlanoLimpezaSemanalExecucaoWhereInput {
+  return {
+    AND: [
+      scope,
+      {
+        OR: [
+          { status: { not: StatusPlanoLimpeza.PENDENTE } },
+          { assinaturaResponsavel: { not: "" } },
+          { assinaturaSupervisor: { not: "" } },
+          { observacaoResponsavel: { not: null } },
+          { observacaoSupervisor: { not: null } }
+        ]
+      }
+    ]
+  };
 }
 
 export async function createWeeklyAreaConfigAction(formData: FormData) {
@@ -768,8 +815,11 @@ export async function createWeeklyAreaConfigAction(formData: FormData) {
     const duplicated = await prisma.planoLimpezaSemanalArea.findUnique({
       where: { nome }
     });
-    if (duplicated) {
+    if (duplicated && !duplicated.excluidoEm) {
       throw new Error("Já existe uma área semanal cadastrada com este nome.");
+    }
+    if (duplicated?.excluidoEm) {
+      throw new Error("Já existe uma área semanal removida com este nome. Use outro nome para o novo cadastro.");
     }
 
     await prisma.$transaction(async (tx) => {
@@ -807,7 +857,7 @@ export async function updateWeeklyAreaConfigAction(formData: FormData) {
       where: { id: areaId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Área semanal não encontrada.");
     }
 
@@ -820,8 +870,11 @@ export async function updateWeeklyAreaConfigAction(formData: FormData) {
     const duplicated = await prisma.planoLimpezaSemanalArea.findUnique({
       where: { nome }
     });
-    if (duplicated && duplicated.id !== existing.id) {
+    if (duplicated && duplicated.id !== existing.id && !duplicated.excluidoEm) {
       throw new Error("Já existe uma área semanal cadastrada com este nome.");
+    }
+    if (duplicated && duplicated.id !== existing.id && duplicated.excluidoEm) {
+      throw new Error("Já existe uma área semanal removida com este nome. Use outro nome para o cadastro.");
     }
 
     const nomeAlterado = nome !== existing.nome;
@@ -881,7 +934,7 @@ export async function toggleWeeklyAreaConfigStatusAction(formData: FormData) {
       where: { id: areaId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Área semanal não encontrada.");
     }
 
@@ -920,7 +973,7 @@ export async function deleteWeeklyAreaConfigAction(formData: FormData) {
       where: { id: areaId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Área semanal não encontrada.");
     }
 
@@ -929,35 +982,57 @@ export async function deleteWeeklyAreaConfigAction(formData: FormData) {
       select: { id: true }
     });
     const linkedItemIds = linkedItems.map((item) => item.id);
-    const linkedExecutions = await prisma.planoLimpezaSemanalExecucao.count({
-      where: {
-        OR: [
-          { area: existing.nome },
-          linkedItemIds.length > 0 ? { itemId: { in: linkedItemIds } } : { id: -1 }
-        ]
-      }
+    const executionScope = weeklyExecutionScopeForArea(existing.nome, linkedItemIds);
+    const linkedRealHistory = await prisma.planoLimpezaSemanalExecucao.count({
+      where: realWeeklyHistoryWhere(executionScope)
     });
 
-    if (linkedExecutions > 0) {
-      throw new Error(
-        "Esta área já possui registros vinculados e não pode ser excluída definitivamente. Para preservar o histórico, utilize a opção Inativar."
-      );
-    }
-
-    await prisma.$transaction(async (tx) => {
-      if (linkedItemIds.length > 0) {
+    if (linkedRealHistory === 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.planoLimpezaSemanalExecucao.deleteMany({
+          where: disposableWeeklyExecutionWhere(executionScope)
+        });
         await tx.planoLimpezaSemanalItem.deleteMany({
           where: { id: { in: linkedItemIds } }
         });
-      }
-      await tx.planoLimpezaSemanalArea.delete({
-        where: { id: areaId }
+        await tx.planoLimpezaSemanalArea.delete({
+          where: { id: areaId }
+        });
+        await normalizeWeeklyAreaOrder(tx);
+      });
+
+      revalidateModulePaths();
+      redirectWithFeedback(
+        returnTo,
+        "success",
+        linkedItemIds.length > 0
+          ? "Área e itens vinculados excluídos com sucesso."
+          : "Área excluída com sucesso."
+      );
+    }
+
+    const now = getCurrentSystemDateTime();
+    await prisma.$transaction(async (tx) => {
+      await tx.planoLimpezaSemanalExecucao.deleteMany({
+        where: disposableWeeklyExecutionWhere(executionScope)
+      });
+      await tx.planoLimpezaSemanalItem.updateMany({
+        where: { id: { in: linkedItemIds } },
+        data: { ativo: false, excluidoEm: now }
+      });
+      await tx.planoLimpezaSemanalArea.update({
+        where: { id: areaId },
+        data: { ativo: false, excluidoEm: now }
       });
       await normalizeWeeklyAreaOrder(tx);
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Área do Plano Semanal Excluída com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Esta área possui histórico de execução. Para preservar a auditoria, ela foi removida das rotinas futuras, mas os registros antigos permanecerão disponíveis no histórico."
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
@@ -1032,7 +1107,7 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
       where: { id: itemId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Item semanal não encontrado.");
     }
 
@@ -1098,7 +1173,7 @@ export async function toggleWeeklyConfigItemStatusAction(formData: FormData) {
       where: { id: itemId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Item semanal não encontrado.");
     }
 
@@ -1137,29 +1212,47 @@ export async function deleteWeeklyConfigItemAction(formData: FormData) {
       where: { id: itemId }
     });
 
-    if (!existing) {
+    if (!existing || existing.excluidoEm) {
       throw new Error("Item semanal não encontrado.");
     }
 
-    const linkedExecutions = await prisma.planoLimpezaSemanalExecucao.count({
-      where: { itemId }
+    const executionScope: Prisma.PlanoLimpezaSemanalExecucaoWhereInput = { itemId };
+    const linkedRealHistory = await prisma.planoLimpezaSemanalExecucao.count({
+      where: realWeeklyHistoryWhere(executionScope)
     });
 
-    if (linkedExecutions > 0) {
-      throw new Error(
-        "Este item já possui registros vinculados e não pode ser excluído definitivamente. Para preservar o histórico, utilize a opção Inativar."
-      );
+    if (linkedRealHistory === 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.planoLimpezaSemanalExecucao.deleteMany({
+          where: disposableWeeklyExecutionWhere(executionScope)
+        });
+        await tx.planoLimpezaSemanalItem.delete({
+          where: { id: itemId }
+        });
+        await normalizeWeeklyOrderForArea(tx, existing.area);
+      });
+
+      revalidateModulePaths();
+      redirectWithFeedback(returnTo, "success", "Item do Plano Semanal Excluído com Sucesso.");
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.planoLimpezaSemanalItem.delete({
-        where: { id: itemId }
+      await tx.planoLimpezaSemanalExecucao.deleteMany({
+        where: disposableWeeklyExecutionWhere(executionScope)
+      });
+      await tx.planoLimpezaSemanalItem.update({
+        where: { id: itemId },
+        data: { ativo: false, excluidoEm: getCurrentSystemDateTime() }
       });
       await normalizeWeeklyOrderForArea(tx, existing.area);
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Item do Plano Semanal Excluído com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Este item possui histórico de execução. Para preservar a auditoria, ele foi removido das rotinas futuras, mas os registros antigos permanecerão disponíveis no histórico."
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
@@ -1186,15 +1279,15 @@ export async function moveWeeklyConfigItemAction(formData: FormData) {
     const moved = await prisma.$transaction(async (tx) => {
       const current = await tx.planoLimpezaSemanalItem.findUnique({
         where: { id: itemId },
-        select: { id: true, area: true }
+        select: { id: true, area: true, excluidoEm: true }
       });
 
-      if (!current) {
+      if (!current || current.excluidoEm) {
         throw new Error("Item semanal não encontrado.");
       }
 
       const items = await tx.planoLimpezaSemanalItem.findMany({
-        where: { area: current.area },
+        where: { area: current.area, excluidoEm: null },
         orderBy: [{ ordem: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         select: { id: true }
       });

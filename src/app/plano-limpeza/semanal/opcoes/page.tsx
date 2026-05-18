@@ -242,9 +242,11 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
 
   const [areas, itens] = await Promise.all([
     prisma.planoLimpezaSemanalArea.findMany({
+      where: { excluidoEm: null },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
     prisma.planoLimpezaSemanalItem.findMany({
+      where: { excluidoEm: null },
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     })
   ]);
@@ -268,6 +270,9 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
   const itemParaExcluir = deleteItemId
     ? itens.find((item) => item.id === deleteItemId) ?? null
     : null;
+  const quantidadeItensDaAreaParaExcluir = areaParaExcluir
+    ? itens.filter((item) => item.area === areaParaExcluir.nome).length
+    : 0;
 
   const itemEditAreaOptions = itemEmEdicao
     ? Array.from(new Set([...activeAreaOptions, itemEmEdicao.area])).sort((a, b) =>
@@ -616,19 +621,28 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
         <ActionModal
           title="Excluir área do plano semanal"
           description={
-            <p>
-              Deseja realmente excluir a área{" "}
-              <strong>{areaParaExcluir.nome}</strong> do plano semanal?
-            </p>
+            quantidadeItensDaAreaParaExcluir > 0 ? (
+              <p>
+                Esta área possui {quantidadeItensDaAreaParaExcluir} item(ns) cadastrado(s)
+                vinculado(s). Deseja excluir a área e todos os itens vinculados quando não houver
+                histórico real? Se houver histórico, a área será removida das rotinas futuras e a
+                auditoria será preservada.
+              </p>
+            ) : (
+              <p>
+                Deseja realmente excluir a área{" "}
+                <strong>{areaParaExcluir.nome}</strong> do plano semanal?
+              </p>
+            )
           }
           cancelHref={PAGE_PATH}
         >
           <form action={deleteWeeklyAreaConfigAction}>
-            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteWeeklyAreaId=${areaParaExcluir.id}`} />
+            <input type="hidden" name="returnTo" value={PAGE_PATH} />
             <input type="hidden" name="weeklyAreaId" value={String(areaParaExcluir.id)} />
             <ModalActions>
               <button type="submit" className="btn-danger">
-                Excluir
+                {quantidadeItensDaAreaParaExcluir > 0 ? "Excluir área e itens" : "Excluir"}
               </button>
             </ModalActions>
           </form>
@@ -647,7 +661,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
           cancelHref={PAGE_PATH}
         >
           <form action={deleteWeeklyConfigItemAction}>
-            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteItemId=${itemParaExcluir.id}`} />
+            <input type="hidden" name="returnTo" value={PAGE_PATH} />
             <input type="hidden" name="itemId" value={String(itemParaExcluir.id)} />
             <ModalActions>
               <button type="submit" className="btn-danger">

@@ -1427,11 +1427,11 @@ async function buildWeeklyCleaningStats(
 
   const [weeklyAreas, rawItems, execucoes] = await Promise.all([
     prisma.planoLimpezaSemanalArea.findMany({
-      where: { ativo: true },
+      where: { ativo: true, excluidoEm: null },
       select: { nome: true }
     }),
     prisma.planoLimpezaSemanalItem.findMany({
-      where: { ativo: true },
+      where: { ativo: true, excluidoEm: null },
       select: {
         id: true,
         area: true,
@@ -1453,7 +1453,9 @@ async function buildWeeklyCleaningStats(
         item: {
           select: {
             oQueLimpar: true,
-            quando: true
+            quando: true,
+            ativo: true,
+            excluidoEm: true
           }
         },
         updatedAt: true
@@ -1468,6 +1470,10 @@ async function buildWeeklyCleaningStats(
   const recordsByKey = new Map<string, (typeof execucoes)[number]>();
 
   for (const execution of execucoes) {
+    if (!execution.item.ativo || execution.item.excluidoEm) {
+      continue;
+    }
+
     const key = keyFor(getWeekStartDateForDate(execution.dataExecucao), execution.itemId);
     if (!recordsByKey.has(key)) {
       recordsByKey.set(key, execution);
@@ -2161,7 +2167,7 @@ async function buildNonConformitySummary(params: {
           lte: params.ranges.weekly.end
         },
         status: { not: StatusPlanoLimpeza.CONCLUIDO },
-        item: { ativo: true }
+        item: { ativo: true, excluidoEm: null }
       },
       select: {
         id: true,
@@ -2175,7 +2181,7 @@ async function buildNonConformitySummary(params: {
       orderBy: [{ dataExecucao: "asc" }, { updatedAt: "desc" }]
     }),
     prisma.planoLimpezaSemanalArea.findMany({
-      where: { ativo: true },
+      where: { ativo: true, excluidoEm: null },
       select: { nome: true }
     }),
     prisma.chamadoManutencao.findMany({

@@ -101,10 +101,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   ]);
 
   const activeAreaNames = new Set(
-    weeklyAreas.filter((area) => area.ativo).map((area) => area.nome)
+    weeklyAreas.filter((area) => area.ativo && !area.excluidoEm).map((area) => area.nome)
   );
   const activeItems = allItems.filter(
-    (item) => item.ativo && activeAreaNames.has(item.area)
+    (item) => item.ativo && !item.excluidoEm && activeAreaNames.has(item.area)
   );
 
   const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawRecords);
@@ -151,7 +151,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 
   const areaOptions = Array.from(
     new Set([
-      ...weeklyAreas.map((area) => area.nome),
+      ...weeklyAreas.filter((area) => !area.excluidoEm).map((area) => area.nome),
       ...allItems.map((item) => item.area),
       ...areasHistoricas.map((item) => item.area)
     ])
