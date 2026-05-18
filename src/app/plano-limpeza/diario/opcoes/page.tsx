@@ -1,9 +1,11 @@
 import Link from "next/link";
 
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { prisma } from "@/lib/prisma";
 
 import {
   createDailyAreaConfigAction,
+  deleteDailyAreaConfigAction,
   toggleDailyAreaConfigStatusAction,
   updateDailyAreaConfigAction
 } from "../../actions";
@@ -86,12 +88,16 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const editAreaId = parsePositiveInt(firstParam(params.editAreaId));
+  const deleteAreaId = parsePositiveInt(firstParam(params.deleteAreaId));
 
   const areas = await prisma.planoLimpezaDiarioArea.findMany({
     orderBy: [{ ordem: "asc" }, { nome: "asc" }]
   });
   const areaEmEdicao = editAreaId
     ? areas.find((area) => area.id === editAreaId) ?? null
+    : null;
+  const areaParaExcluir = deleteAreaId
+    ? areas.find((area) => area.id === deleteAreaId) ?? null
     : null;
 
   return (
@@ -200,6 +206,9 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   <div className="btn-group">
                     <Link href={`${PAGE_PATH}?editAreaId=${area.id}`} className="btn-action" scroll={false}>
                       Editar
+                    </Link>
+                    <Link href={`${PAGE_PATH}?deleteAreaId=${area.id}`} className="btn-danger" scroll={false}>
+                      Excluir
                     </Link>
 
                     <form action={toggleDailyAreaConfigStatusAction}>
@@ -314,6 +323,29 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
             </form>
           </section>
         </div>
+      ) : null}
+
+      {areaParaExcluir ? (
+        <ActionModal
+          title="Excluir área do plano diário"
+          description={
+            <p>
+              Deseja realmente excluir a área{" "}
+              <strong>{areaParaExcluir.nome}</strong> do plano diário?
+            </p>
+          }
+          cancelHref={PAGE_PATH}
+        >
+          <form action={deleteDailyAreaConfigAction}>
+            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteAreaId=${areaParaExcluir.id}`} />
+            <input type="hidden" name="areaId" value={String(areaParaExcluir.id)} />
+            <ModalActions>
+              <button type="submit" className="btn-danger">
+                Excluir
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
       ) : null}
     </div>
   );

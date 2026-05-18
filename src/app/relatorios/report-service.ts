@@ -552,8 +552,8 @@ async function generateSemanalReport(moduleId: ReportModuleId, reportId: string,
       { label: "Aguardando supervisor", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR).length },
       { label: "Concluídas", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length }
     ],
-    columns: columns([["semana", "Semana"], ["area", "Área"], ["item", "Item"], ["diaSemana", "Dia da semana"], ["responsavel", "Responsável"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"]]),
-    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.item.oQueLimpar, diaSemana: item.item.quando, responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
+    columns: columns([["semana", "Semana"], ["area", "Área"], ["item", "Item"], ["produto", "Produto"], ["diaSemana", "Dia da semana"], ["setorResponsavel", "Setor responsável"], ["funcionarioResponsavel", "Funcionário responsável"], ["responsavel", "Responsável pela execução"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"]]),
+    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.item.oQueLimpar, produto: valueOrDash(item.item.qualProduto), diaSemana: item.item.quando, setorResponsavel: valueOrDash(item.item.setorResponsavel), funcionarioResponsavel: valueOrDash(item.item.quem), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
   });
 }
 

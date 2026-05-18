@@ -32,7 +32,9 @@ type WeeklySignChecklistModalProps = {
       id: number;
       ordem: number;
       oQueLimpar: string;
+      qualProduto: string;
       quando: string;
+      setorResponsavel: string | null;
       quem: string;
     };
   }>;
@@ -98,13 +100,15 @@ export function WeeklySignChecklistModal({
             Itens da Área ({items.length})
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
+            <table className="min-w-[1180px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
               <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2">Ordem</th>
                   <th className="px-3 py-2">O que limpar</th>
+                  <th className="px-3 py-2">Produto</th>
                   <th className="px-3 py-2">Quando</th>
-                  <th className="px-3 py-2">Quem</th>
+                  <th className="px-3 py-2">Setor</th>
+                  <th className="px-3 py-2">Funcionário</th>
                   <th className="px-3 py-2">Assinatura do Responsável</th>
                   <th className="px-3 py-2">Assinatura do Supervisor</th>
                   <th className="px-3 py-2">Obs. Responsável</th>
@@ -116,7 +120,7 @@ export function WeeklySignChecklistModal({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                    <td colSpan={12} className="px-3 py-2 text-slate-500 dark:text-slate-400">
                       Nenhum item encontrado para esta execução semanal.
                     </td>
                   </tr>
@@ -125,7 +129,9 @@ export function WeeklySignChecklistModal({
                     <tr key={executionItem.id}>
                       <td className="px-3 py-2">{executionItem.item.ordem}</td>
                       <td className="px-3 py-2">{executionItem.item.oQueLimpar}</td>
+                      <td className="px-3 py-2">{executionItem.item.qualProduto}</td>
                       <td className="px-3 py-2">{getWeeklyDayLabel(executionItem.item.quando)}</td>
+                      <td className="px-3 py-2">{executionItem.item.setorResponsavel || "-"}</td>
                       <td className="px-3 py-2">{executionItem.item.quem}</td>
                       <td className="px-3 py-2">
                         {executionItem.assinaturaResponsavel || "-"}

@@ -17,7 +17,7 @@ import {
 } from "@/lib/rbac";
 
 import { closeWeeklyMonthAction, reopenWeeklyMonthAction } from "../actions";
-import { MONTH_OPTIONS, WEEKLY_AREAS, WEEKLY_STATUS_OPTIONS } from "../constants";
+import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
 import { ReopenMonthModal } from "../reopen-month-modal";
 import {
   consolidateWeeklyExecutionsByAreaWeek,
@@ -134,7 +134,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const syncStart = syncRange ? formatDateInput(syncRange.start) : null;
   const syncEnd = syncRange ? formatDateInput(syncRange.end) : null;
 
-  const [rawExecutions, allItems, areasHistoricas] = await Promise.all([
+  const [rawExecutions, allItems, weeklyAreas, areasHistoricas] = await Promise.all([
     prisma.planoLimpezaSemanalExecucao.findMany({
       where,
       select: {
@@ -150,6 +150,9 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     prisma.planoLimpezaSemanalItem.findMany({
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     }),
+    prisma.planoLimpezaSemanalArea.findMany({
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }]
+    }),
     prisma.planoLimpezaSemanalExecucao.findMany({
       select: { area: true },
       distinct: ["area"],
@@ -157,7 +160,12 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     })
   ]);
 
-  const activeItems = allItems.filter((item) => item.ativo);
+  const activeAreaNames = new Set(
+    weeklyAreas.filter((area) => area.ativo).map((area) => area.nome)
+  );
+  const activeItems = allItems.filter(
+    (item) => item.ativo && activeAreaNames.has(item.area)
+  );
   const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawExecutions);
   const filteredByItemAreas =
     filtroItem.trim().length > 0
@@ -187,7 +195,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
   const areaOptions = Array.from(
     new Set([
-      ...WEEKLY_AREAS,
+      ...weeklyAreas.map((area) => area.nome),
       ...allItems.map((item) => item.area),
       ...areasHistoricas.map((item) => item.area)
     ])
@@ -218,7 +226,9 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               id: true,
               ordem: true,
               oQueLimpar: true,
+              qualProduto: true,
               quando: true,
+              setorResponsavel: true,
               quem: true
             }
           }
@@ -730,7 +740,9 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               id: executionItem.item.id,
               ordem: executionItem.item.ordem,
               oQueLimpar: executionItem.item.oQueLimpar,
+              qualProduto: executionItem.item.qualProduto,
               quando: executionItem.item.quando,
+              setorResponsavel: executionItem.item.setorResponsavel,
               quem: executionItem.item.quem
             }
           }))}

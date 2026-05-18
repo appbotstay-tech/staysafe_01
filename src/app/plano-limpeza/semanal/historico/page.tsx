@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
 
-import { MONTH_OPTIONS, WEEKLY_AREAS, WEEKLY_STATUS_OPTIONS } from "../../constants";
+import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../../constants";
 import { consolidateWeeklyExecutionsByAreaWeek } from "../../service";
 import { StatusBadge } from "../../status-badge";
 import { ThemeToggleButton } from "../../theme-toggle-button";
@@ -72,7 +72,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const syncStart = syncRange ? formatDateInput(syncRange.start) : null;
   const syncEnd = syncRange ? formatDateInput(syncRange.end) : null;
 
-  const [rawRecords, allItems, areasHistoricas] = await Promise.all([
+  const [rawRecords, allItems, weeklyAreas, areasHistoricas] = await Promise.all([
     prisma.planoLimpezaSemanalExecucao.findMany({
       where,
       select: {
@@ -90,6 +90,9 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
     prisma.planoLimpezaSemanalItem.findMany({
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     }),
+    prisma.planoLimpezaSemanalArea.findMany({
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }]
+    }),
     prisma.planoLimpezaSemanalExecucao.findMany({
       select: { area: true },
       distinct: ["area"],
@@ -97,7 +100,12 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
     })
   ]);
 
-  const activeItems = allItems.filter((item) => item.ativo);
+  const activeAreaNames = new Set(
+    weeklyAreas.filter((area) => area.ativo).map((area) => area.nome)
+  );
+  const activeItems = allItems.filter(
+    (item) => item.ativo && activeAreaNames.has(item.area)
+  );
 
   const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawRecords);
   const filteredByItemAreas =
@@ -143,7 +151,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 
   const areaOptions = Array.from(
     new Set([
-      ...WEEKLY_AREAS,
+      ...weeklyAreas.map((area) => area.nome),
       ...allItems.map((item) => item.area),
       ...areasHistoricas.map((item) => item.area)
     ])

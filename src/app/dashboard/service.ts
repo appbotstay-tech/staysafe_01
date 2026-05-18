@@ -1425,7 +1425,11 @@ async function buildWeeklyCleaningStats(
       }
     : { dataExecucao: { gte: range.start, lte: range.end } };
 
-  const [items, execucoes] = await Promise.all([
+  const [weeklyAreas, rawItems, execucoes] = await Promise.all([
+    prisma.planoLimpezaSemanalArea.findMany({
+      where: { ativo: true },
+      select: { nome: true }
+    }),
     prisma.planoLimpezaSemanalItem.findMany({
       where: { ativo: true },
       select: {
@@ -1457,6 +1461,8 @@ async function buildWeeklyCleaningStats(
       orderBy: [{ updatedAt: "desc" }]
     })
   ]);
+  const activeAreaNames = new Set(weeklyAreas.map((area) => area.nome));
+  const items = rawItems.filter((item) => activeAreaNames.has(item.area));
 
   const keyFor = (weekStart: Date, itemId: number) => `${dateOnlyKey(weekStart)}|${itemId}`;
   const recordsByKey = new Map<string, (typeof execucoes)[number]>();
@@ -2016,6 +2022,7 @@ async function buildNonConformitySummary(params: {
     buffetRegistros,
     limpezasDiarias,
     limpezasSemanais,
+    weeklyAreasForDashboard,
     chamadosOperacionais
   ] = await Promise.all([
     prisma.controleTemperaturaEquipamento.findMany({
@@ -2153,7 +2160,8 @@ async function buildNonConformitySummary(params: {
           gte: params.ranges.openPendencies.start,
           lte: params.ranges.weekly.end
         },
-        status: { not: StatusPlanoLimpeza.CONCLUIDO }
+        status: { not: StatusPlanoLimpeza.CONCLUIDO },
+        item: { ativo: true }
       },
       select: {
         id: true,
@@ -2165,6 +2173,10 @@ async function buildNonConformitySummary(params: {
         updatedAt: true
       },
       orderBy: [{ dataExecucao: "asc" }, { updatedAt: "desc" }]
+    }),
+    prisma.planoLimpezaSemanalArea.findMany({
+      where: { ativo: true },
+      select: { nome: true }
     }),
     prisma.chamadoManutencao.findMany({
       where: {
@@ -2187,9 +2199,14 @@ async function buildNonConformitySummary(params: {
       orderBy: [{ dataHoraCriacao: "asc" }]
     })
   ]);
-
   const temperaturasNaoConformes = dedupeTemperatureMeasurements(temperaturas).filter(
     (record) => record.status !== StatusTemperaturaEquipamento.CONFORME
+  );
+  const activeWeeklyAreaNames = new Set(
+    weeklyAreasForDashboard.map((area) => area.nome)
+  );
+  const limpezasSemanaisAtivas = limpezasSemanais.filter((record) =>
+    activeWeeklyAreaNames.has(record.area)
   );
 
   for (const record of temperaturasNaoConformes) {
@@ -2330,7 +2347,7 @@ async function buildNonConformitySummary(params: {
     });
   }
 
-  for (const record of limpezasSemanais) {
+  for (const record of limpezasSemanaisAtivas) {
     addInsightItem(summary, {
       id: `nc-limpeza-semanal:${record.id}`,
       moduleId: MODULES.limpezaSemanal.id,
