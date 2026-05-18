@@ -229,7 +229,15 @@ export async function ensureWeeklyChecklistForDateRange(params: {
         excluidoEm: null,
         area: { in: Array.from(activeAreaNames) }
       },
-      select: { id: true, area: true },
+      select: {
+        id: true,
+        area: true,
+        oQueLimpar: true,
+        qualProduto: true,
+        quando: true,
+        setorResponsavel: true,
+        quem: true
+      },
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     });
     const activeItemById = new Map(activeItems.map((item) => [item.id, item]));
@@ -328,6 +336,11 @@ export async function ensureWeeklyChecklistForDateRange(params: {
             dataExecucao: desired.weekStart,
             area: desired.area,
             itemId: desired.itemId,
+            itemDescricao: activeItemById.get(desired.itemId)?.oQueLimpar ?? null,
+            qualProduto: activeItemById.get(desired.itemId)?.qualProduto ?? null,
+            quando: activeItemById.get(desired.itemId)?.quando ?? null,
+            setorResponsavel: activeItemById.get(desired.itemId)?.setorResponsavel ?? null,
+            funcionarioResponsavel: activeItemById.get(desired.itemId)?.quem ?? null,
             assinaturaResponsavel: "",
             assinaturaSupervisor: "",
             status: StatusPlanoLimpeza.PENDENTE
@@ -353,8 +366,15 @@ export async function ensureWeeklyChecklistForDateRange(params: {
         const updateData: Prisma.PlanoLimpezaSemanalExecucaoUncheckedUpdateInput = {};
         const expectedItem = activeItemById.get(desired.itemId);
 
-        if (expectedItem && keeper.area !== expectedItem.area) {
-          updateData.area = expectedItem.area;
+        if (expectedItem) {
+          if (keeper.area !== expectedItem.area) {
+            updateData.area = expectedItem.area;
+          }
+          updateData.itemDescricao = expectedItem.oQueLimpar;
+          updateData.qualProduto = expectedItem.qualProduto;
+          updateData.quando = expectedItem.quando;
+          updateData.setorResponsavel = expectedItem.setorResponsavel;
+          updateData.funcionarioResponsavel = expectedItem.quem;
         }
         if (keeper.weekStart.getTime() !== desired.weekStart.getTime()) {
           updateData.dataExecucao = desired.weekStart;

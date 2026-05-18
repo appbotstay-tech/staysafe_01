@@ -1446,6 +1446,8 @@ async function buildWeeklyCleaningStats(
         id: true,
         dataExecucao: true,
         area: true,
+        itemDescricao: true,
+        quando: true,
         itemId: true,
         assinaturaResponsavel: true,
         assinaturaSupervisor: true,
@@ -1512,8 +1514,8 @@ async function buildWeeklyCleaningStats(
         id: `${moduleInfo.id}:${execution.id}`,
         moduleId: moduleInfo.id,
         moduleName: moduleInfo.name,
-        title: `${execution.area} | ${execution.item.oQueLimpar}`,
-        description: `Semana de ${formatDateDisplay(getWeekStartDateForDate(execution.dataExecucao))}. Frequência: ${execution.item.quando}.`,
+        title: `${execution.area} | ${execution.itemDescricao ?? execution.item.oQueLimpar}`,
+        description: `Semana de ${formatDateDisplay(getWeekStartDateForDate(execution.dataExecucao))}. Frequência: ${execution.quando ?? execution.item.quando}.`,
         status,
         responsible: execution.assinaturaSupervisor || execution.assinaturaResponsavel || undefined,
         dateTime: formatDateDisplay(execution.dataExecucao),
@@ -1529,6 +1531,10 @@ async function buildWeeklyCleaningStats(
   }
 
   for (const execution of execucoes) {
+    if (!execution.item.ativo || execution.item.excluidoEm) {
+      continue;
+    }
+
     const key = keyFor(getWeekStartDateForDate(execution.dataExecucao), execution.itemId);
     if (expectedKeys.has(key)) {
       continue;
@@ -1539,7 +1545,7 @@ async function buildWeeklyCleaningStats(
       id: `${moduleInfo.id}:${execution.id}`,
       moduleId: moduleInfo.id,
       moduleName: moduleInfo.name,
-      title: `${execution.area} | ${execution.item.oQueLimpar}`,
+      title: `${execution.area} | ${execution.itemDescricao ?? execution.item.oQueLimpar}`,
       description: "Execução existente fora da configuração ativa atual.",
       status,
       responsible: execution.assinaturaSupervisor || execution.assinaturaResponsavel || undefined,
@@ -2173,6 +2179,7 @@ async function buildNonConformitySummary(params: {
         id: true,
         dataExecucao: true,
         area: true,
+        itemDescricao: true,
         status: true,
         assinaturaResponsavel: true,
         item: { select: { oQueLimpar: true } },
@@ -2358,7 +2365,7 @@ async function buildNonConformitySummary(params: {
       id: `nc-limpeza-semanal:${record.id}`,
       moduleId: MODULES.limpezaSemanal.id,
       moduleName: MODULES.limpezaSemanal.name,
-      title: `${record.area} | ${record.item.oQueLimpar}`,
+      title: `${record.area} | ${record.itemDescricao ?? record.item.oQueLimpar}`,
       description:
         record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
           ? "Item semanal aguardando supervisão."

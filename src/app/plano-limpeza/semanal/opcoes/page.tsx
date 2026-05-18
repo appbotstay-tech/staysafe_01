@@ -131,7 +131,7 @@ function WeeklyItemFields(props: {
   return (
     <>
       <label className="text-sm text-slate-700 dark:text-slate-200">
-        O que limpar? *
+        Área *
         <select
           name="area"
           required
@@ -158,14 +158,14 @@ function WeeklyItemFields(props: {
         />
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-        Item/local específico *
+        O que limpar? *
         <input
           type="text"
           name="oQueLimpar"
           required
           defaultValue={getDraftValue(props.params, "oQueLimpar", defaults.oQueLimpar)}
           className={INPUT_CLASS}
-          placeholder="Ex.: prateleiras, piso, portas, rodapés"
+          placeholder="Ex.: Geladeiras, Armários, Piso, Lixeiras, Prateleiras"
         />
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
@@ -396,7 +396,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
 
       <section className={CARD_CLASS}>
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-          Novo Item Semanal
+          Novo Item/Local de Limpeza Semanal
         </h2>
         <form action={createWeeklyConfigItemAction} className="mt-3 grid gap-3 md:grid-cols-2">
           <input type="hidden" name="returnTo" value={PAGE_PATH} />
@@ -416,7 +416,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
           />
           <div className="md:col-span-2">
             <button type="submit" className="btn-primary" disabled={activeAreaOptions.length === 0}>
-              Adicionar Item
+              Adicionar Item/Local
             </button>
           </div>
         </form>
@@ -424,7 +424,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-slate-100">
-          Itens por Área
+          Itens/Locais por Área
         </h2>
 
         <div className="space-y-4">

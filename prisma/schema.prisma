@@ -633,6 +633,11 @@ model PlanoLimpezaSemanalExecucao {
   area                  String
   itemId                Int
   item                  PlanoLimpezaSemanalItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemDescricao         String?
+  qualProduto           String?
+  quando                String?
+  setorResponsavel      String?
+  funcionarioResponsavel String?
   assinaturaResponsavel String
   assinaturaSupervisor  String
   observacaoResponsavel String?

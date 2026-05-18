@@ -12,6 +12,7 @@ import {
   formatDateInput,
   getWeekDateRangeForDate,
   getMonthDateRange,
+  getWeeklyDayLabel,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -83,7 +84,21 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         assinaturaSupervisor: true,
         status: true,
         observacaoResponsavel: true,
-        observacaoSupervisor: true
+        observacaoSupervisor: true,
+        itemDescricao: true,
+        qualProduto: true,
+        quando: true,
+        setorResponsavel: true,
+        funcionarioResponsavel: true,
+        item: {
+          select: {
+            oQueLimpar: true,
+            qualProduto: true,
+            quando: true,
+            setorResponsavel: true,
+            quem: true
+          }
+        }
       },
       orderBy: [{ dataExecucao: "desc" }, { createdAt: "desc" }]
     }),
@@ -131,6 +146,27 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       return false;
     }
 
+    return true;
+  });
+
+  const filteredRecords = rawRecords.filter((record) => {
+    const itemNome = record.itemDescricao ?? record.item.oQueLimpar;
+    const quando = record.quando ?? record.item.quando;
+    if (filtroArea && record.area !== filtroArea) {
+      return false;
+    }
+    if (filtroStatus && record.status !== filtroStatus) {
+      return false;
+    }
+    if (filtroResponsavel && !includesIgnoreCase(record.assinaturaResponsavel, filtroResponsavel)) {
+      return false;
+    }
+    if (filtroItem && !includesIgnoreCase(itemNome, filtroItem)) {
+      return false;
+    }
+    if (!includesIgnoreCase(quando, firstParam(params.diaSemana).trim())) {
+      return false;
+    }
     return true;
   });
 
@@ -293,6 +329,59 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                     </td>
                   </tr>
                 ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className={CARD_CLASS}>
+        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Itens/Locais Executados ({filteredRecords.length})
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1180px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <tr>
+                <th className="px-3 py-2">Semana</th>
+                <th className="px-3 py-2">Área</th>
+                <th className="px-3 py-2">O que limpar</th>
+                <th className="px-3 py-2">Produto</th>
+                <th className="px-3 py-2">Quando</th>
+                <th className="px-3 py-2">Setor</th>
+                <th className="px-3 py-2">Funcionário</th>
+                <th className="px-3 py-2">Responsável</th>
+                <th className="px-3 py-2">Supervisor</th>
+                <th className="px-3 py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                    Nenhum item/local encontrado.
+                  </td>
+                </tr>
+              ) : (
+                filteredRecords.map((record) => {
+                  const quando = record.quando ?? record.item.quando;
+                  return (
+                    <tr key={record.id}>
+                      <td className="px-3 py-2">{formatDateDisplay(record.dataExecucao)}</td>
+                      <td className="px-3 py-2">{record.area}</td>
+                      <td className="px-3 py-2">{record.itemDescricao ?? record.item.oQueLimpar}</td>
+                      <td className="px-3 py-2">{record.qualProduto ?? record.item.qualProduto}</td>
+                      <td className="px-3 py-2">{getWeeklyDayLabel(quando)}</td>
+                      <td className="px-3 py-2">{record.setorResponsavel ?? record.item.setorResponsavel ?? "-"}</td>
+                      <td className="px-3 py-2">{record.funcionarioResponsavel ?? record.item.quem}</td>
+                      <td className="px-3 py-2">{record.assinaturaResponsavel || "-"}</td>
+                      <td className="px-3 py-2">{record.assinaturaSupervisor || "-"}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={record.status} />
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

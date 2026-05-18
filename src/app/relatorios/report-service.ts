@@ -536,12 +536,12 @@ async function generateSemanalReport(moduleId: ReportModuleId, reportId: string,
     if (reportId === "pendencias" && item.status !== StatusPlanoLimpeza.PENDENTE) return false;
     if (reportId === "aguardando-supervisor" && item.status !== StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) return false;
     if (!includesText(item.area, getParam(params, "area"))) return false;
-    if (!includesText(item.item.oQueLimpar, getParam(params, "item"))) return false;
+    if (!includesText(item.itemDescricao ?? item.item.oQueLimpar, getParam(params, "item"))) return false;
     if (!includesText(item.assinaturaResponsavel, getParam(params, "responsavel"))) return false;
     if (!includesText(item.assinaturaSupervisor, getParam(params, "supervisor"))) return false;
     const status = getParam(params, "statusPlanoLimpeza");
     if (status && item.status !== status) return false;
-    if (!includesText(item.item.quando, getParam(params, "diaSemana"))) return false;
+    if (!includesText(item.quando ?? item.item.quando, getParam(params, "diaSemana"))) return false;
     return true;
   });
   return finalizeReport({
@@ -553,7 +553,7 @@ async function generateSemanalReport(moduleId: ReportModuleId, reportId: string,
       { label: "Concluídas", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length }
     ],
     columns: columns([["semana", "Semana"], ["area", "Área"], ["item", "Item"], ["produto", "Produto"], ["diaSemana", "Dia da semana"], ["setorResponsavel", "Setor responsável"], ["funcionarioResponsavel", "Funcionário responsável"], ["responsavel", "Responsável pela execução"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"]]),
-    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.item.oQueLimpar, produto: valueOrDash(item.item.qualProduto), diaSemana: item.item.quando, setorResponsavel: valueOrDash(item.item.setorResponsavel), funcionarioResponsavel: valueOrDash(item.item.quem), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
+    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.itemDescricao ?? item.item.oQueLimpar, produto: valueOrDash(item.qualProduto ?? item.item.qualProduto), diaSemana: item.quando ?? item.item.quando, setorResponsavel: valueOrDash(item.setorResponsavel ?? item.item.setorResponsavel), funcionarioResponsavel: valueOrDash(item.funcionarioResponsavel ?? item.item.quem), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
   });
 }
 

@@ -13,6 +13,8 @@ type WeeklySignChecklistModalProps = {
   execution: {
     executionId: number;
     area: string;
+    dayLabel?: string;
+    dayDate?: Date;
     weekStart: Date;
     weekEnd: Date;
     status: StatusPlanoLimpeza;
@@ -52,13 +54,21 @@ export function WeeklySignChecklistModal({
     <div className="bpma-modal-backdrop">
       <div className="bpma-modal-panel max-w-6xl">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Execução Semanal da Área
+          Execução Semanal dos Itens
         </h3>
 
         <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Área</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">{execution.area}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Dia</p>
+            <p className="font-medium text-slate-800 dark:text-slate-100">
+              {execution.dayLabel
+                ? `${execution.dayLabel}${execution.dayDate ? ` • ${formatDateDisplay(execution.dayDate)}` : ""}`
+                : "-"}
+            </p>
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Semana</p>
@@ -97,7 +107,7 @@ export function WeeklySignChecklistModal({
 
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="border-b border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-            Itens da Área ({items.length})
+            Itens/Locais do Dia ({items.length})
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[1180px] divide-y divide-slate-200 text-xs dark:divide-slate-700">

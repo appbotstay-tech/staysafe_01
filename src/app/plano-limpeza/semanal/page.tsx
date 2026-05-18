@@ -1,6 +1,7 @@
 import {
   Prisma,
   StatusFechamentoPlanoLimpeza,
+  StatusPlanoLimpeza,
   TipoPlanoLimpeza
 } from "@prisma/client";
 import Link from "next/link";
@@ -17,7 +18,7 @@ import {
 } from "@/lib/rbac";
 
 import { closeWeeklyMonthAction, reopenWeeklyMonthAction } from "../actions";
-import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
+import { MONTH_OPTIONS, WEEKLY_DAY_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
 import { ReopenMonthModal } from "../reopen-month-modal";
 import {
   consolidateWeeklyExecutionsByAreaWeek,
@@ -34,6 +35,7 @@ import {
   getWeekDateRangeForDate,
   getMonthDateRange,
   getMonthYear,
+  getWeeklyDayLabel,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -65,6 +67,197 @@ function buildPathWithParams(params: URLSearchParams): string {
 
 function includesIgnoreCase(text: string, search: string): boolean {
   return text.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"));
+}
+
+type WeeklyExecutionPageRecord = {
+  id: number;
+  dataExecucao: Date;
+  area: string;
+  assinaturaResponsavel: string;
+  assinaturaSupervisor: string;
+  status: StatusPlanoLimpeza;
+  itemDescricao: string | null;
+  qualProduto: string | null;
+  quando: string | null;
+  setorResponsavel: string | null;
+  funcionarioResponsavel: string | null;
+  item: {
+    id: number;
+    ordem: number;
+    oQueLimpar: string;
+    qualProduto: string;
+    quando: string;
+    setorResponsavel: string | null;
+    quem: string;
+  };
+};
+
+type WeeklyDayAreaSummary = {
+  executionId: number;
+  area: string;
+  quando: string;
+  dayLabel: string;
+  dayDate: Date;
+  weekStart: Date;
+  weekEnd: Date;
+  assinaturaResponsavel: string;
+  assinaturaSupervisor: string;
+  status: StatusPlanoLimpeza;
+  statusGeral: "Pendente" | "Parcial" | "Aguardando Supervisor" | "Concluído";
+  totalRegistrosOriginais: number;
+  recordIds: number[];
+  itemNames: string[];
+};
+
+function getExecutionItemDescription(record: WeeklyExecutionPageRecord): string {
+  return record.itemDescricao?.trim() || record.item.oQueLimpar;
+}
+
+function getExecutionItemQuando(record: WeeklyExecutionPageRecord): string {
+  return record.quando?.trim() || record.item.quando;
+}
+
+function getWeeklyDayIndex(value: string): number {
+  const index = WEEKLY_DAY_OPTIONS.findIndex((day) => day.value === value);
+  return index >= 0 ? index : 0;
+}
+
+function getDateForWeeklyDay(weekStart: Date, value: string): Date {
+  const date = new Date(weekStart);
+  date.setUTCDate(date.getUTCDate() + getWeeklyDayIndex(value));
+  return date;
+}
+
+function getWeeklyRecordStatus(record: WeeklyExecutionPageRecord): StatusPlanoLimpeza {
+  const hasResponsavel = record.assinaturaResponsavel.trim().length > 0;
+  const hasSupervisor = record.assinaturaSupervisor.trim().length > 0;
+
+  if (hasResponsavel && hasSupervisor) {
+    return StatusPlanoLimpeza.CONCLUIDO;
+  }
+
+  if (hasResponsavel) {
+    return StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR;
+  }
+
+  return record.status;
+}
+
+function consolidateWeeklyDayAreaStatus(records: WeeklyExecutionPageRecord[]): {
+  assinaturaResponsavel: string;
+  assinaturaSupervisor: string;
+  status: StatusPlanoLimpeza;
+  statusGeral: WeeklyDayAreaSummary["statusGeral"];
+} {
+  const responsaveis = Array.from(
+    new Set(records.map((record) => record.assinaturaResponsavel.trim()).filter(Boolean))
+  );
+  const supervisores = Array.from(
+    new Set(records.map((record) => record.assinaturaSupervisor.trim()).filter(Boolean))
+  );
+  const itemStatuses = records.map(getWeeklyRecordStatus);
+
+  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.CONCLUIDO)) {
+    return {
+      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
+      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
+      status: StatusPlanoLimpeza.CONCLUIDO,
+      statusGeral: "Concluído"
+    };
+  }
+
+  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.PENDENTE)) {
+    return {
+      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
+      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
+      status: StatusPlanoLimpeza.PENDENTE,
+      statusGeral: "Pendente"
+    };
+  }
+
+  if (itemStatuses.every((status) => status !== StatusPlanoLimpeza.PENDENTE)) {
+    return {
+      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
+      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
+      status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
+      statusGeral: "Aguardando Supervisor"
+    };
+  }
+
+  return {
+    assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
+    assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
+    status: StatusPlanoLimpeza.PENDENTE,
+    statusGeral: "Parcial"
+  };
+}
+
+function buildWeeklyDayAreaSummaries(records: WeeklyExecutionPageRecord[]): WeeklyDayAreaSummary[] {
+  const grouped = new Map<
+    string,
+    {
+      area: string;
+      quando: string;
+      weekStart: Date;
+      weekEnd: Date;
+      records: WeeklyExecutionPageRecord[];
+    }
+  >();
+
+  for (const record of records) {
+    const weekRange = getWeekDateRangeForDate(record.dataExecucao);
+    const quando = getExecutionItemQuando(record);
+    const key = `${formatDateInput(weekRange.start)}|${quando}|${record.area}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        area: record.area,
+        quando,
+        weekStart: weekRange.start,
+        weekEnd: weekRange.end,
+        records: []
+      });
+    }
+
+    grouped.get(key)!.records.push(record);
+  }
+
+  return Array.from(grouped.values())
+    .map((group) => {
+      const orderedRecords = [...group.records].sort((a, b) => {
+        if (a.item.ordem !== b.item.ordem) {
+          return a.item.ordem - b.item.ordem;
+        }
+        return getExecutionItemDescription(a).localeCompare(getExecutionItemDescription(b), "pt-BR");
+      });
+      const signableRecord =
+        orderedRecords.find((record) => getWeeklySignStage(record) !== null) ?? orderedRecords[0];
+      const consolidated = consolidateWeeklyDayAreaStatus(orderedRecords);
+
+      return {
+        executionId: signableRecord.id,
+        area: group.area,
+        quando: group.quando,
+        dayLabel: getWeeklyDayLabel(group.quando),
+        dayDate: getDateForWeeklyDay(group.weekStart, group.quando),
+        weekStart: group.weekStart,
+        weekEnd: group.weekEnd,
+        assinaturaResponsavel: consolidated.assinaturaResponsavel,
+        assinaturaSupervisor: consolidated.assinaturaSupervisor,
+        status: consolidated.status,
+        statusGeral: consolidated.statusGeral,
+        totalRegistrosOriginais: orderedRecords.length,
+        recordIds: orderedRecords.map((record) => record.id),
+        itemNames: orderedRecords.map(getExecutionItemDescription)
+      };
+    })
+    .sort((a, b) => {
+      const weekDiff = b.weekStart.getTime() - a.weekStart.getTime();
+      if (weekDiff !== 0) return weekDiff;
+      const dayDiff = getWeeklyDayIndex(a.quando) - getWeeklyDayIndex(b.quando);
+      if (dayDiff !== 0) return dayDiff;
+      return a.area.localeCompare(b.area, "pt-BR");
+    });
 }
 
 export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProps) {
@@ -141,9 +334,25 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         id: true,
         dataExecucao: true,
         area: true,
+        itemDescricao: true,
+        qualProduto: true,
+        quando: true,
+        setorResponsavel: true,
+        funcionarioResponsavel: true,
         assinaturaResponsavel: true,
         assinaturaSupervisor: true,
-        status: true
+        status: true,
+        item: {
+          select: {
+            id: true,
+            ordem: true,
+            oQueLimpar: true,
+            qualProduto: true,
+            quando: true,
+            setorResponsavel: true,
+            quem: true
+          }
+        }
       },
       orderBy: [{ dataExecucao: "desc" }, { createdAt: "desc" }]
     }),
@@ -166,13 +375,13 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const activeItems = allItems.filter(
     (item) => item.ativo && !item.excluidoEm && activeAreaNames.has(item.area)
   );
-  const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawExecutions);
-  const filteredByItemAreas =
+  const summariesAll = buildWeeklyDayAreaSummaries(rawExecutions);
+  const filteredByItemNames =
     filtroItem.trim().length > 0
       ? new Set(
-          allItems
-            .filter((item) => includesIgnoreCase(item.oQueLimpar, filtroItem))
-            .map((item) => item.area)
+          rawExecutions
+            .filter((record) => includesIgnoreCase(getExecutionItemDescription(record), filtroItem))
+            .map((record) => record.id)
         )
       : null;
 
@@ -186,7 +395,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     if (filtroResponsavel && !includesIgnoreCase(summary.assinaturaResponsavel, filtroResponsavel)) {
       return false;
     }
-    if (filteredByItemAreas && !filteredByItemAreas.has(summary.area)) {
+    if (filteredByItemNames && !summary.recordIds.some((id) => filteredByItemNames.has(id))) {
       return false;
     }
 
@@ -208,14 +417,15 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const executionItemsParaAssinatura = executionParaAssinatura
     ? await prisma.planoLimpezaSemanalExecucao.findMany({
         where: {
-          area: executionParaAssinatura.area,
-          dataExecucao: {
-            gte: executionParaAssinatura.weekStart,
-            lte: executionParaAssinatura.weekEnd
-          }
+          id: { in: executionParaAssinatura.recordIds }
         },
         select: {
           id: true,
+          itemDescricao: true,
+          qualProduto: true,
+          quando: true,
+          setorResponsavel: true,
+          funcionarioResponsavel: true,
           status: true,
           assinaturaResponsavel: true,
           assinaturaSupervisor: true,
@@ -391,7 +601,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {isColaborador ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Área"}
+          {isColaborador ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Dia e Área"}
         </h2>
 
         {isColaborador ? (
@@ -475,14 +685,14 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
         {!hasManualFilters && !isColaborador ? (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Exibindo automaticamente as execuções da semana atual por área.
+            Exibindo automaticamente os itens da semana atual agrupados por dia e área.
           </p>
         ) : null}
 
         <div className="mt-4 space-y-3 md:hidden">
           {summaries.length === 0 ? (
             <div className="rounded-lg border border-slate-200 p-3 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Nenhuma execução de área encontrada.
+              Nenhuma execução semanal encontrada.
             </div>
           ) : (
             summaries.map((summary) => {
@@ -496,15 +706,16 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               })();
 
               return (
-                <article key={`${summary.area}-${formatDateInput(summary.weekStart)}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <article key={`${summary.area}-${summary.quando}-${formatDateInput(summary.weekStart)}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                   <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Semana de {formatDateDisplay(summary.weekStart)}
+                    {summary.dayLabel} • {formatDateDisplay(summary.dayDate)}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {summary.area}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {summary.totalRegistrosOriginais} item(ns) na semana
+                    {summary.totalRegistrosOriginais} item(ns): {summary.itemNames.slice(0, 3).join(", ")}
+                    {summary.itemNames.length > 3 ? "..." : ""}
                   </p>
                   <div className="mt-2">
                     <StatusBadge status={summary.statusGeral} />
@@ -514,7 +725,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                       <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
                     ) : podeAssinar ? (
                       <Link href={hrefAssinar} className="btn-action">
-                        Abrir Área
+                        Abrir Itens
                       </Link>
                     ) : (
                       <span className="text-xs text-slate-500 dark:text-slate-400">Sem Ação</span>
@@ -531,8 +742,9 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Semana</th>
+                <th className="px-3 py-2">Dia</th>
                 <th className="px-3 py-2">Área</th>
-                <th className="px-3 py-2">Itens Configurados</th>
+                <th className="px-3 py-2">Itens/Locais</th>
                 <th className="px-3 py-2">Status Geral</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
@@ -540,8 +752,8 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {summaries.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhuma execução de área encontrada.
+                  <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                    Nenhuma execução semanal encontrada.
                   </td>
                 </tr>
               ) : (
@@ -556,12 +768,24 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                   })();
 
                   return (
-                    <tr key={`${summary.area}-${formatDateInput(summary.weekStart)}`}>
+                    <tr key={`${summary.area}-${summary.quando}-${formatDateInput(summary.weekStart)}`}>
                       <td className="px-3 py-2">
                         {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
                       </td>
+                      <td className="px-3 py-2">
+                        {summary.dayLabel}
+                        <span className="block text-xs text-slate-500 dark:text-slate-400">
+                          {formatDateDisplay(summary.dayDate)}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">{summary.area}</td>
-                      <td className="px-3 py-2">{summary.totalRegistrosOriginais}</td>
+                      <td className="px-3 py-2">
+                        <span className="font-medium">{summary.totalRegistrosOriginais}</span>
+                        <span className="block max-w-md text-xs text-slate-500 dark:text-slate-400">
+                          {summary.itemNames.slice(0, 4).join(", ")}
+                          {summary.itemNames.length > 4 ? "..." : ""}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
                         <StatusBadge status={summary.statusGeral} />
                       </td>
@@ -570,7 +794,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                           <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
                         ) : podeAssinar ? (
                           <Link href={hrefAssinar} className="btn-action">
-                            Abrir Área
+                            Abrir Itens
                           </Link>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">Sem Ação</span>
@@ -739,11 +963,11 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             item: {
               id: executionItem.item.id,
               ordem: executionItem.item.ordem,
-              oQueLimpar: executionItem.item.oQueLimpar,
-              qualProduto: executionItem.item.qualProduto,
-              quando: executionItem.item.quando,
-              setorResponsavel: executionItem.item.setorResponsavel,
-              quem: executionItem.item.quem
+              oQueLimpar: executionItem.itemDescricao ?? executionItem.item.oQueLimpar,
+              qualProduto: executionItem.qualProduto ?? executionItem.item.qualProduto,
+              quando: executionItem.quando ?? executionItem.item.quando,
+              setorResponsavel: executionItem.setorResponsavel ?? executionItem.item.setorResponsavel,
+              quem: executionItem.funcionarioResponsavel ?? executionItem.item.quem
             }
           }))}
         />
