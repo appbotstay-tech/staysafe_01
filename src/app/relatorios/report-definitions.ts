@@ -135,7 +135,7 @@ export const FILTER_DEFINITIONS: Record<ReportFilterKey, ReportFilterDefinition>
     { value: "", label: "Todos" }, { value: "PADRAO", label: "Item padrão" }, { value: "EXTRA", label: "Item extra" }
   ] },
   statusBuffet: { key: "statusBuffet", label: "Status", type: "select", options: [
-    { value: "", label: "Todos" }, { value: "PENDENTE", label: "Pendente" }, { value: "PREENCHIDO", label: "Preenchido" }, { value: "ASSINADO", label: "Assinado" }
+    { value: "", label: "Todos" }, { value: "PENDENTE", label: "Pendente" }, { value: "PREENCHIDO", label: "Preenchido" }, { value: "ASSINADO", label: "Assinado" }, { value: "NAO_SERVIDO", label: "Não servido" }
   ] },
   temperaturaForaRegra: { key: "temperaturaForaRegra", label: "Temperatura fora da regra", type: "select", options: yesNo },
   area: { key: "area", label: "Área", type: "text" },

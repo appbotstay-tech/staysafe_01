@@ -1,0 +1,1 @@
+ALTER TYPE "StatusItemBuffetAmostra" ADD VALUE IF NOT EXISTS 'NAO_SERVIDO';

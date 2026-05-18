@@ -118,6 +118,7 @@ enum StatusItemBuffetAmostra {
   PENDENTE
   PREENCHIDO
   ASSINADO
+  NAO_SERVIDO
 }
 
 enum StatusTemperaturaBuffetAmostra {

@@ -79,6 +79,9 @@ function parseStatus(value: string): StatusItemBuffetAmostra | null {
   if (value === StatusItemBuffetAmostra.ASSINADO) {
     return StatusItemBuffetAmostra.ASSINADO;
   }
+  if (value === StatusItemBuffetAmostra.NAO_SERVIDO) {
+    return StatusItemBuffetAmostra.NAO_SERVIDO;
+  }
   return null;
 }
 
@@ -277,6 +280,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
               <option value={StatusItemBuffetAmostra.PENDENTE}>Pendente</option>
               <option value={StatusItemBuffetAmostra.PREENCHIDO}>Preenchido</option>
               <option value={StatusItemBuffetAmostra.ASSINADO}>Assinado</option>
+              <option value={StatusItemBuffetAmostra.NAO_SERVIDO}>Não servido</option>
             </select>
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import type {
@@ -14,7 +14,7 @@ import {
   saveServicoItemsStateAction
 } from "../../actions";
 import { ItemStatusBadge, TemperatureStatusBadge } from "../../status-badges";
-import { getClassificacaoLabel } from "../../utils";
+import { avaliarTemperaturaBuffet, getClassificacaoLabel } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -25,6 +25,13 @@ type ActionState = {
 type AcaoCorretivaOption = {
   id: number;
   nome: string;
+};
+
+type PendingItemIssue = {
+  rowKey: string;
+  nome: string;
+  kind: "blank" | "incomplete";
+  missingFields: string[];
 };
 
 export type ServiceItemFormRow = {
@@ -81,6 +88,16 @@ function AddExtraSubmitButton() {
       {pending ? "Adicionando..." : "Adicionar Item"}
     </button>
   );
+}
+
+function parseTemperatureInput(value: string): number | null {
+  const normalized = value.replace(",", ".").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function AddExtraItemModal({
@@ -175,13 +192,129 @@ export function ServiceItemsForm({
 }: ServiceItemsFormProps) {
   const router = useRouter();
   const [state, formAction] = useActionState(saveServicoItemsStateAction, INITIAL_STATE);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const confirmPendingInputRef = useRef<HTMLInputElement | null>(null);
+  const bypassConfirmationRef = useRef(false);
+  const [pendingIssues, setPendingIssues] = useState<PendingItemIssue[]>([]);
+  const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set());
   const hasEditableRows = rows.some((row) => !row.bloqueado);
 
   useEffect(() => {
     if (state.status === "success") {
+      setPendingIssues([]);
+      setHighlightedRows(new Set());
+      bypassConfirmationRef.current = false;
+      if (confirmPendingInputRef.current) {
+        confirmPendingInputRef.current.value = "false";
+      }
       router.refresh();
     }
   }, [router, state.status]);
+
+  const collectPendingIssues = (formData: FormData): PendingItemIssue[] => {
+    const issues: PendingItemIssue[] = [];
+
+    for (const row of rows) {
+      if (row.bloqueado) {
+        continue;
+      }
+
+      const tcEquipamento = String(formData.get(`${row.rowKey}-tcEquipamento`) ?? "").trim();
+      const primeiraTc = String(formData.get(`${row.rowKey}-primeiraTc`) ?? "").trim();
+      const segundaTc = String(formData.get(`${row.rowKey}-segundaTc`) ?? "").trim();
+      const acaoCorretiva = String(formData.get(`${row.rowKey}-acaoCorretiva`) ?? "").trim();
+      const observacao = String(formData.get(`${row.rowKey}-observacao`) ?? "").trim();
+      const hasAnyValue = [
+        tcEquipamento,
+        primeiraTc,
+        segundaTc,
+        acaoCorretiva,
+        observacao
+      ].some(Boolean);
+
+      if (!hasAnyValue) {
+        issues.push({
+          rowKey: row.rowKey,
+          nome: row.nome,
+          kind: "blank",
+          missingFields: []
+        });
+        continue;
+      }
+
+      const missingFields: string[] = [];
+      const tcEquipamentoNumber = parseTemperatureInput(tcEquipamento);
+      const primeiraTcNumber = parseTemperatureInput(primeiraTc);
+      const segundaTcNumber = parseTemperatureInput(segundaTc);
+
+      if (tcEquipamentoNumber === null) {
+        missingFields.push("TC Equipamento");
+      }
+
+      if (primeiraTcNumber === null) {
+        missingFields.push("1ª TC");
+      }
+
+      if (segundaTcNumber === null) {
+        missingFields.push("2ª TC");
+      } else {
+        const avaliacao = avaliarTemperaturaBuffet(row.classificacao, segundaTcNumber);
+        if (avaliacao.exigeAcaoCorretiva && !acaoCorretiva) {
+          missingFields.push("ação corretiva");
+        }
+      }
+
+      if (
+        acaoCorretiva &&
+        !acoesCorretivas.some((option) => option.nome === acaoCorretiva)
+      ) {
+        missingFields.push("ação corretiva válida");
+      }
+
+      if (missingFields.length > 0) {
+        issues.push({
+          rowKey: row.rowKey,
+          nome: row.nome,
+          kind: "incomplete",
+          missingFields
+        });
+      }
+    }
+
+    return issues;
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (bypassConfirmationRef.current) {
+      bypassConfirmationRef.current = false;
+      return;
+    }
+
+    if (confirmPendingInputRef.current) {
+      confirmPendingInputRef.current.value = "false";
+    }
+
+    const issues = collectPendingIssues(new FormData(event.currentTarget));
+    if (issues.length === 0) {
+      setPendingIssues([]);
+      setHighlightedRows(new Set());
+      return;
+    }
+
+    event.preventDefault();
+    setPendingIssues(issues);
+    setHighlightedRows(new Set(issues.map((issue) => issue.rowKey)));
+  };
+
+  const submitWithPendingConfirmation = () => {
+    if (confirmPendingInputRef.current) {
+      confirmPendingInputRef.current.value = "true";
+    }
+
+    bypassConfirmationRef.current = true;
+    setPendingIssues([]);
+    formRef.current?.requestSubmit();
+  };
 
   if (rows.length === 0) {
     return (
@@ -198,6 +331,9 @@ export function ServiceItemsForm({
       </div>
     );
   }
+
+  const blankIssues = pendingIssues.filter((issue) => issue.kind === "blank");
+  const incompleteIssues = pendingIssues.filter((issue) => issue.kind === "incomplete");
 
   return (
     <div className="space-y-4">
@@ -221,17 +357,24 @@ export function ServiceItemsForm({
         </div>
       ) : null}
 
-      <form action={formAction} className="space-y-4">
+      <form ref={formRef} action={formAction} className="space-y-4" onSubmit={handleSubmit}>
         <input type="hidden" name="servicoId" value={String(servicoId)} />
         <input type="hidden" name="data" value={dataInput} />
         <input type="hidden" name="returnTo" value={returnTo} />
+        <input
+          ref={confirmPendingInputRef}
+          type="hidden"
+          name="confirmarItensPendentes"
+          defaultValue="false"
+        />
 
         <div className="grid gap-3 xl:grid-cols-2">
           {rows.map((row) => {
             const acaoEstaAtiva = acoesCorretivas.some(
               (option) => option.nome === row.acaoCorretiva
             );
-            const invalid = state.invalidRowKey === row.rowKey;
+            const invalid =
+              state.invalidRowKey === row.rowKey || highlightedRows.has(row.rowKey);
 
             return (
               <section
@@ -369,6 +512,72 @@ export function ServiceItemsForm({
           <SubmitItemsButton disabled={!hasEditableRows || acoesCorretivas.length === 0} />
         </div>
       </form>
+
+      {pendingIssues.length > 0 ? (
+        <div className="bpma-modal-backdrop">
+          <section className="bpma-modal-panel max-w-2xl">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Confirmar salvamento com itens pendentes
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              Alguns itens não foram preenchidos. Confirme apenas se esses itens não foram
+              servidos ou se realmente não precisam de registro neste serviço.
+            </p>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {blankIssues.length > 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                    Itens sem preenchimento
+                  </p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+                    {blankIssues.map((issue) => (
+                      <li key={issue.rowKey}>- {issue.nome}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {incompleteIssues.length > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                    Itens incompletos
+                  </p>
+                  <ul className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-200">
+                    {incompleteIssues.map((issue) => (
+                      <li key={issue.rowKey}>
+                        - {issue.nome}: falta {issue.missingFields.join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+
+            <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+              Ao confirmar, esses itens serão registrados como <strong>Não servido</strong> e
+              não continuarão como pendência do serviço.
+            </p>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPendingIssues([])}
+              >
+                Voltar e preencher
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={submitWithPendingConfirmation}
+              >
+                Salvar mesmo assim
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

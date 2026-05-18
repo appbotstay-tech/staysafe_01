@@ -179,6 +179,10 @@ export function getStatusItemLabel(status: StatusItemBuffetAmostra): string {
     return "Assinado";
   }
 
+  if (status === "NAO_SERVIDO") {
+    return "Não servido";
+  }
+
   return "Pendente";
 }
 
@@ -263,13 +267,14 @@ export function avaliarTemperaturaBuffet(
 export function calcularStatusServico(params: {
   totalItens: number;
   itensAssinados: number;
+  itensNaoServidos?: number;
   itensIniciados: number;
 }): StatusServicoBuffet {
   if (params.totalItens <= 0 || params.itensIniciados <= 0) {
     return "PENDENTE";
   }
 
-  if (params.itensAssinados >= params.totalItens) {
+  if (params.itensAssinados + (params.itensNaoServidos ?? 0) >= params.totalItens) {
     return "CONCLUIDO";
   }
 

@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  IMAGE_UPLOAD_ACCEPT_ATTRIBUTE,
+  validateImageUploadFile
+} from "@/lib/image-upload-rules";
+
 type ImageUploadFieldProps = {
   name: string;
   label: string;
@@ -50,6 +55,22 @@ export function ImageUploadField({
     [previewUrl]
   );
 
+  const clearSelectedFile = () => {
+    const input = inputRef.current;
+    if (input) {
+      input.value = "";
+      input.setCustomValidity("");
+    }
+
+    if (previewUrl && !previewUrl.startsWith("data:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setSelectedFileName(existingFileName ?? "");
+    setPreviewUrl(existingImageDataUrl ?? null);
+    setValidationError("");
+  };
+
   useEffect(() => {
     return () => {
       if (previewUrl && !isDataUrlPreview) {
@@ -91,6 +112,23 @@ export function ImageUploadField({
     const handleSubmit = (event: Event) => {
       const isRequiredByStatus = requiredStatusValues.includes(getStatusValue());
       const hasFile = hasUpload();
+      const file = input.files?.[0] ?? null;
+      const fileValidationMessage = file
+        ? validateImageUploadFile({
+            name: file.name,
+            size: file.size,
+            type: file.type
+          })
+        : "";
+
+      if (fileValidationMessage) {
+        input.setCustomValidity(fileValidationMessage);
+        setValidationError(fileValidationMessage);
+        event.preventDefault();
+        event.stopPropagation();
+        input.reportValidity();
+        return;
+      }
 
       if (isRequiredByStatus && !hasFile) {
         input.setCustomValidity(requiredMessage);
@@ -128,7 +166,7 @@ export function ImageUploadField({
         ref={inputRef}
         type="file"
         name={name}
-        accept="image/*"
+        accept={IMAGE_UPLOAD_ACCEPT_ATTRIBUTE}
         required={required && !existingImageDataUrl}
         className={`${inputClassName} ${
           validationError
@@ -145,6 +183,24 @@ export function ImageUploadField({
               setSelectedFileName("");
               setPreviewUrl(null);
             }
+            return;
+          }
+
+          const fileValidationMessage = validateImageUploadFile({
+            name: file.name,
+            size: file.size,
+            type: file.type
+          });
+
+          if (fileValidationMessage) {
+            event.target.value = "";
+            event.target.setCustomValidity(fileValidationMessage);
+            setValidationError(fileValidationMessage);
+            setSelectedFileName("");
+            if (previewUrl && !previewUrl.startsWith("data:")) {
+              URL.revokeObjectURL(previewUrl);
+            }
+            setPreviewUrl(existingImageDataUrl ?? null);
             return;
           }
 
@@ -170,6 +226,15 @@ export function ImageUploadField({
         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
           Arquivo selecionado: {selectedFileName}
         </span>
+      ) : null}
+      {selectedFileName && selectedFileName !== existingFileName ? (
+        <button
+          type="button"
+          className="mt-2 text-xs font-medium text-slate-700 underline dark:text-slate-200"
+          onClick={clearSelectedFile}
+        >
+          Remover foto selecionada
+        </button>
       ) : null}
       {previewUrl ? (
         <div className="mt-2">

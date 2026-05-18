@@ -76,6 +76,27 @@ type RegistroItemSource = {
   classificacao: ClassificacaoItemBuffetAmostra;
 };
 
+type RegistroItemPayload = {
+  itemNome: string;
+  classificacao: ClassificacaoItemBuffetAmostra;
+  tcEquipamento: number | null;
+  primeiraTc: number | null;
+  segundaTc: number | null;
+  statusTemperatura: ReturnType<typeof avaliarTemperaturaBuffet>["status"] | null;
+  acaoCorretiva: string | null;
+  observacao: string | null;
+  responsavelUsuarioId: number;
+  responsavelNome: string;
+  responsavelPerfil: Awaited<ReturnType<typeof getCurrentUserForAction>>["perfil"];
+  dataHoraRegistro: Date;
+  status: StatusItemBuffetAmostra;
+};
+
+type RegistroItemIssue = {
+  kind: "blank" | "incomplete";
+  missingFields: string[];
+};
+
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -223,7 +244,7 @@ async function buildRegistroPayload(params: {
   actor: Awaited<ReturnType<typeof getCurrentUserForAction>>;
   item: RegistroItemSource;
   input: RegistroTemperaturaInput;
-}) {
+}): Promise<RegistroItemPayload> {
   const tcEquipamento = parseTemperatureInput(params.input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(params.input.primeiraTcInput);
   const segundaTc = parseTemperatureInput(params.input.segundaTcInput);
@@ -272,6 +293,71 @@ async function buildRegistroPayload(params: {
     responsavelPerfil: params.actor.perfil,
     dataHoraRegistro: getCurrentSystemDateTime(),
     status: StatusItemBuffetAmostra.PREENCHIDO
+  };
+}
+
+function getRegistroItemIssue(
+  item: RegistroItemSource,
+  input: RegistroTemperaturaInput
+): RegistroItemIssue | null {
+  const values = [
+    input.tcEquipamentoInput,
+    input.primeiraTcInput,
+    input.segundaTcInput,
+    input.acaoCorretivaInput,
+    input.observacao
+  ];
+  const hasAnyValue = values.some((value) => value.trim().length > 0);
+
+  if (!hasAnyValue) {
+    return { kind: "blank", missingFields: [] };
+  }
+
+  const missingFields: string[] = [];
+  const tcEquipamento = parseTemperatureInput(input.tcEquipamentoInput);
+  const primeiraTc = parseTemperatureInput(input.primeiraTcInput);
+  const segundaTc = parseTemperatureInput(input.segundaTcInput);
+
+  if (tcEquipamento === null) {
+    missingFields.push("TC Equipamento");
+  }
+
+  if (primeiraTc === null) {
+    missingFields.push("1ª TC");
+  }
+
+  if (segundaTc === null) {
+    missingFields.push("2ª TC");
+  } else {
+    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, segundaTc);
+    if (avaliacao.exigeAcaoCorretiva && !input.acaoCorretivaInput) {
+      missingFields.push("ação corretiva");
+    }
+  }
+
+  return missingFields.length > 0 ? { kind: "incomplete", missingFields } : null;
+}
+
+function buildNaoServidoPayload(params: {
+  actor: Awaited<ReturnType<typeof getCurrentUserForAction>>;
+  item: RegistroItemSource;
+  observacao?: string;
+}): RegistroItemPayload {
+  return {
+    itemNome: params.item.nome,
+    classificacao: params.item.classificacao,
+    tcEquipamento: null,
+    primeiraTc: null,
+    segundaTc: null,
+    statusTemperatura: null,
+    acaoCorretiva: null,
+    observacao:
+      params.observacao?.trim() || "Item previsto no serviço, mas não servido neste dia.",
+    responsavelUsuarioId: params.actor.id,
+    responsavelNome: params.actor.nomeCompleto,
+    responsavelPerfil: params.actor.perfil,
+    dataHoraRegistro: getCurrentSystemDateTime(),
+    status: StatusItemBuffetAmostra.NAO_SERVIDO
   };
 }
 
@@ -420,6 +506,8 @@ export async function saveServicoItemsStateAction(
       .getAll("rowKey")
       .map((value) => (typeof value === "string" ? value : ""))
       .filter(Boolean);
+    const confirmarItensPendentes =
+      getInputValue(formData, "confirmarItensPendentes") === "true";
 
     if (!servicoId) {
       throw new Error("Serviço inválido para salvar os itens.");
@@ -473,12 +561,12 @@ export async function saveServicoItemsStateAction(
       | {
           type: "fixed";
           itemId: number;
-          payload: Awaited<ReturnType<typeof buildRegistroPayload>>;
+          payload: RegistroItemPayload;
         }
       | {
           type: "extra";
           registroId: number;
-          payload: Awaited<ReturnType<typeof buildRegistroPayload>>;
+          payload: RegistroItemPayload;
         }
     > = [];
 
@@ -505,6 +593,31 @@ export async function saveServicoItemsStateAction(
             continue;
           }
 
+          const issue = getRegistroItemIssue(item, input);
+          if (issue) {
+            if (!confirmarItensPendentes) {
+              return {
+                status: "error",
+                message:
+                  issue.kind === "blank"
+                    ? `O item "${item.nome}" está sem preenchimento. Confirme para salvar como não servido.`
+                    : `O item "${item.nome}" está incompleto (${issue.missingFields.join(", ")}). Corrija ou confirme para salvar como não servido.`,
+                invalidRowKey: rowKey
+              };
+            }
+
+            updates.push({
+              type: "fixed",
+              itemId,
+              payload: buildNaoServidoPayload({
+                actor,
+                item,
+                observacao: input.observacao
+              })
+            });
+            continue;
+          }
+
           updates.push({
             type: "fixed",
             itemId,
@@ -525,15 +638,41 @@ export async function saveServicoItemsStateAction(
             continue;
           }
 
+          const item = {
+            nome: registro.itemNome,
+            classificacao: registro.classificacao
+          };
+          const issue = getRegistroItemIssue(item, input);
+          if (issue) {
+            if (!confirmarItensPendentes) {
+              return {
+                status: "error",
+                message:
+                  issue.kind === "blank"
+                    ? `O item "${registro.itemNome}" está sem preenchimento. Confirme para salvar como não servido.`
+                    : `O item "${registro.itemNome}" está incompleto (${issue.missingFields.join(", ")}). Corrija ou confirme para salvar como não servido.`,
+                invalidRowKey: rowKey
+              };
+            }
+
+            updates.push({
+              type: "extra",
+              registroId,
+              payload: buildNaoServidoPayload({
+                actor,
+                item,
+                observacao: input.observacao
+              })
+            });
+            continue;
+          }
+
           updates.push({
             type: "extra",
             registroId,
             payload: await buildRegistroPayload({
               actor,
-              item: {
-                nome: registro.itemNome,
-                classificacao: registro.classificacao
-              },
+              item,
               input
             })
           });
@@ -820,7 +959,7 @@ export async function signServicoItensAction(formData: FormData) {
     );
 
     if (registrosParaAssinar.length === 0) {
-      throw new Error("Todos os itens deste serviço já estão assinados.");
+      throw new Error("Não há itens preenchidos aguardando assinatura neste serviço.");
     }
 
     const now = getCurrentSystemDateTime();
@@ -895,7 +1034,12 @@ export async function closeMonthAction(formData: FormData) {
     const registrosNaoAssinados = await prisma.controleBuffetAmostraRegistro.count({
       where: {
         data: { gte: range.start, lte: range.end },
-        status: { not: StatusItemBuffetAmostra.ASSINADO }
+        status: {
+          notIn: [
+            StatusItemBuffetAmostra.ASSINADO,
+            StatusItemBuffetAmostra.NAO_SERVIDO
+          ]
+        }
       }
     });
 

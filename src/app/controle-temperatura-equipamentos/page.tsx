@@ -505,7 +505,7 @@ export default async function ControleTemperaturaEquipamentosPage({
               label="Foto da Evidência"
               existingImageDataUrl={fotoRegistroEmEdicao}
               existingFileName={registroEmEdicao?.fotoNome ?? null}
-              helperText="Obrigatória quando o status calculado for Alerta ou Crítico."
+              helperText="Obrigatória em Alerta/Crítico. Envie JPG, PNG ou WEBP de até 5 MB."
               requiredStatusFieldName="statusCalculado"
               requiredStatusValues={["ALERTA", "CRITICO"]}
               requiredMessage="Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."

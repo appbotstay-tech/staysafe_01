@@ -149,6 +149,9 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     const itensAssinados = registrosItensAtivos.filter(
       (registro) => registro.status === StatusItemBuffetAmostra.ASSINADO
     ).length;
+    const itensNaoServidos = registrosItensAtivos.filter(
+      (registro) => registro.status === StatusItemBuffetAmostra.NAO_SERVIDO
+    ).length;
     const itensIniciados = registrosItensAtivos.filter(
       (registro) => registro.status !== StatusItemBuffetAmostra.PENDENTE
     ).length;
@@ -156,6 +159,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     const status = calcularStatusServico({
       totalItens: quantidadeItens,
       itensAssinados,
+      itensNaoServidos,
       itensIniciados
     });
 

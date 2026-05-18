@@ -646,6 +646,10 @@ function buffetStatusLabel(status: StatusItemBuffetAmostra): DashboardNormalized
     return "Concluído";
   }
 
+  if (status === StatusItemBuffetAmostra.NAO_SERVIDO) {
+    return "Concluído";
+  }
+
   if (status === StatusItemBuffetAmostra.PREENCHIDO) {
     return "Aguardando responsável";
   }
@@ -1210,7 +1214,12 @@ async function buildBuffetStats(
           { data: { gte: range.start, lte: range.end } },
           {
             data: { gte: openRange.start, lt: range.start },
-            status: { not: StatusItemBuffetAmostra.ASSINADO }
+            status: {
+              notIn: [
+                StatusItemBuffetAmostra.ASSINADO,
+                StatusItemBuffetAmostra.NAO_SERVIDO
+              ]
+            }
           }
         ]
       }
@@ -1316,7 +1325,9 @@ async function buildBuffetStats(
           moduleName: moduleInfo.name,
           title: `${servico.nome} | ${item.nome}`,
           description:
-            record.statusTemperatura === "ALERTA" || record.statusTemperatura === "CRITICO"
+            record.status === StatusItemBuffetAmostra.NAO_SERVIDO
+              ? "Item previsto confirmado como não servido."
+              : record.statusTemperatura === "ALERTA" || record.statusTemperatura === "CRITICO"
               ? "Temperatura registrada com ação corretiva."
               : "Item do serviço registrado.",
           status:
@@ -1329,7 +1340,10 @@ async function buildBuffetStats(
           href
         };
 
-        if (record.status === StatusItemBuffetAmostra.ASSINADO) {
+        if (
+          record.status === StatusItemBuffetAmostra.ASSINADO ||
+          record.status === StatusItemBuffetAmostra.NAO_SERVIDO
+        ) {
           addCompleted(stats, detail);
         } else {
           addPending(stats, detail, status);
@@ -1356,14 +1370,22 @@ async function buildBuffetStats(
       moduleId: moduleInfo.id,
       moduleName: moduleInfo.name,
       title: `${record.servico.nome} | ${record.itemNome}`,
-      description: record.itemExtra ? "Item extra lançado no serviço." : "Registro fora da configuração ativa atual.",
+      description:
+        record.status === StatusItemBuffetAmostra.NAO_SERVIDO
+          ? "Item confirmado como não servido."
+          : record.itemExtra
+            ? "Item extra lançado no serviço."
+            : "Registro fora da configuração ativa atual.",
       status,
       responsible: record.assinaturaNome ?? record.responsavelNome,
       dateTime: formatDateTimeDisplay(record.assinaturaDataHora ?? record.dataHoraRegistro),
       href: `${moduleInfo.href}/servico/${record.servicoId}?data=${formatDateInput(record.data)}`
     };
 
-    if (record.status === StatusItemBuffetAmostra.ASSINADO) {
+    if (
+      record.status === StatusItemBuffetAmostra.ASSINADO ||
+      record.status === StatusItemBuffetAmostra.NAO_SERVIDO
+    ) {
       addCompleted(stats, detail);
     } else {
       addPending(stats, detail, status);

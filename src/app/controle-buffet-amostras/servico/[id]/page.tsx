@@ -160,6 +160,9 @@ export default async function ExecucaoServicoBuffetPage({
   const itensAssinados = registros.filter(
     (registro) => registro.status === StatusItemBuffetAmostra.ASSINADO
   ).length;
+  const itensNaoServidos = registros.filter(
+    (registro) => registro.status === StatusItemBuffetAmostra.NAO_SERVIDO
+  ).length;
   const totalItensServico = itensConfiguradosDoDia.length + registrosExtras.length;
   const todosItensPreenchidos = totalItensServico > 0 && itensPendentes === 0;
   const formatTemperatureInput = (value: number | null): string =>
@@ -349,7 +352,7 @@ export default async function ExecucaoServicoBuffetPage({
           Assinatura do Serviço
         </h2>
 
-        <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-4">
+        <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-5">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Itens do Serviço
@@ -374,6 +377,12 @@ export default async function ExecucaoServicoBuffetPage({
             </p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{itensAssinados}</p>
           </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Não servidos
+            </p>
+            <p className="font-semibold text-slate-800 dark:text-slate-100">{itensNaoServidos}</p>
+          </div>
         </div>
 
         {fechamentoAssinado ? (
@@ -394,7 +403,7 @@ export default async function ExecucaoServicoBuffetPage({
           </p>
         ) : itensPreenchidos === 0 ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-            Todos os itens deste serviço já estão assinados.
+            Não há itens preenchidos aguardando assinatura neste serviço.
           </p>
         ) : (
           <form action={signServicoItensAction} className="grid gap-3 md:grid-cols-2">

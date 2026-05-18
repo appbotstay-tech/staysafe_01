@@ -1,3 +1,9 @@
+import {
+  MAX_IMAGE_UPLOAD_BYTES,
+  UNSUPPORTED_IMAGE_FORMAT_MESSAGE,
+  validateImageUploadFile
+} from "@/lib/image-upload-rules";
+
 type ParsedImageUpload = {
   fileName: string;
   mimeType: string;
@@ -12,14 +18,12 @@ type ParseImageUploadParams = {
   maxBytes?: number;
 };
 
-const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
-
 export async function parseImageUploadFromFormData(
   params: ParseImageUploadParams
 ): Promise<ParsedImageUpload | null> {
   const value = params.formData.get(params.key);
   const required = params.required ?? false;
-  const maxBytes = params.maxBytes ?? DEFAULT_MAX_IMAGE_BYTES;
+  const maxBytes = params.maxBytes ?? MAX_IMAGE_UPLOAD_BYTES;
 
   if (!(value instanceof File) || value.size === 0) {
     if (required) {
@@ -32,21 +36,33 @@ export async function parseImageUploadFromFormData(
     return null;
   }
 
-  if (!value.type.startsWith("image/")) {
-    throw new Error("O arquivo enviado deve ser uma imagem.");
+  const validationMessage = validateImageUploadFile({
+    name: value.name,
+    size: value.size,
+    type: value.type
+  });
+
+  if (validationMessage) {
+    throw new Error(validationMessage);
   }
 
   if (value.size > maxBytes) {
-    throw new Error("A imagem excede o limite de 5MB.");
+    throw new Error("A foto selecionada é muito grande. Envie uma imagem menor.");
   }
 
-  const buffer = Buffer.from(await value.arrayBuffer());
+  try {
+    const buffer = Buffer.from(await value.arrayBuffer());
 
-  return {
-    fileName: value.name,
-    mimeType: value.type,
-    base64: buffer.toString("base64")
-  };
+    return {
+      fileName: value.name,
+      mimeType: value.type || "image/jpeg",
+      base64: buffer.toString("base64")
+    };
+  } catch {
+    throw new Error(
+      `Não foi possível salvar a foto. Tente novamente ou selecione outra imagem. ${UNSUPPORTED_IMAGE_FORMAT_MESSAGE}`
+    );
+  }
 }
 
 export function getImageDataUrl(mimeType: string | null, base64: string | null): string | null {
