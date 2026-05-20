@@ -92,7 +92,6 @@ function LaudoStatusBadge({ dataValidade }: { dataValidade: Date | null }) {
 
 export async function DocumentosModuleHeader({
   title,
-  description,
   modulo,
   modulePath,
   searchParams,
@@ -102,33 +101,33 @@ export async function DocumentosModuleHeader({
   const anexosHref = buildHeaderHref(modulePath, searchParams, true);
   const fecharHref = buildHeaderHref(modulePath, searchParams, false);
 
-  const documentos = await prisma.documentoTecnicoAnexo.findMany({
-    where: {
-      modulo,
-      ativo: true
-    },
-    select: {
-      id: true,
-      tipo: true,
-      nome: true,
-      legislacaoResumo: true,
-      dataEmissao: true,
-      dataValidade: true,
-      observacoes: true,
-      criadoEm: true
-    },
-    orderBy: [{ tipo: "asc" }, { criadoEm: "desc" }, { id: "desc" }]
-  });
+  const [documentos, configuracao] = await Promise.all([
+    prisma.documentoTecnicoAnexo.findMany({
+      where: {
+        ativo: true,
+        OR: [{ modulo, todosModulos: false }, { todosModulos: true }]
+      },
+      select: {
+        id: true,
+        tipo: true,
+        nome: true,
+        dataEmissao: true,
+        dataValidade: true,
+        observacoes: true,
+        criadoEm: true,
+        todosModulos: true
+      },
+      orderBy: [{ todosModulos: "asc" }, { tipo: "asc" }, { criadoEm: "desc" }, { id: "desc" }]
+    }),
+    prisma.moduloConfiguracao.findUnique({
+      where: { modulo },
+      select: { textoCabecalho: true }
+    })
+  ]);
 
-  const legislacaoPrincipal =
-    documentos.find((documento) => documento.tipo === DocumentoTipo.LEGISLACAO) ?? null;
-  const legislacaoTexto = legislacaoPrincipal?.legislacaoResumo?.trim()
-    ? `${legislacaoPrincipal.nome} - ${legislacaoPrincipal.legislacaoResumo.trim()}`
-    : null;
-  const documentosPorTipo = DOCUMENTO_TIPO_ORDER.map((tipo) => ({
-    tipo,
-    documentos: documentos.filter((documento) => documento.tipo === tipo)
-  })).filter((group) => group.documentos.length > 0);
+  const textoCabecalho = configuracao?.textoCabecalho?.trim() ?? "";
+  const documentosDesteModulo = documentos.filter((documento) => !documento.todosModulos);
+  const documentosGerais = documentos.filter((documento) => documento.todosModulos);
 
   return (
     <>
@@ -138,17 +137,9 @@ export async function DocumentosModuleHeader({
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
               {title}
             </h1>
-            {description ? (
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                {description}
-              </p>
-            ) : null}
-            {legislacaoTexto ? (
-              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-                <span className="font-medium text-slate-700 dark:text-slate-200">
-                  Legislação/Referência:
-                </span>{" "}
-                {legislacaoTexto}
+            {textoCabecalho ? (
+              <p className="mt-2 max-w-3xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
+                {textoCabecalho}
               </p>
             ) : null}
           </div>
@@ -174,51 +165,8 @@ export async function DocumentosModuleHeader({
             </p>
           ) : (
             <div className="space-y-4">
-              {documentosPorTipo.map((group) => (
-                <section key={group.tipo} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {getDocumentoTipoLabel(group.tipo)}
-                  </h3>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    {group.documentos.map((documento) => (
-                      <article
-                        key={documento.id}
-                        className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          <TipoBadge tipo={documento.tipo} />
-                          {documento.tipo === DocumentoTipo.LAUDO ? (
-                            <LaudoStatusBadge dataValidade={documento.dataValidade} />
-                          ) : null}
-                        </div>
-                        <p className="mt-2 font-medium text-slate-900 dark:text-slate-100">
-                          {documento.nome}
-                        </p>
-                        {documento.tipo === DocumentoTipo.LAUDO ? (
-                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                            Emissão: {documento.dataEmissao ? formatAppDate(documento.dataEmissao) : "-"}
-                            {" • "}
-                            Validade: {documento.dataValidade ? formatAppDate(documento.dataValidade) : "-"}
-                          </p>
-                        ) : null}
-                        {documento.observacoes ? (
-                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                            {documento.observacoes}
-                          </p>
-                        ) : null}
-                        <div className="mt-3">
-                          <a
-                            href={`/api/documentos-tecnicos/${documento.id}/download`}
-                            className="btn-action"
-                          >
-                            Baixar PDF
-                          </a>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
+              <DocumentGroup title="Documentos deste módulo" documentos={documentosDesteModulo} />
+              <DocumentGroup title="Documentos gerais" documentos={documentosGerais} />
             </div>
           )}
         </ActionModal>
@@ -232,3 +180,84 @@ const DOCUMENTO_TIPO_ORDER = [
   DocumentoTipo.LAUDO,
   DocumentoTipo.POP_MANUAL
 ];
+
+type HeaderDocument = {
+  id: number;
+  tipo: DocumentoTipo;
+  nome: string;
+  dataEmissao: Date | null;
+  dataValidade: Date | null;
+  observacoes: string | null;
+};
+
+function DocumentGroup({
+  title,
+  documentos
+}: {
+  title: string;
+  documentos: HeaderDocument[];
+}) {
+  if (documentos.length === 0) {
+    return null;
+  }
+
+  const documentosPorTipo = DOCUMENTO_TIPO_ORDER.map((tipo) => ({
+    tipo,
+    documentos: documentos.filter((documento) => documento.tipo === tipo)
+  })).filter((group) => group.documentos.length > 0);
+
+  return (
+    <section className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+        {title}
+      </h3>
+      <div className="mt-3 space-y-3">
+        {documentosPorTipo.map((group) => (
+          <div key={group.tipo}>
+            <p className="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+              {getDocumentoTipoLabel(group.tipo)}
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {group.documentos.map((documento) => (
+                <article
+                  key={documento.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <TipoBadge tipo={documento.tipo} />
+                    {documento.tipo === DocumentoTipo.LAUDO ? (
+                      <LaudoStatusBadge dataValidade={documento.dataValidade} />
+                    ) : null}
+                  </div>
+                  <p className="mt-2 font-medium text-slate-900 dark:text-slate-100">
+                    {documento.nome}
+                  </p>
+                  {documento.tipo === DocumentoTipo.LAUDO ? (
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                      Emissão: {documento.dataEmissao ? formatAppDate(documento.dataEmissao) : "-"}
+                      {" • "}
+                      Validade: {documento.dataValidade ? formatAppDate(documento.dataValidade) : "-"}
+                    </p>
+                  ) : null}
+                  {documento.observacoes ? (
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                      {documento.observacoes}
+                    </p>
+                  ) : null}
+                  <div className="mt-3">
+                    <a
+                      href={`/api/documentos-tecnicos/${documento.id}/download`}
+                      className="btn-action"
+                    >
+                      Baixar PDF
+                    </a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

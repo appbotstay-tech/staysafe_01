@@ -1,6 +1,11 @@
-import { ClassificacaoItemBuffetAmostra, TipoServicoBuffetAmostra } from "@prisma/client";
+import {
+  ClassificacaoItemBuffetAmostra,
+  ModuloDocumento,
+  TipoServicoBuffetAmostra
+} from "@prisma/client";
 import Link from "next/link";
 
+import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
@@ -123,6 +128,11 @@ export default async function ControleBuffetAmostrasOpcoesPage({
           {feedback}
         </section>
       ) : null}
+
+      <ModuleHeaderTextSettings
+        modulo={ModuloDocumento.CONTROLE_BUFFET_AMOSTRAS}
+        returnTo={PAGE_PATH}
+      />
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">

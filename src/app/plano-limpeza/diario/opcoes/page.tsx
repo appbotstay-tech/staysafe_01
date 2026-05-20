@@ -1,5 +1,7 @@
+import { ModuloDocumento } from "@prisma/client";
 import Link from "next/link";
 
+import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { prisma } from "@/lib/prisma";
 
@@ -135,6 +137,11 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
           {feedback}
         </section>
       ) : null}
+
+      <ModuleHeaderTextSettings
+        modulo={ModuloDocumento.PLANO_LIMPEZA_DIARIO}
+        returnTo={PAGE_PATH}
+      />
 
       <section className={CARD_CLASS}>
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nova Área</h2>

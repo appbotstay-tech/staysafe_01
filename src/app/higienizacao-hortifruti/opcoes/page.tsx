@@ -1,6 +1,7 @@
-import { TipoOpcaoHigienizacao } from "@prisma/client";
+import { ModuloDocumento, TipoOpcaoHigienizacao } from "@prisma/client";
 import Link from "next/link";
 
+import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -74,6 +75,11 @@ export default async function HigienizacaoHortifrutiOpcoesPage({
           {feedback}
         </section>
       ) : null}
+
+      <ModuleHeaderTextSettings
+        modulo={ModuloDocumento.HIGIENIZACAO_HORTIFRUTI}
+        returnTo={PAGE_PATH}
+      />
 
       <section className={CARD_CLASS}>
         <div className="grid gap-4 lg:grid-cols-2">

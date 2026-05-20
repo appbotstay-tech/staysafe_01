@@ -91,6 +91,17 @@ export function getDocumentoModuloLabel(modulo: ModuloDocumento): string {
   return DOCUMENTO_MODULO_LABELS.get(modulo) ?? modulo;
 }
 
+export function getDocumentoAplicacaoLabel(params: {
+  todosModulos: boolean;
+  modulo: ModuloDocumento | null;
+}): string {
+  if (params.todosModulos) {
+    return "Todos os módulos";
+  }
+
+  return params.modulo ? getDocumentoModuloLabel(params.modulo) : "Módulo não definido";
+}
+
 export function getDocumentoModuloHref(modulo: ModuloDocumento): string | null {
   return DOCUMENTO_MODULO_HREFS.get(modulo) ?? null;
 }
@@ -127,6 +138,22 @@ export function canAccessDocumentoModulo(role: UserRole, modulo: ModuloDocumento
   }
 
   return canAccessModule(role, href);
+}
+
+export function canAccessDocumentoTecnico(params: {
+  role: UserRole;
+  modulo: ModuloDocumento | null;
+  todosModulos: boolean;
+}): boolean {
+  if (params.todosModulos) {
+    return true;
+  }
+
+  if (!params.modulo) {
+    return false;
+  }
+
+  return canAccessDocumentoModulo(params.role, params.modulo);
 }
 
 export function getLaudoValidityStatus(

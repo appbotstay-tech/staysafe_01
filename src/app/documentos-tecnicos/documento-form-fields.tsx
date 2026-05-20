@@ -11,6 +11,7 @@ import {
 
 type DocumentoFormFieldsProps = {
   defaultModulo?: ModuloDocumento;
+  defaultTodosModulos?: boolean;
   defaultTipo?: DocumentoTipo;
   defaultNome?: string;
   defaultLegislacaoResumo?: string | null;
@@ -26,6 +27,7 @@ const INPUT_CLASS = "bpma-input";
 
 export function DocumentoFormFields({
   defaultModulo = ModuloDocumento.HIGIENIZACAO_HORTIFRUTI,
+  defaultTodosModulos = false,
   defaultTipo = DocumentoTipo.LEGISLACAO,
   defaultNome = "",
   defaultLegislacaoResumo = "",
@@ -37,19 +39,40 @@ export function DocumentoFormFields({
   requirePdf = false
 }: DocumentoFormFieldsProps) {
   const [tipo, setTipo] = useState<DocumentoTipo>(defaultTipo);
+  const [todosModulos, setTodosModulos] = useState(defaultTodosModulos);
 
   return (
     <>
       <label className="text-sm text-slate-700 dark:text-slate-200">
-        Módulo relacionado *
-        <select name="modulo" required defaultValue={defaultModulo} className={INPUT_CLASS}>
-          {DOCUMENTO_MODULO_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+        Aplicação do documento *
+        <select
+          name="aplicacaoDocumento"
+          required
+          value={todosModulos ? "TODOS_MODULOS" : "MODULO_ESPECIFICO"}
+          className={INPUT_CLASS}
+          onChange={(event) => setTodosModulos(event.target.value === "TODOS_MODULOS")}
+        >
+          <option value="MODULO_ESPECIFICO">Módulo específico</option>
+          <option value="TODOS_MODULOS">Todos os módulos</option>
         </select>
       </label>
+
+      {todosModulos ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          Este PDF aparecerá no botão Anexos de todos os módulos operacionais permitidos.
+        </p>
+      ) : (
+        <label className="text-sm text-slate-700 dark:text-slate-200">
+          Módulo relacionado *
+          <select name="modulo" required defaultValue={defaultModulo} className={INPUT_CLASS}>
+            {DOCUMENTO_MODULO_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Tipo do documento *

@@ -19,7 +19,11 @@ import {
 } from "@/lib/date-time";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
-import { canUpdateMaintenanceTicket, getRoleLabel } from "@/lib/rbac";
+import {
+  canManageModuleOptions,
+  canUpdateMaintenanceTicket,
+  getRoleLabel
+} from "@/lib/rbac";
 
 import { createChamadoAction } from "./actions";
 import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
@@ -97,6 +101,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const now = getAppNow();
 
@@ -154,6 +159,11 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
             <Link href="/" className="btn-secondary">
               Voltar para Início
             </Link>
+            {podeGerenciarOpcoes ? (
+              <Link href="/chamados-manutencao/opcoes" className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
             <ThemeToggleButton />
           </>
         }

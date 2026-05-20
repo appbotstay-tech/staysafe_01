@@ -225,6 +225,7 @@ model Usuario {
   logsAssinatura            LogAssinatura[]
   chamadosManutencaoCriados ChamadoManutencao[]           @relation("ChamadoCriadoPor")
   documentosTecnicosCriados DocumentoTecnicoAnexo[]        @relation("DocumentoTecnicoCriadoPor")
+  configuracoesModuloAtualizadas ModuloConfiguracao[]      @relation("ModuloConfiguracaoAtualizadoPor")
 
   @@index([perfil, status, isDevDefinitivo])
   @@map("usuario")
@@ -836,7 +837,8 @@ model ChamadoManutencao {
 
 model DocumentoTecnicoAnexo {
   id                  Int             @id @default(autoincrement())
-  modulo              ModuloDocumento
+  modulo              ModuloDocumento?
+  todosModulos        Boolean         @default(false)
   tipo                DocumentoTipo
   nome                String
   legislacaoResumo    String?         @db.Text
@@ -854,8 +856,22 @@ model DocumentoTecnicoAnexo {
   atualizadoEm        DateTime        @updatedAt
 
   @@index([modulo, tipo, ativo])
+  @@index([todosModulos, ativo])
   @@index([tipo, ativo])
   @@index([dataValidade])
   @@index([criadoPorUsuarioId])
   @@map("documento_tecnico_anexo")
+}
+
+model ModuloConfiguracao {
+  id                     Int              @id @default(autoincrement())
+  modulo                 ModuloDocumento  @unique
+  textoCabecalho         String?          @db.Text
+  atualizadoPorUsuarioId Int?
+  atualizadoPor          Usuario?         @relation("ModuloConfiguracaoAtualizadoPor", fields: [atualizadoPorUsuarioId], references: [id], onDelete: SetNull)
+  criadoEm               DateTime         @default(now())
+  atualizadoEm           DateTime         @updatedAt
+
+  @@index([atualizadoPorUsuarioId])
+  @@map("modulo_configuracao")
 }

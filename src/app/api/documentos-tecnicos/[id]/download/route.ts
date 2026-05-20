@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   buildDownloadFileName,
-  canAccessDocumentoModulo
+  canAccessDocumentoTecnico
 } from "@/lib/documentos-tecnicos";
 import { prisma } from "@/lib/prisma";
 import { canManageTechnicalDocuments } from "@/lib/rbac";
@@ -43,6 +43,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     where: { id },
     select: {
       modulo: true,
+      todosModulos: true,
       ativo: true,
       arquivoNome: true,
       arquivoMimeType: true,
@@ -55,7 +56,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   const canManage = canManageTechnicalDocuments(user.perfil);
-  if (!canAccessDocumentoModulo(user.perfil, documento.modulo)) {
+  if (
+    !canAccessDocumentoTecnico({
+      role: user.perfil,
+      modulo: documento.modulo,
+      todosModulos: documento.todosModulos
+    })
+  ) {
     return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
   }
 

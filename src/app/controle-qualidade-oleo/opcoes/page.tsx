@@ -1,6 +1,7 @@
-import { StatusQualidadeOleo } from "@prisma/client";
+import { ModuloDocumento, StatusQualidadeOleo } from "@prisma/client";
 import Link from "next/link";
 
+import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -68,6 +69,11 @@ export default async function ControleQualidadeOleoOpcoesPage({ searchParams }: 
           {feedback}
         </section>
       ) : null}
+
+      <ModuleHeaderTextSettings
+        modulo={ModuloDocumento.CONTROLE_QUALIDADE_OLEO}
+        returnTo={PAGE_PATH}
+      />
 
       <section className={CARD_CLASS}>
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nova Opção</h2>

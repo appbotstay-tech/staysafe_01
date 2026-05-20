@@ -89,13 +89,15 @@ function sanitizeText(value: string, maxLength = 1000): string | null {
 }
 
 function getDocumentoPayload(formData: FormData) {
-  const modulo = parseModuloDocumento(getInputValue(formData, "modulo"));
+  const aplicacaoDocumento = getInputValue(formData, "aplicacaoDocumento");
+  const todosModulos = aplicacaoDocumento === "TODOS_MODULOS";
+  const modulo = todosModulos ? null : parseModuloDocumento(getInputValue(formData, "modulo"));
   const tipo = parseDocumentoTipo(getInputValue(formData, "tipo"));
   const nome = sanitizeText(getInputValue(formData, "nome"), 180);
   const observacoes = sanitizeText(getInputValue(formData, "observacoes"), 2000);
   const ativo = getInputValue(formData, "ativo") !== "false";
 
-  if (!modulo) {
+  if (!todosModulos && !modulo) {
     throw new Error("Selecione um módulo relacionado válido.");
   }
 
@@ -129,6 +131,7 @@ function getDocumentoPayload(formData: FormData) {
 
   return {
     modulo,
+    todosModulos,
     tipo,
     nome,
     legislacaoResumo,

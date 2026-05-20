@@ -1,10 +1,12 @@
 import {
   CategoriaEquipamentoTemperatura,
+  ModuloDocumento,
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento
 } from "@prisma/client";
 import Link from "next/link";
 
+import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -117,6 +119,11 @@ export default async function ControleTemperaturaOpcoesPage({
           Nenhuma categoria de temperatura foi cadastrada ainda. Execute o seed do Prisma para carregar os parâmetros iniciais ou ajuste a base antes de usar este módulo.
         </section>
       ) : null}
+
+      <ModuleHeaderTextSettings
+        modulo={ModuloDocumento.CONTROLE_TEMPERATURA}
+        returnTo={PAGE_PATH}
+      />
 
       <section className={CARD_CLASS}>
         <div className="grid gap-4 lg:grid-cols-2">

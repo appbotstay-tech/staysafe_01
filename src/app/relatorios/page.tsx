@@ -1,9 +1,14 @@
 ﻿import { redirect } from "next/navigation";
 
+import { ModuloDocumento } from "@prisma/client";
+import Link from "next/link";
+
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDateTime } from "@/lib/date-time";
-import { canAccessReports } from "@/lib/rbac";
+import { prisma } from "@/lib/prisma";
+import { canAccessReports, canManageModuleOptions } from "@/lib/rbac";
 
+import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 import { ReportActions } from "./components/report-actions";
 import { ReportControls } from "./components/report-controls";
 import { getReportDefinition, getReportModule } from "./report-definitions";
@@ -143,25 +148,47 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const selectedModule = getReportModule(moduleParam);
   const selectedReport = getReportDefinition(selectedModule.id, reportParam);
   const generated = firstParam(params.generated) === "1";
+  const podeGerenciarOpcoes = canManageModuleOptions(user.perfil);
   const initialFilters = buildInitialFilters(params);
-  const report = generated
-    ? await generateReport({
-        moduleId: selectedModule.id,
-        reportId: selectedReport.id,
-        searchParams: params,
-        user
-      })
-    : null;
+  const [report, configuracaoCabecalho] = await Promise.all([
+    generated
+      ? generateReport({
+          moduleId: selectedModule.id,
+          reportId: selectedReport.id,
+          searchParams: params,
+          user
+        })
+      : Promise.resolve(null),
+    prisma.moduloConfiguracao.findUnique({
+      where: { modulo: ModuloDocumento.RELATORIOS_AUDITORIA },
+      select: { textoCabecalho: true }
+    })
+  ]);
+  const textoCabecalho = configuracaoCabecalho?.textoCabecalho?.trim() ?? "";
 
   return (
     <div className="space-y-6 dark:text-slate-100">
       <section className="bpma-card print:hidden">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-          Relatórios e Auditoria
-        </h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Selecione o módulo, escolha o relatório, aplique apenas os filtros compatíveis e gere a visão de auditoria.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+              Relatórios e Auditoria
+            </h1>
+            {textoCabecalho ? (
+              <p className="mt-2 max-w-3xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
+                {textoCabecalho}
+              </p>
+            ) : null}
+          </div>
+          <div className="btn-group">
+            {podeGerenciarOpcoes ? (
+              <Link href="/relatorios/opcoes" className="btn-secondary">
+                Gerenciar Opções
+              </Link>
+            ) : null}
+            <ThemeToggleButton />
+          </div>
+        </div>
       </section>
 
       <ReportControls

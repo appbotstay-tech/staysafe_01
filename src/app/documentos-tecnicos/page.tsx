@@ -8,6 +8,7 @@ import {
   DOCUMENTO_MODULO_OPTIONS,
   DOCUMENTO_TIPO_OPTIONS,
   formatFileSize,
+  getDocumentoAplicacaoLabel,
   getDocumentoModuloLabel,
   getDocumentoTipoClass,
   getDocumentoTipoLabel,
@@ -30,6 +31,7 @@ import {
   canManageTechnicalDocuments
 } from "@/lib/rbac";
 
+import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 import {
   createDocumentoAction,
   deleteDocumentoAction,
@@ -76,6 +78,12 @@ function parseValidadeFilter(value: string): LaudoValidityStatus | null {
   if (value === "VALIDO") return "VALIDO";
   if (value === "PROXIMO_VENCIMENTO") return "PROXIMO_VENCIMENTO";
   if (value === "VENCIDO") return "VENCIDO";
+  return null;
+}
+
+function parseAplicacaoFilter(value: string): "MODULO_ESPECIFICO" | "TODOS_MODULOS" | null {
+  if (value === "MODULO_ESPECIFICO") return "MODULO_ESPECIFICO";
+  if (value === "TODOS_MODULOS") return "TODOS_MODULOS";
   return null;
 }
 
@@ -136,14 +144,20 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const filtroModulo = parseModuloDocumento(firstParam(params.filtroModulo).trim());
+  const filtroAplicacao = parseAplicacaoFilter(firstParam(params.filtroAplicacao).trim());
   const filtroTipo = parseDocumentoTipo(firstParam(params.filtroTipo).trim());
   const filtroAtivo = parseAtivoFilter(firstParam(params.filtroAtivo).trim());
   const filtroValidade = parseValidadeFilter(firstParam(params.filtroValidade).trim());
   const filtroBusca = firstParam(params.filtroBusca).trim();
 
   const where: Prisma.DocumentoTecnicoAnexoWhereInput = {};
-  if (filtroModulo) {
+  if (filtroModulo && filtroAplicacao !== "TODOS_MODULOS") {
     where.modulo = filtroModulo;
+  }
+  if (filtroAplicacao === "MODULO_ESPECIFICO") {
+    where.todosModulos = false;
+  } else if (filtroAplicacao === "TODOS_MODULOS") {
+    where.todosModulos = true;
   }
   if (filtroTipo) {
     where.tipo = filtroTipo;
@@ -193,12 +207,20 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
     canManage && deleteId
       ? await prisma.documentoTecnicoAnexo.findUnique({
           where: { id: deleteId },
-          select: { id: true, nome: true, modulo: true, tipo: true, ativo: true }
+          select: {
+            id: true,
+            nome: true,
+            modulo: true,
+            todosModulos: true,
+            tipo: true,
+            ativo: true
+          }
         })
       : null;
 
   const paramsRetorno = new URLSearchParams();
   if (filtroModulo) paramsRetorno.set("filtroModulo", filtroModulo);
+  if (filtroAplicacao) paramsRetorno.set("filtroAplicacao", filtroAplicacao);
   if (filtroTipo) paramsRetorno.set("filtroTipo", filtroTipo);
   if (canManage && filtroAtivo !== null) paramsRetorno.set("filtroAtivo", String(filtroAtivo));
   if (filtroValidade) paramsRetorno.set("filtroValidade", filtroValidade);
@@ -240,11 +262,9 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
               Gestão de PDFs técnicos, legais e operacionais vinculados aos módulos do BPMA.
             </p>
           </div>
-          {canManage ? (
-            <Link href={hrefNovoDocumento} className="btn-primary">
-              Novo Documento
-            </Link>
-          ) : null}
+          <div className="btn-group">
+            <ThemeToggleButton />
+          </div>
         </div>
       </section>
 
@@ -304,7 +324,8 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
                     <input type="hidden" name="id" value={documentoEmEdicao.id} />
                   ) : null}
                   <DocumentoFormFields
-                    defaultModulo={documentoEmEdicao?.modulo}
+                    defaultModulo={documentoEmEdicao?.modulo ?? undefined}
+                    defaultTodosModulos={documentoEmEdicao?.todosModulos ?? false}
                     defaultTipo={documentoEmEdicao?.tipo}
                     defaultNome={documentoEmEdicao?.nome ?? ""}
                     defaultLegislacaoResumo={documentoEmEdicao?.legislacaoResumo ?? ""}
@@ -343,7 +364,19 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
           Documentos Cadastrados
         </h2>
 
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-5 dark:bg-slate-800">
+        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Aplicação
+            <select
+              name="filtroAplicacao"
+              defaultValue={filtroAplicacao ?? ""}
+              className="bpma-input"
+            >
+              <option value="">Todas</option>
+              <option value="MODULO_ESPECIFICO">Módulo específico</option>
+              <option value="TODOS_MODULOS">Todos os módulos</option>
+            </select>
+          </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Módulo
             <select name="filtroModulo" defaultValue={filtroModulo ?? ""} className="bpma-input">
@@ -402,7 +435,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
               className="bpma-input"
             />
           </label>
-          <div className="btn-group md:col-span-5">
+          <div className="btn-group md:col-span-6">
             <button type="submit" className="btn-primary">
               Aplicar Filtros
             </button>
@@ -443,7 +476,10 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
                     {documento.nome}
                   </h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {getDocumentoModuloLabel(documento.modulo)}
+                    {getDocumentoAplicacaoLabel({
+                      todosModulos: documento.todosModulos,
+                      modulo: documento.modulo
+                    })}
                   </p>
                   {documento.dataEmissao || documento.dataValidade ? (
                     <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
@@ -495,6 +531,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
                 <th className="px-3 py-2">Nome</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Módulo</th>
+                <th className="px-3 py-2">Aplicação</th>
                 <th className="px-3 py-2">Emissão</th>
                 <th className="px-3 py-2">Validade</th>
                 <th className="px-3 py-2">Status</th>
@@ -507,7 +544,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {documentos.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={11} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum documento encontrado.
                   </td>
                 </tr>
@@ -539,7 +576,12 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
                       <td className="px-3 py-2">
                         <TipoDocumentoBadge tipo={documento.tipo} />
                       </td>
-                      <td className="px-3 py-2">{getDocumentoModuloLabel(documento.modulo)}</td>
+                      <td className="px-3 py-2">
+                        {documento.modulo ? getDocumentoModuloLabel(documento.modulo) : "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {documento.todosModulos ? "Todos os módulos" : "Módulo específico"}
+                      </td>
                       <td className="px-3 py-2">
                         {documento.dataEmissao ? formatAppDate(documento.dataEmissao) : "-"}
                       </td>
@@ -606,7 +648,10 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
           description={
             <p>
               Documento: <strong>{documentoParaExcluir.nome}</strong> em{" "}
-              {getDocumentoModuloLabel(documentoParaExcluir.modulo)}.
+              {getDocumentoAplicacaoLabel({
+                todosModulos: documentoParaExcluir.todosModulos,
+                modulo: documentoParaExcluir.modulo
+              })}.
             </p>
           }
         >
