@@ -185,6 +185,25 @@ enum StatusChamadoManutencao {
   CANCELADO
 }
 
+enum DocumentoTipo {
+  LEGISLACAO
+  LAUDO
+  POP_MANUAL
+}
+
+enum ModuloDocumento {
+  DASHBOARD_RESUMO_BPMA
+  HIGIENIZACAO_HORTIFRUTI
+  CONTROLE_TEMPERATURA
+  CONTROLE_QUALIDADE_OLEO
+  RASTREABILIDADE_RECEBIMENTO
+  CONTROLE_BUFFET_AMOSTRAS
+  PLANO_LIMPEZA_DIARIO
+  PLANO_LIMPEZA_SEMANAL
+  CHAMADOS_MANUTENCAO
+  RELATORIOS_AUDITORIA
+}
+
 model Usuario {
   id                        Int                           @id @default(autoincrement())
   nomeCompleto              String
@@ -205,6 +224,7 @@ model Usuario {
   solicitacoesTratadas      SolicitacaoRedefinicaoSenha[] @relation("SolicitacaoTratadaPor")
   logsAssinatura            LogAssinatura[]
   chamadosManutencaoCriados ChamadoManutencao[]           @relation("ChamadoCriadoPor")
+  documentosTecnicosCriados DocumentoTecnicoAnexo[]        @relation("DocumentoTecnicoCriadoPor")
 
   @@index([perfil, status, isDevDefinitivo])
   @@map("usuario")
@@ -812,4 +832,30 @@ model ChamadoManutencao {
   @@index([areaLocal])
   @@index([criadoPorId])
   @@map("chamado_manutencao")
+}
+
+model DocumentoTecnicoAnexo {
+  id                  Int             @id @default(autoincrement())
+  modulo              ModuloDocumento
+  tipo                DocumentoTipo
+  nome                String
+  legislacaoResumo    String?         @db.Text
+  dataEmissao         DateTime?       @db.Date
+  dataValidade        DateTime?       @db.Date
+  observacoes         String?         @db.Text
+  arquivoNome         String
+  arquivoMimeType     String
+  arquivoTamanho      Int
+  arquivoConteudo     Bytes
+  ativo               Boolean         @default(true)
+  criadoPorUsuarioId  Int
+  criadoPor           Usuario         @relation("DocumentoTecnicoCriadoPor", fields: [criadoPorUsuarioId], references: [id], onDelete: Restrict)
+  criadoEm            DateTime        @default(now())
+  atualizadoEm        DateTime        @updatedAt
+
+  @@index([modulo, tipo, ativo])
+  @@index([tipo, ativo])
+  @@index([dataValidade])
+  @@index([criadoPorUsuarioId])
+  @@map("documento_tecnico_anexo")
 }

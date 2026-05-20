@@ -1,0 +1,234 @@
+import { DocumentoTipo, ModuloDocumento } from "@prisma/client";
+import Link from "next/link";
+import type { ReactNode } from "react";
+
+import { ActionModal } from "@/components/ui/action-modal";
+import {
+  getDocumentoTipoClass,
+  getDocumentoTipoLabel,
+  getLaudoValidityClass,
+  getLaudoValidityLabel,
+  getLaudoValidityStatus
+} from "@/lib/documentos-tecnicos";
+import { formatAppDate } from "@/lib/date-time";
+import { prisma } from "@/lib/prisma";
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+type DocumentosModuleHeaderProps = {
+  title: string;
+  description?: string;
+  modulo: ModuloDocumento;
+  modulePath: string;
+  searchParams: SearchParams;
+  actions?: ReactNode;
+};
+
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function buildPathWithParams(modulePath: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${modulePath}?${query}` : modulePath;
+}
+
+function buildHeaderHref(
+  modulePath: string,
+  searchParams: SearchParams,
+  open: boolean
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (!value || key === "documentos") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        params.append(key, item);
+      }
+    } else {
+      params.set(key, value);
+    }
+  }
+
+  if (open) {
+    params.set("documentos", "1");
+  }
+
+  return buildPathWithParams(modulePath, params);
+}
+
+function TipoBadge({ tipo }: { tipo: DocumentoTipo }) {
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getDocumentoTipoClass(
+        tipo
+      )}`}
+    >
+      {getDocumentoTipoLabel(tipo)}
+    </span>
+  );
+}
+
+function LaudoStatusBadge({ dataValidade }: { dataValidade: Date | null }) {
+  if (!dataValidade) {
+    return null;
+  }
+
+  const status = getLaudoValidityStatus(dataValidade);
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getLaudoValidityClass(
+        status
+      )}`}
+    >
+      {getLaudoValidityLabel(status)}
+    </span>
+  );
+}
+
+export async function DocumentosModuleHeader({
+  title,
+  description,
+  modulo,
+  modulePath,
+  searchParams,
+  actions
+}: DocumentosModuleHeaderProps) {
+  const modalAberto = firstParam(searchParams.documentos) === "1";
+  const anexosHref = buildHeaderHref(modulePath, searchParams, true);
+  const fecharHref = buildHeaderHref(modulePath, searchParams, false);
+
+  const documentos = await prisma.documentoTecnicoAnexo.findMany({
+    where: {
+      modulo,
+      ativo: true
+    },
+    select: {
+      id: true,
+      tipo: true,
+      nome: true,
+      legislacaoResumo: true,
+      dataEmissao: true,
+      dataValidade: true,
+      observacoes: true,
+      criadoEm: true
+    },
+    orderBy: [{ tipo: "asc" }, { criadoEm: "desc" }, { id: "desc" }]
+  });
+
+  const legislacaoPrincipal =
+    documentos.find((documento) => documento.tipo === DocumentoTipo.LEGISLACAO) ?? null;
+  const legislacaoTexto = legislacaoPrincipal?.legislacaoResumo?.trim()
+    ? `${legislacaoPrincipal.nome} - ${legislacaoPrincipal.legislacaoResumo.trim()}`
+    : null;
+  const documentosPorTipo = DOCUMENTO_TIPO_ORDER.map((tipo) => ({
+    tipo,
+    documentos: documentos.filter((documento) => documento.tipo === tipo)
+  })).filter((group) => group.documentos.length > 0);
+
+  return (
+    <>
+      <section className="bpma-card">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {description}
+              </p>
+            ) : null}
+            {legislacaoTexto ? (
+              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  Legislação/Referência:
+                </span>{" "}
+                {legislacaoTexto}
+              </p>
+            ) : null}
+          </div>
+          <div className="btn-group">
+            <Link href={anexosHref} className="btn-secondary">
+              Anexos
+            </Link>
+            {actions}
+          </div>
+        </div>
+      </section>
+
+      {modalAberto ? (
+        <ActionModal
+          title="Anexos"
+          cancelHref={fecharHref}
+          maxWidthClassName="max-w-4xl"
+          description={`Documentos técnicos ativos vinculados a ${title}.`}
+        >
+          {documentos.length === 0 ? (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Nenhum documento ativo vinculado a este módulo.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {documentosPorTipo.map((group) => (
+                <section key={group.tipo} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {getDocumentoTipoLabel(group.tipo)}
+                  </h3>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {group.documentos.map((documento) => (
+                      <article
+                        key={documento.id}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          <TipoBadge tipo={documento.tipo} />
+                          {documento.tipo === DocumentoTipo.LAUDO ? (
+                            <LaudoStatusBadge dataValidade={documento.dataValidade} />
+                          ) : null}
+                        </div>
+                        <p className="mt-2 font-medium text-slate-900 dark:text-slate-100">
+                          {documento.nome}
+                        </p>
+                        {documento.tipo === DocumentoTipo.LAUDO ? (
+                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                            Emissão: {documento.dataEmissao ? formatAppDate(documento.dataEmissao) : "-"}
+                            {" • "}
+                            Validade: {documento.dataValidade ? formatAppDate(documento.dataValidade) : "-"}
+                          </p>
+                        ) : null}
+                        {documento.observacoes ? (
+                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                            {documento.observacoes}
+                          </p>
+                        ) : null}
+                        <div className="mt-3">
+                          <a
+                            href={`/api/documentos-tecnicos/${documento.id}/download`}
+                            className="btn-action"
+                          >
+                            Baixar PDF
+                          </a>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </ActionModal>
+      ) : null}
+    </>
+  );
+}
+
+const DOCUMENTO_TIPO_ORDER = [
+  DocumentoTipo.LEGISLACAO,
+  DocumentoTipo.LAUDO,
+  DocumentoTipo.POP_MANUAL
+];

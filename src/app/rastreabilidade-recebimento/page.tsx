@@ -1,4 +1,5 @@
 import {
+  ModuloDocumento,
   Prisma,
   StatusFechamentoRastreabilidadeRecebimento,
   StatusNotaRecebimento
@@ -6,6 +7,7 @@ import {
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
@@ -253,17 +255,14 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
 
   return (
     <div className="space-y-6 dark:text-slate-100">
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Rastreabilidade de Recebimento de Alimentos Perecíveis e Não Perecíveis
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Registro diário do recebimento de mercadorias
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Rastreabilidade de Recebimento de Alimentos Perecíveis e Não Perecíveis"
+        description="Registro diário do recebimento de mercadorias"
+        modulo={ModuloDocumento.RASTREABILIDADE_RECEBIMENTO}
+        modulePath={MODULE_PATH}
+        searchParams={params}
+        actions={
+          <>
             {podeVerGestao ? (
               <Link href="/rastreabilidade-recebimento/historico" className="btn-secondary">
                 Histórico Completo
@@ -278,9 +277,9 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
               Abrir Chamado de Manutenção
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section

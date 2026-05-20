@@ -1,7 +1,12 @@
-import { StatusFechamentoBuffetAmostra, StatusItemBuffetAmostra } from "@prisma/client";
+import {
+  ModuloDocumento,
+  StatusFechamentoBuffetAmostra,
+  StatusItemBuffetAmostra
+} from "@prisma/client";
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -204,17 +209,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
 
   return (
     <div className="space-y-6 dark:text-slate-100">
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Controle de Buffet / Amostras
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Controle diário de temperatura e amostras dos serviços
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Controle de Buffet / Amostras"
+        description="Controle diário de temperatura e amostras dos serviços"
+        modulo={ModuloDocumento.CONTROLE_BUFFET_AMOSTRAS}
+        modulePath={MODULE_PATH}
+        searchParams={params}
+        actions={
+          <>
             {podeVerGestao ? (
               <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
                 Histórico Completo
@@ -232,9 +234,9 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
               Abrir Chamado de Manutenção
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section

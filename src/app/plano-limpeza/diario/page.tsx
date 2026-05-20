@@ -1,7 +1,13 @@
-import { Prisma, StatusFechamentoPlanoLimpeza, TipoPlanoLimpeza } from "@prisma/client";
+import {
+  ModuloDocumento,
+  Prisma,
+  StatusFechamentoPlanoLimpeza,
+  TipoPlanoLimpeza
+} from "@prisma/client";
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -243,17 +249,14 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
     <div className="space-y-6 dark:text-slate-100">
       <DailyChecklistSync date={syncDate} enabled={areaConfigs.length > 0} />
 
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Plano de Limpeza Diário
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Checklist diário automático por área e turno configurados.
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Plano de Limpeza Diário"
+        description="Checklist diário automático por área e turno configurados."
+        modulo={ModuloDocumento.PLANO_LIMPEZA_DIARIO}
+        modulePath={PAGE_PATH}
+        searchParams={params}
+        actions={
+          <>
             <Link href="/plano-limpeza" className="btn-secondary">
               Voltar para Módulo
             </Link>
@@ -271,9 +274,9 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
               Abrir Chamado de Manutenção
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section

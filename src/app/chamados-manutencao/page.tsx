@@ -1,4 +1,5 @@
 import {
+  ModuloDocumento,
   OrigemChamadoManutencao,
   Prisma,
   StatusChamadoManutencao
@@ -6,6 +7,7 @@ import {
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
@@ -141,24 +143,21 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
 
   return (
     <div className="space-y-6 dark:text-slate-100">
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Chamados de Manutenção
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Registro e acompanhamento de ocorrências de manutenção.
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Chamados de Manutenção"
+        description="Registro e acompanhamento de ocorrências de manutenção."
+        modulo={ModuloDocumento.CHAMADOS_MANUTENCAO}
+        modulePath={PAGE_PATH}
+        searchParams={params}
+        actions={
+          <>
             <Link href="/" className="btn-secondary">
               Voltar para Início
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section

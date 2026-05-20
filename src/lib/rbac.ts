@@ -23,9 +23,9 @@ export function getRoleLabel(role: UserRole): string {
 }
 
 const MODULE_ACCESS: Record<UserRole, string[]> = {
-  DEV: [...OPERATIONAL_MODULES, "/relatorios"],
-  GERENTE: [...OPERATIONAL_MODULES, "/relatorios"],
-  NUTRICIONISTA: [...OPERATIONAL_MODULES, "/relatorios"],
+  DEV: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
+  GERENTE: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
+  NUTRICIONISTA: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
   COLABORADOR: OPERATIONAL_MODULES
 };
 
@@ -55,6 +55,14 @@ export function canViewManagementSections(role: UserRole): boolean {
 
 export function canAccessReports(role: UserRole): boolean {
   return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
+}
+
+export function canAccessTechnicalDocuments(role: UserRole): boolean {
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
+}
+
+export function canManageTechnicalDocuments(role: UserRole): boolean {
+  return role === "DEV" || role === "GERENTE";
 }
 
 export function canDeleteOperationalRecords(role: UserRole): boolean {
@@ -120,6 +128,10 @@ export function canAccessPath(role: UserRole, pathname: string): boolean {
 
   if (pathname.startsWith("/relatorios")) {
     return canAccessReports(role);
+  }
+
+  if (pathname.startsWith("/documentos-tecnicos")) {
+    return canAccessTechnicalDocuments(role);
   }
 
   if (pathname.includes("/opcoes")) {

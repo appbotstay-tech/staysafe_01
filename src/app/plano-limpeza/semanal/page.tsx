@@ -1,4 +1,5 @@
 import {
+  ModuloDocumento,
   Prisma,
   StatusFechamentoPlanoLimpeza,
   StatusPlanoLimpeza,
@@ -7,6 +8,7 @@ import {
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -535,17 +537,14 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         enabled={activeItems.length > 0 && Boolean(syncStart && syncEnd)}
       />
 
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Plano de Limpeza Semanal
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Execução semanal por área com detalhamento interno dos itens configurados.
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Plano de Limpeza Semanal"
+        description="Execução semanal por área com detalhamento interno dos itens configurados."
+        modulo={ModuloDocumento.PLANO_LIMPEZA_SEMANAL}
+        modulePath={PAGE_PATH}
+        searchParams={params}
+        actions={
+          <>
             <Link href="/plano-limpeza" className="btn-secondary">
               Voltar para Módulo
             </Link>
@@ -563,9 +562,9 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               Abrir Chamado de Manutenção
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section

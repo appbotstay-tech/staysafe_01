@@ -9,6 +9,7 @@ import {
   canAccessReports,
   canDeleteOperationalRecords,
   canManageModuleOptions,
+  canManageTechnicalDocuments,
   canManageUsers,
   canOpenMaintenanceTicket,
   canReopenMonth,
@@ -42,6 +43,12 @@ export function ensureCanAccessReports(role: UserRole) {
 export function ensureCanManageOptions(role: UserRole) {
   if (!canManageModuleOptions(role)) {
     throw new Error("Você não tem permissão para gerenciar opções.");
+  }
+}
+
+export function ensureCanManageTechnicalDocuments(role: UserRole) {
+  if (!canManageTechnicalDocuments(role)) {
+    throw new Error("Você não tem permissão para gerenciar anexos e documentos técnicos.");
   }
 }
 

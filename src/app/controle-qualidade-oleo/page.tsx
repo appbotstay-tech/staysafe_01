@@ -1,4 +1,5 @@
 import {
+  ModuloDocumento,
   Prisma,
   StatusFechamentoQualidadeOleo,
   StatusQualidadeOleo
@@ -6,6 +7,7 @@ import {
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
@@ -329,17 +331,14 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
 
   return (
     <div className="space-y-6 dark:text-slate-100">
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Controle de Qualidade do Óleo
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Registro diário da qualidade do óleo de fritura
-            </p>
-          </div>
-          <div className="btn-group">
+      <DocumentosModuleHeader
+        title="Controle de Qualidade do Óleo"
+        description="Registro diário da qualidade do óleo de fritura"
+        modulo={ModuloDocumento.CONTROLE_QUALIDADE_OLEO}
+        modulePath={MODULE_PATH}
+        searchParams={params}
+        actions={
+          <>
             {podeVerGestao ? (
               <Link href="/controle-qualidade-oleo/historico" className="btn-secondary">
                 Histórico Completo
@@ -354,9 +353,9 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
               Abrir Chamado de Manutenção
             </Link>
             <ThemeToggleButton />
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {feedback ? (
         <section
