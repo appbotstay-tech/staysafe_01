@@ -289,7 +289,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
                   {documentoEmEdicao ? "Editar Documento" : "Cadastro de Documento"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Cadastre legislação, laudos ou POP/manuais em PDF.
+                  Cadastre legislação, Docs. e Laudos ou POP/manuais em PDF.
                 </p>
               </div>
               {mostrarFormulario ? (
@@ -414,7 +414,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
             </label>
           ) : null}
           <label className="text-sm text-slate-700 dark:text-slate-200">
-            Validade do laudo
+            Validade
             <select
               name="filtroValidade"
               defaultValue={filtroValidade ?? ""}
@@ -422,7 +422,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
             >
               <option value="">Todos</option>
               <option value="VALIDO">Válido</option>
-              <option value="PROXIMO_VENCIMENTO">Próximo do vencimento</option>
+              <option value="PROXIMO_VENCIMENTO">Próximo ao Vencimento</option>
               <option value="VENCIDO">Vencido</option>
             </select>
           </label>

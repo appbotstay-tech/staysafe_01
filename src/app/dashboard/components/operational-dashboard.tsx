@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { ThemeToggleButton } from "@/app/plano-limpeza/theme-toggle-button";
-
 import type {
   DashboardData,
   DashboardDetailItem,
@@ -15,13 +13,6 @@ import type {
   DashboardPeriod,
   DashboardSummaryCard
 } from "../types";
-
-const PERIOD_OPTIONS: Array<{ value: DashboardPeriod; label: string }> = [
-  { value: "hoje", label: "Hoje" },
-  { value: "semana", label: "Semana Atual" },
-  { value: "mes", label: "Mês Atual" },
-  { value: "personalizado", label: "Data personalizada" }
-];
 
 const MAIN_CARD_IDS = new Set(["diarias", "semanais", "mensal", "chamados"]);
 const CLEANING_MODULE_IDS = new Set(["limpeza-diaria", "limpeza-semanal"]);
@@ -82,17 +73,6 @@ function detailCacheKey(
   return `${period}:${startDate ?? ""}:${endDate ?? ""}:${cardId}:${kind}`;
 }
 
-function dashboardPeriodHref(period: DashboardPeriod, data: DashboardData): string {
-  const params = new URLSearchParams({ period });
-
-  if (period === "personalizado") {
-    if (data.customStartDate) params.set("startDate", data.customStartDate);
-    if (data.customEndDate) params.set("endDate", data.customEndDate);
-  }
-
-  return `/?${params.toString()}`;
-}
-
 function appendCustomRangeParams(query: URLSearchParams, data: DashboardData): void {
   if (data.period !== "personalizado") {
     return;
@@ -100,6 +80,52 @@ function appendCustomRangeParams(query: URLSearchParams, data: DashboardData): v
 
   if (data.customStartDate) query.set("startDate", data.customStartDate);
   if (data.customEndDate) query.set("endDate", data.customEndDate);
+}
+
+function CompletionDonut({
+  completed,
+  pending,
+  percentCompleted
+}: {
+  completed: number;
+  pending: number;
+  percentCompleted: number;
+}) {
+  const hasData = completed + pending > 0;
+  const completedDegrees = hasData ? Math.min(360, Math.max(0, percentCompleted * 3.6)) : 0;
+  const chartBackground = hasData
+    ? `conic-gradient(#10b981 0deg ${completedDegrees}deg, #f59e0b ${completedDegrees}deg 360deg)`
+    : "conic-gradient(#cbd5e1 0deg 360deg)";
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-2">
+      <div
+        className="relative grid h-24 w-24 place-items-center rounded-full sm:h-28 sm:w-28"
+        style={{ background: chartBackground }}
+        aria-label={`${percentCompleted}% concluído, ${completed} concluídas e ${pending} pendentes`}
+      >
+        <div className="absolute inset-[10px] rounded-full bg-white dark:bg-slate-900" />
+        <div className="relative text-center">
+          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {percentCompleted}%
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            concluído
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          Concluídas
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-amber-500" />
+          Pendentes
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function calculatePercent(value: number, total: number): number {
@@ -390,23 +416,27 @@ function SummaryCard({
         ) : null}
       </div>
 
-      <div>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-              {card.percentCompleted}%
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CompletionDonut
+          completed={card.completed}
+          pending={card.pending}
+          percentCompleted={card.percentCompleted}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                {card.percentCompleted}%
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">concluídas</p>
+            </div>
+            <p className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
+              {card.completed} de {card.total}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">concluídas</p>
           </div>
-          <p className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
-            {card.completed} de {card.total}
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            {card.completed} concluídas | {card.pending} pendentes
           </p>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-          <div
-            className="h-full rounded-full bg-emerald-500"
-            style={{ width: `${card.percentCompleted}%` }}
-          />
         </div>
       </div>
 
@@ -586,68 +616,6 @@ export function OperationalDashboard({ data }: OperationalDashboardProps) {
 
   return (
     <div className="space-y-5 dark:text-slate-100">
-      <section className="bpma-card-compact">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              Resumo BPMA
-            </h1>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              {data.periodLabel} | Atualizado em {data.generatedAt}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:items-end">
-            <div className="flex flex-wrap gap-2">
-              {PERIOD_OPTIONS.map((option) => (
-                <Link
-                  key={option.value}
-                  href={dashboardPeriodHref(option.value, data)}
-                  className={data.period === option.value ? "btn-primary" : "btn-secondary"}
-                >
-                  {option.label}
-                </Link>
-              ))}
-              <ThemeToggleButton />
-            </div>
-
-            {data.period === "personalizado" ? (
-              <form method="get" className="grid w-full gap-2 sm:w-auto sm:grid-cols-[1fr_1fr_auto]">
-                <input type="hidden" name="period" value="personalizado" />
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Data inicial
-                  <input
-                    type="date"
-                    name="startDate"
-                    defaultValue={data.customStartDate ?? ""}
-                    className="bpma-input mt-1"
-                  />
-                </label>
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Data final
-                  <input
-                    type="date"
-                    name="endDate"
-                    defaultValue={data.customEndDate ?? ""}
-                    className="bpma-input mt-1"
-                  />
-                </label>
-                <div className="sm:flex sm:items-end">
-                  <button type="submit" className="btn-primary w-full sm:w-auto">
-                    Aplicar
-                  </button>
-                </div>
-              </form>
-            ) : null}
-          </div>
-        </div>
-        {data.filterError ? (
-          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            {data.filterError}
-          </p>
-        ) : null}
-      </section>
-
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {mainCards.map((card) => (
           <SummaryCard

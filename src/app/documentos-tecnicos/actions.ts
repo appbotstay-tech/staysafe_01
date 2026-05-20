@@ -125,7 +125,7 @@ function getDocumentoPayload(formData: FormData) {
     dataValidade = parseAppDateInput(getInputValue(formData, "dataValidade"));
 
     if (!dataEmissao || !dataValidade) {
-      throw new Error("Informe a data de emissão e a data de validade do laudo.");
+      throw new Error("Informe a data de emissão e a data de validade do documento.");
     }
   }
 

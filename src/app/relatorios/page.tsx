@@ -175,9 +175,14 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
               Relatórios e Auditoria
             </h1>
             {textoCabecalho ? (
-              <p className="mt-2 max-w-3xl whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
-                {textoCabecalho}
-              </p>
+              <div className="mt-3 max-w-4xl rounded-lg border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:border-l-amber-400 dark:bg-amber-950/60">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                  Orientação
+                </p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-6 text-amber-900 dark:text-amber-100">
+                  {textoCabecalho}
+                </p>
+              </div>
             ) : null}
           </div>
           <div className="btn-group">
