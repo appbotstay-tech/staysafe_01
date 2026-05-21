@@ -16,7 +16,7 @@ import {
   ensureCanCloseMonth,
   ensureCanManageOptions,
   ensureCanReopenMonth,
-  ensureCanSignResponsible,
+  ensureCanSignSupervisor,
   validateSignaturePassword
 } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -38,6 +38,7 @@ import {
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
+  getTodaySystemDate,
   isServicoDisponivelNaData,
   parseDateInput,
   parsePositiveInt,
@@ -50,12 +51,16 @@ const SERVICE_PATH = "/controle-buffet-amostras/servico";
 const HISTORY_PATH = "/controle-buffet-amostras/historico";
 const OPTIONS_PATH = "/controle-buffet-amostras/opcoes";
 const NAO_SE_APLICA_NORMALIZED = normalizeOption("Não se aplica");
+const SELF_SUPERVISION_MESSAGE =
+  "Este registro foi executado por você. A assinatura de supervisor deve ser feita por outro usuário autorizado.";
 
 type FeedbackType = "success" | "error";
 type FormActionState = {
   status: "idle" | "success" | "error";
   message: string;
   invalidRowKey?: string;
+  servicoId?: number;
+  dataInput?: string;
 };
 
 const FORM_ACTION_INITIAL_STATE: FormActionState = {
@@ -66,7 +71,6 @@ const FORM_ACTION_INITIAL_STATE: FormActionState = {
 type RegistroTemperaturaInput = {
   tcEquipamentoInput: string;
   primeiraTcInput: string;
-  segundaTcInput: string;
   acaoCorretivaInput: string;
   observacao: string;
 };
@@ -231,6 +235,67 @@ function ensureServicoPrevistoNaData(
   }
 }
 
+export async function createServicoEsporadicoStateAction(
+  _previousState: FormActionState = FORM_ACTION_INITIAL_STATE,
+  formData: FormData
+): Promise<FormActionState> {
+  try {
+    await getCurrentUserForAction();
+
+    const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
+    const dataInput = getInputValue(formData, "data");
+    const observacao = getInputValue(formData, "observacao");
+    const data = dataInput ? parseDateInput(dataInput) : getTodaySystemDate();
+
+    if (!nome) {
+      throw new Error("Informe o nome do serviço esporádico.");
+    }
+
+    if (!data) {
+      throw new Error("Informe uma data válida para o serviço.");
+    }
+
+    await ensurePeriodIsOpen(data);
+
+    if (await hasServicoWithSameName(nome)) {
+      throw new Error(
+        "Já existe um serviço com este nome. Informe um nome específico para este evento."
+      );
+    }
+
+    const lastServico = await prisma.controleBuffetAmostraServico.findFirst({
+      orderBy: { ordem: "desc" },
+      select: { ordem: true }
+    });
+    const ordem = (lastServico?.ordem ?? 0) + 1;
+
+    const servico = await prisma.controleBuffetAmostraServico.create({
+      data: {
+        nome,
+        tipoServico: TipoServicoBuffetAmostra.ESPORADICO,
+        dataInicio: data,
+        dataFim: data,
+        observacao: observacao || null,
+        ativo: true,
+        ordem
+      }
+    });
+
+    revalidateModulePaths(servico.id);
+    return {
+      status: "success",
+      message: "Serviço esporádico criado.",
+      servicoId: servico.id,
+      dataInput: formatDateInput(data)
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: getErrorMessage(error, "Não foi possível criar o serviço esporádico.")
+    };
+  }
+}
+
 async function ensureAcoesCorretivasConfiguradas() {
   const options = await getAcoesCorretivas(true);
   if (options.length === 0) {
@@ -247,13 +312,12 @@ async function buildRegistroPayload(params: {
 }): Promise<RegistroItemPayload> {
   const tcEquipamento = parseTemperatureInput(params.input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(params.input.primeiraTcInput);
-  const segundaTc = parseTemperatureInput(params.input.segundaTcInput);
 
-  if (tcEquipamento === null || primeiraTc === null || segundaTc === null) {
-    throw new Error("Preencha TC Equipamento, 1ª TC e 2ª TC com valores válidos.");
+  if (tcEquipamento === null || primeiraTc === null) {
+    throw new Error("Preencha TC Equipamento e TC do Alimento com valores válidos.");
   }
 
-  const avaliacao = avaliarTemperaturaBuffet(params.item.classificacao, segundaTc);
+  const avaliacao = avaliarTemperaturaBuffet(params.item.classificacao, primeiraTc);
   const acaoCorretivaOption = params.input.acaoCorretivaInput
     ? await findAcaoCorretivaByName(params.input.acaoCorretivaInput, false)
     : null;
@@ -284,7 +348,7 @@ async function buildRegistroPayload(params: {
     classificacao: params.item.classificacao,
     tcEquipamento,
     primeiraTc,
-    segundaTc,
+    segundaTc: null,
     statusTemperatura: avaliacao.status,
     acaoCorretiva,
     observacao: params.input.observacao || null,
@@ -303,7 +367,6 @@ function getRegistroItemIssue(
   const values = [
     input.tcEquipamentoInput,
     input.primeiraTcInput,
-    input.segundaTcInput,
     input.acaoCorretivaInput,
     input.observacao
   ];
@@ -316,20 +379,15 @@ function getRegistroItemIssue(
   const missingFields: string[] = [];
   const tcEquipamento = parseTemperatureInput(input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(input.primeiraTcInput);
-  const segundaTc = parseTemperatureInput(input.segundaTcInput);
 
   if (tcEquipamento === null) {
     missingFields.push("TC Equipamento");
   }
 
   if (primeiraTc === null) {
-    missingFields.push("1ª TC");
-  }
-
-  if (segundaTc === null) {
-    missingFields.push("2ª TC");
+    missingFields.push("TC do Alimento");
   } else {
-    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, segundaTc);
+    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, primeiraTc);
     if (avaliacao.exigeAcaoCorretiva && !input.acaoCorretivaInput) {
       missingFields.push("ação corretiva");
     }
@@ -371,7 +429,6 @@ export async function saveRegistroItemAction(formData: FormData) {
     const dataInput = getInputValue(formData, "data");
     const tcEquipamentoInput = getInputValue(formData, "tcEquipamento");
     const primeiraTcInput = getInputValue(formData, "primeiraTc");
-    const segundaTcInput = getInputValue(formData, "segundaTc");
     const acaoCorretivaInput = getInputValue(formData, "acaoCorretiva");
     const observacao = getInputValue(formData, "observacao");
 
@@ -402,13 +459,12 @@ export async function saveRegistroItemAction(formData: FormData) {
 
     const tcEquipamento = parseTemperatureInput(tcEquipamentoInput);
     const primeiraTc = parseTemperatureInput(primeiraTcInput);
-    const segundaTc = parseTemperatureInput(segundaTcInput);
 
-    if (tcEquipamento === null || primeiraTc === null || segundaTc === null) {
-      throw new Error("Preencha TC Equipamento, 1ª TC e 2ª TC com valores válidos.");
+    if (tcEquipamento === null || primeiraTc === null) {
+      throw new Error("Preencha TC Equipamento e TC do Alimento com valores válidos.");
     }
 
-    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, segundaTc);
+    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, primeiraTc);
     const acaoCorretivaOption = acaoCorretivaInput
       ? await findAcaoCorretivaByName(acaoCorretivaInput, false)
       : null;
@@ -454,7 +510,7 @@ export async function saveRegistroItemAction(formData: FormData) {
       classificacao: item.classificacao,
       tcEquipamento,
       primeiraTc,
-      segundaTc,
+      segundaTc: null,
       statusTemperatura: avaliacao.status,
       acaoCorretiva,
       observacao: observacao || null,
@@ -575,7 +631,6 @@ export async function saveServicoItemsStateAction(
         const input = {
           tcEquipamentoInput: getRowInputValue(formData, rowKey, "tcEquipamento"),
           primeiraTcInput: getRowInputValue(formData, rowKey, "primeiraTc"),
-          segundaTcInput: getRowInputValue(formData, rowKey, "segundaTc"),
           acaoCorretivaInput: getRowInputValue(formData, rowKey, "acaoCorretiva"),
           observacao: getRowInputValue(formData, rowKey, "observacao")
         };
@@ -820,7 +875,7 @@ export async function signRegistroItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignResponsible(actor.perfil);
+    ensureCanSignSupervisor(actor.perfil);
 
     const registroId = parsePositiveInt(getInputValue(formData, "registroId"));
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
@@ -843,6 +898,10 @@ export async function signRegistroItemAction(formData: FormData) {
       throw new Error("Somente itens preenchidos podem ser assinados.");
     }
 
+    if (registro.responsavelUsuarioId === actor.id) {
+      throw new Error(SELF_SUPERVISION_MESSAGE);
+    }
+
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
 
     const now = getCurrentSystemDateTime();
@@ -860,7 +919,7 @@ export async function signRegistroItemAction(formData: FormData) {
 
     await createSignatureLog({
       user: actor,
-      tipo: "RESPONSAVEL",
+      tipo: "SUPERVISOR",
       modulo: "controle-buffet-amostras/item",
       referenciaId: String(registro.id)
     });
@@ -885,7 +944,7 @@ export async function signServicoItensAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignResponsible(actor.perfil);
+    ensureCanSignSupervisor(actor.perfil);
 
     const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
     const dataInput = getInputValue(formData, "data");
@@ -901,7 +960,6 @@ export async function signServicoItensAction(formData: FormData) {
     }
 
     await ensurePeriodIsOpen(data);
-    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
 
     const servico = await prisma.controleBuffetAmostraServico.findUnique({
       where: { id: servicoId },
@@ -962,6 +1020,12 @@ export async function signServicoItensAction(formData: FormData) {
       throw new Error("Não há itens preenchidos aguardando assinatura neste serviço.");
     }
 
+    if (registrosParaAssinar.some((registro) => registro.responsavelUsuarioId === actor.id)) {
+      throw new Error(SELF_SUPERVISION_MESSAGE);
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
     const now = getCurrentSystemDateTime();
 
     await prisma.$transaction(async (tx) => {
@@ -981,7 +1045,7 @@ export async function signServicoItensAction(formData: FormData) {
 
     await createSignatureLog({
       user: actor,
-      tipo: "RESPONSAVEL",
+      tipo: "SUPERVISOR",
       modulo: "controle-buffet-amostras/servico",
       referenciaId: `${servicoId}:${dataInput || formatDateInput(now)}`
     });

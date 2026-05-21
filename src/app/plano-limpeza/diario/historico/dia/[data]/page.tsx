@@ -112,7 +112,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
       !item.assinaturaResponsavel.trim() &&
       !item.assinaturaSupervisor.trim()
   ).length;
-  const possuiPendencias = aguardandoSupervisor > 0 || pendentesSemResponsavel > 0;
+  const possuiPendencias = aguardandoSupervisor > 0;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -212,18 +212,13 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
               <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
             </label>
 
-            <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-              <input type="checkbox" name="assinarComoResponsavel" className="mt-1" />
-              Assinar também como responsável pela limpeza para registros pendentes sem assinatura.
-            </label>
-
             <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
               Observação (opcional)
               <textarea
                 name="observacao"
                 rows={3}
                 className={INPUT_CLASS}
-                placeholder="Justificativa para assinatura excepcional do supervisor como responsável."
+                placeholder="Observação da supervisão retroativa, se houver."
               />
             </label>
 
@@ -234,6 +229,11 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
               <p>
                 Pendências sem responsável: <strong>{pendentesSemResponsavel}</strong>
               </p>
+              {pendentesSemResponsavel > 0 ? (
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Registros sem responsável precisam ser assinados primeiro por quem executou a limpeza.
+                </p>
+              ) : null}
             </div>
 
             <div className="md:col-span-2">

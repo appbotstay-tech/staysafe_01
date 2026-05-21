@@ -15,6 +15,7 @@ import {
   canCloseMonth,
   canManageModuleOptions,
   canReopenMonth,
+  canSignAsSupervisor,
   canViewManagementSections,
   getRoleLabel
 } from "@/lib/rbac";
@@ -74,6 +75,7 @@ type WeeklyExecutionPageRecord = {
   dataExecucao: Date;
   area: string;
   assinaturaResponsavel: string;
+  assinaturaResponsavelUsuarioId: number | null;
   assinaturaResponsavelDataHora: Date | null;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
@@ -152,6 +154,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
+  const podeAssinarSupervisor = authUser ? canSignAsSupervisor(authUser.perfil) : false;
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
   const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
@@ -227,6 +230,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         setorResponsavel: true,
         funcionarioResponsavel: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelUsuarioId: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
         status: true,
@@ -317,6 +321,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           funcionarioResponsavel: true,
           status: true,
           assinaturaResponsavel: true,
+          assinaturaResponsavelUsuarioId: true,
           assinaturaResponsavelDataHora: true,
           assinaturaSupervisor: true,
           observacaoResponsavel: true,
@@ -826,12 +831,15 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           closeHref={returnTo}
           returnTo={returnTo}
           usuarioAssinando={responsavelLogado}
+          usuarioAssinandoId={authUser?.id ?? null}
+          podeAssinarSupervisor={podeAssinarSupervisor}
           dataHoraAtual={formatDateTimeDisplay(now)}
           execution={executionParaAssinatura}
           items={executionItemsParaAssinatura.map((executionItem) => ({
             id: executionItem.id,
             status: getWeeklyRecordStatus(executionItem),
             assinaturaResponsavel: executionItem.assinaturaResponsavel,
+            assinaturaResponsavelUsuarioId: executionItem.assinaturaResponsavelUsuarioId,
             assinaturaSupervisor: executionItem.assinaturaSupervisor,
             observacaoResponsavel: executionItem.observacaoResponsavel,
             observacaoSupervisor: executionItem.observacaoSupervisor,

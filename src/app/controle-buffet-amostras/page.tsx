@@ -19,6 +19,7 @@ import {
 
 import { closeMonthAction, reopenMonthAction } from "./actions";
 import { ReopenMonthModal } from "./reopen-month-modal";
+import { SporadicServiceModal } from "./sporadic-service-modal";
 import { ServiceStatusBadge } from "./status-badges";
 import {
   calcularStatusServico,
@@ -99,7 +100,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       : currentPeriod.mes;
   const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
-  const [servicos, registrosDia, fechamentoAtual] = await Promise.all([
+  const [servicos, registrosDia, fechamentoAtual, fechamentoDiaAtual] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
       where: { ativo: true },
       include: {
@@ -128,6 +129,9 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     }),
     prisma.controleBuffetAmostraFechamento.findUnique({
       where: { mes_ano: { mes: fechamentoMes, ano: fechamentoAno } }
+    }),
+    prisma.controleBuffetAmostraFechamento.findUnique({
+      where: { mes_ano: { mes: currentPeriod.mes, ano: currentPeriod.ano } }
     })
   ]);
 
@@ -171,6 +175,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     return {
       id: servico.id,
       nome: servico.nome,
+      observacao: servico.observacao,
       tipoServico: servico.tipoServico,
       periodo: getServicoPeriodoLabel(servico),
       quantidadeItens,
@@ -199,6 +204,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   });
 
   const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
+  const fechamentoDiaAssinado =
+    fechamentoDiaAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
   const reaberturaFormId = `reabertura-buffet-${fechamentoMes}-${fechamentoAno}`;
   const returnTo = buildPathWithParams(
     new URLSearchParams({
@@ -255,6 +262,10 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Serviços do Dia ({formatDateDisplay(today)})
           </h2>
+          <SporadicServiceModal
+            todayInput={todayInput}
+            disabled={fechamentoDiaAssinado}
+          />
         </div>
 
         <div className="overflow-x-auto">
@@ -280,7 +291,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                 servicosDoDia.map((servico) => (
                   <tr key={servico.id}>
                     <td className="px-3 py-2">{formatDateDisplay(today)}</td>
-                    <td className="px-3 py-2">{servico.nome}</td>
+                    <td className="px-3 py-2">
+                      {servico.nome}
+                      {servico.observacao ? (
+                        <p className="mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
+                          {servico.observacao}
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">
                       {getTipoServicoLabel(servico.tipoServico)}
                       {servico.tipoServico === "ESPORADICO" ? (
@@ -359,8 +377,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                   <th className="px-3 py-2">Item</th>
                   <th className="px-3 py-2">Classificação</th>
                   <th className="px-3 py-2">TC Equip.</th>
-                  <th className="px-3 py-2">1ª TC</th>
-                  <th className="px-3 py-2">2ª TC</th>
+                  <th className="px-3 py-2">TC Alimento</th>
                   <th className="px-3 py-2">Status do Item</th>
                   <th className="px-3 py-2">Responsável</th>
                 </tr>
@@ -368,7 +385,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {registrosFechamento.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={9}>
+                    <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={8}>
                       Nenhum registro no período selecionado.
                     </td>
                   </tr>
@@ -391,9 +408,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                       </td>
                       <td className="px-3 py-2">
                         {registro.primeiraTc !== null ? `${registro.primeiraTc}°C` : "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {registro.segundaTc !== null ? `${registro.segundaTc}°C` : "-"}
                       </td>
                       <td className="px-3 py-2">{getStatusItemLabel(registro.status)}</td>
                       <td className="px-3 py-2">{registro.responsavelNome}</td>

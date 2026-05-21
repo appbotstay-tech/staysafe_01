@@ -5,7 +5,8 @@ import {
   ConformidadeRecebimento,
   StatusFechamentoRastreabilidadeRecebimento,
   StatusNotaRecebimento,
-  StatusRecebimento
+  StatusRecebimento,
+  TipoTemperaturaRecebimento
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -41,6 +42,7 @@ import {
   parsePositiveInt,
   parseTemperatureInput
 } from "./utils";
+import type { Conformidade } from "./utils";
 import {
   normalizeSifValue,
   SIF_BACKEND_REQUIRED_MESSAGE
@@ -87,8 +89,10 @@ type ItemInputValues = {
   lote: string;
   dataFabricacao: string;
   dataValidade: string;
+  validadeNaoAplicavel: boolean;
   sif: string;
   temperatura: string;
+  temperaturaTipo: TipoTemperaturaRecebimento;
   transporteEntregador: string;
   aspectoSensorial: string;
   embalagem: string;
@@ -100,9 +104,11 @@ type ValidatedItemPayload = {
   produto: string;
   lote: string;
   dataFabricacao: Date;
-  dataValidade: Date;
+  dataValidade: Date | null;
+  validadeNaoAplicavel: boolean;
   sif: string;
-  temperatura: number;
+  temperatura: number | null;
+  temperaturaTipo: TipoTemperaturaRecebimento;
   categoriaId: number;
   temperaturaStatus: ConformidadeRecebimento;
   transporteEntregador: ConformidadeRecebimento;
@@ -131,6 +137,15 @@ function getInputValue(formData: FormData, key: string): string {
 
 function getItemInputValue(formData: FormData, itemId: number, field: string): string {
   return getInputValue(formData, `item-${itemId}-${field}`);
+}
+
+function getBooleanInput(formData: FormData, key: string): boolean {
+  const value = formData.get(key);
+  return value === "true" || value === "on";
+}
+
+function getItemBooleanInput(formData: FormData, itemId: number, field: string): boolean {
+  return getBooleanInput(formData, `item-${itemId}-${field}`);
 }
 
 function getReturnToPath(formData: FormData): string {
@@ -319,6 +334,18 @@ function parseRequiredTemperature(value: string): number {
   return parsed;
 }
 
+function parseTemperaturaRecebimentoTipo(value: string): TipoTemperaturaRecebimento {
+  if (value === TipoTemperaturaRecebimento.AMBIENTE) {
+    return TipoTemperaturaRecebimento.AMBIENTE;
+  }
+
+  if (value === TipoTemperaturaRecebimento.NAO_APLICAVEL) {
+    return TipoTemperaturaRecebimento.NAO_APLICAVEL;
+  }
+
+  return TipoTemperaturaRecebimento.NUMERICA;
+}
+
 function validateAndBuildItemPayload(
   input: ItemInputValues,
   categories: CategoryItem[],
@@ -343,8 +370,10 @@ function validateAndBuildItemPayload(
   }
 
   const dataFabricacao = parseRequiredDate(input.dataFabricacao, "Data de Fabricação");
-  const dataValidade = parseRequiredDate(input.dataValidade, "Validade");
-  const temperatura = parseRequiredTemperature(input.temperatura);
+  const dataValidade = input.validadeNaoAplicavel
+    ? null
+    : parseRequiredDate(input.dataValidade, "Validade");
+  const temperaturaTipo = input.temperaturaTipo;
 
   const transporteEntregador = parseConformidade(input.transporteEntregador);
   const aspectoSensorial = parseConformidade(input.aspectoSensorial);
@@ -357,7 +386,12 @@ function validateAndBuildItemPayload(
   }
 
   const category = determineCategoryForProduct(input.produto, categories);
-  const temperaturaStatus = calculateTemperatureStatus(temperatura, category.temperaturaMaxima);
+  let temperatura: number | null = null;
+  let temperaturaStatus: Conformidade = "CONFORME";
+  if (temperaturaTipo === TipoTemperaturaRecebimento.NUMERICA) {
+    temperatura = parseRequiredTemperature(input.temperatura);
+    temperaturaStatus = calculateTemperatureStatus(temperatura, category.temperaturaMaxima);
+  }
   const needsCorrectiveAction = isActionCorrectiveRequired({
     temperaturaStatus,
     transporteEntregador,
@@ -381,8 +415,10 @@ function validateAndBuildItemPayload(
     lote: input.lote,
     dataFabricacao,
     dataValidade,
+    validadeNaoAplicavel: input.validadeNaoAplicavel,
     sif: sifValue,
     temperatura,
+    temperaturaTipo,
     categoriaId: category.id,
     temperaturaStatus: temperaturaStatus as ConformidadeRecebimento,
     transporteEntregador: transporteEntregador as ConformidadeRecebimento,
@@ -580,8 +616,12 @@ async function createManualNoteFromForm(formData: FormData): Promise<number> {
       lote: getInputValue(formData, "lote"),
       dataFabricacao: getInputValue(formData, "dataFabricacao"),
       dataValidade: getInputValue(formData, "dataValidade"),
+      validadeNaoAplicavel: getBooleanInput(formData, "validadeNaoAplicavel"),
       sif: getInputValue(formData, "sif"),
       temperatura: getInputValue(formData, "temperatura"),
+      temperaturaTipo: parseTemperaturaRecebimentoTipo(
+        getInputValue(formData, "temperaturaTipo")
+      ),
       transporteEntregador: getInputValue(formData, "transporteEntregador"),
       aspectoSensorial: getInputValue(formData, "aspectoSensorial"),
       embalagem: getInputValue(formData, "embalagem"),
@@ -688,8 +728,12 @@ export async function saveNotaItemsAction(formData: FormData) {
           lote: getItemInputValue(formData, item.id, "lote"),
           dataFabricacao: getItemInputValue(formData, item.id, "dataFabricacao"),
           dataValidade: getItemInputValue(formData, item.id, "dataValidade"),
+          validadeNaoAplicavel: getItemBooleanInput(formData, item.id, "validadeNaoAplicavel"),
           sif: getItemInputValue(formData, item.id, "sif"),
           temperatura: getItemInputValue(formData, item.id, "temperatura"),
+          temperaturaTipo: parseTemperaturaRecebimentoTipo(
+            getItemInputValue(formData, item.id, "temperaturaTipo")
+          ),
           transporteEntregador: getItemInputValue(formData, item.id, "transporteEntregador"),
           aspectoSensorial: getItemInputValue(formData, item.id, "aspectoSensorial"),
           embalagem: getItemInputValue(formData, item.id, "embalagem"),
@@ -789,8 +833,12 @@ export async function saveNotaItemsStateAction(
             lote: getItemInputValue(formData, item.id, "lote"),
             dataFabricacao: getItemInputValue(formData, item.id, "dataFabricacao"),
             dataValidade: getItemInputValue(formData, item.id, "dataValidade"),
+            validadeNaoAplicavel: getItemBooleanInput(formData, item.id, "validadeNaoAplicavel"),
             sif: getItemInputValue(formData, item.id, "sif"),
             temperatura: getItemInputValue(formData, item.id, "temperatura"),
+            temperaturaTipo: parseTemperaturaRecebimentoTipo(
+              getItemInputValue(formData, item.id, "temperaturaTipo")
+            ),
             transporteEntregador: getItemInputValue(formData, item.id, "transporteEntregador"),
             aspectoSensorial: getItemInputValue(formData, item.id, "aspectoSensorial"),
             embalagem: getItemInputValue(formData, item.id, "embalagem"),
@@ -901,8 +949,14 @@ export async function finalizeNotaAction(formData: FormData) {
           lote: item.lote ?? "",
           dataFabricacao: item.dataFabricacao ? formatDateInput(item.dataFabricacao) : "",
           dataValidade: item.dataValidade ? formatDateInput(item.dataValidade) : "",
+          validadeNaoAplicavel: item.validadeNaoAplicavel,
           sif: item.sif ?? "",
-          temperatura: item.temperatura !== null ? String(item.temperatura) : "",
+          temperatura:
+            item.temperaturaTipo === TipoTemperaturaRecebimento.NUMERICA &&
+            item.temperatura !== null
+              ? String(item.temperatura)
+              : "",
+          temperaturaTipo: item.temperaturaTipo,
           transporteEntregador: item.transporteEntregador ?? "",
           aspectoSensorial: item.aspectoSensorial ?? "",
           embalagem: item.embalagem ?? "",

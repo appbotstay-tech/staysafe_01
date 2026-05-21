@@ -9,7 +9,7 @@ import { notFound } from "next/navigation";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { canViewManagementSections, getRoleLabel } from "@/lib/rbac";
+import { canSignAsSupervisor, canViewManagementSections, getRoleLabel } from "@/lib/rbac";
 
 import { signServicoItensAction } from "../../actions";
 import {
@@ -80,6 +80,7 @@ export default async function ExecucaoServicoBuffetPage({
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
+  const podeAssinarSupervisor = authUser ? canSignAsSupervisor(authUser.perfil) : false;
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
   const now = getCurrentSystemDateTime();
 
@@ -165,6 +166,13 @@ export default async function ExecucaoServicoBuffetPage({
   ).length;
   const totalItensServico = itensConfiguradosDoDia.length + registrosExtras.length;
   const todosItensPreenchidos = totalItensServico > 0 && itensPendentes === 0;
+  const assinaturaBloqueadaPorExecutor = authUser
+    ? registros.some(
+        (registro) =>
+          registro.status === StatusItemBuffetAmostra.PREENCHIDO &&
+          registro.responsavelUsuarioId === authUser.id
+      )
+    : false;
   const formatTemperatureInput = (value: number | null): string =>
     value !== null && value !== undefined ? String(value).replace(".", ",") : "";
   const itemRows: ServiceItemFormRow[] = [
@@ -173,8 +181,8 @@ export default async function ExecucaoServicoBuffetPage({
       const registro = registrosByItemId.get(item.id) ?? null;
       const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
       const avaliacao =
-        registro?.segundaTc !== null && registro?.segundaTc !== undefined
-          ? avaliarTemperaturaBuffet(item.classificacao, registro.segundaTc)
+        registro?.primeiraTc !== null && registro?.primeiraTc !== undefined
+          ? avaliarTemperaturaBuffet(item.classificacao, registro.primeiraTc)
           : null;
 
       return {
@@ -188,7 +196,6 @@ export default async function ExecucaoServicoBuffetPage({
         avaliacaoOrientacao: avaliacao?.orientacao ?? null,
         tcEquipamento: formatTemperatureInput(registro?.tcEquipamento ?? null),
         primeiraTc: formatTemperatureInput(registro?.primeiraTc ?? null),
-        segundaTc: formatTemperatureInput(registro?.segundaTc ?? null),
         acaoCorretiva: registro?.acaoCorretiva?.trim() ?? "",
         observacao: registro?.observacao ?? "",
         responsavelNome: registro?.responsavelNome ?? null,
@@ -207,8 +214,8 @@ export default async function ExecucaoServicoBuffetPage({
     }),
     ...registrosExtras.map((registro) => {
       const avaliacao =
-        registro.segundaTc !== null && registro.segundaTc !== undefined
-          ? avaliarTemperaturaBuffet(registro.classificacao, registro.segundaTc)
+        registro.primeiraTc !== null && registro.primeiraTc !== undefined
+          ? avaliarTemperaturaBuffet(registro.classificacao, registro.primeiraTc)
           : null;
 
       return {
@@ -222,7 +229,6 @@ export default async function ExecucaoServicoBuffetPage({
         avaliacaoOrientacao: avaliacao?.orientacao ?? null,
         tcEquipamento: formatTemperatureInput(registro.tcEquipamento),
         primeiraTc: formatTemperatureInput(registro.primeiraTc),
-        segundaTc: formatTemperatureInput(registro.segundaTc),
         acaoCorretiva: registro.acaoCorretiva?.trim() ?? "",
         observacao: registro.observacao ?? "",
         responsavelNome: registro.responsavelNome,
@@ -254,6 +260,11 @@ export default async function ExecucaoServicoBuffetPage({
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {getTipoServicoLabel(servico.tipoServico)} • {getServicoPeriodoLabel(servico)}
             </p>
+            {servico.observacao ? (
+              <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+                {servico.observacao}
+              </p>
+            ) : null}
           </div>
           <div className="btn-group">
             <Link href={MODULE_PATH} className="btn-secondary">
@@ -405,6 +416,14 @@ export default async function ExecucaoServicoBuffetPage({
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
             Não há itens preenchidos aguardando assinatura neste serviço.
           </p>
+        ) : !podeAssinarSupervisor ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Seu perfil não possui permissão para assinar como supervisor.
+          </p>
+        ) : assinaturaBloqueadaPorExecutor ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Este registro foi executado por você. A assinatura de supervisor deve ser feita por outro usuário autorizado.
+          </p>
         ) : (
           <form action={signServicoItensAction} className="grid gap-3 md:grid-cols-2">
             <input type="hidden" name="servicoId" value={String(servico.id)} />
@@ -424,7 +443,7 @@ export default async function ExecucaoServicoBuffetPage({
 
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">
-                Assinar Todos os Itens
+                Assinar como Supervisor
               </button>
             </div>
           </form>

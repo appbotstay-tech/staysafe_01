@@ -79,6 +79,12 @@ enum StatusFechamentoRastreabilidadeRecebimento {
   ASSINADO
 }
 
+enum TipoTemperaturaRecebimento {
+  NUMERICA
+  AMBIENTE
+  NAO_APLICAVEL
+}
+
 enum StatusNotaRecebimento {
   PENDENTE
   IMPORTADA
@@ -534,8 +540,10 @@ model RastreabilidadeRecebimentoRegistro {
   lote                   String?
   dataFabricacao         DateTime?                            @db.Date
   dataValidade           DateTime?                            @db.Date
+  validadeNaoAplicavel   Boolean                              @default(false)
   sif                    String?
   temperatura            Float?
+  temperaturaTipo        TipoTemperaturaRecebimento            @default(NUMERICA)
   temperaturaStatus      ConformidadeRecebimento?
   transporteEntregador   ConformidadeRecebimento?
   aspectoSensorial       ConformidadeRecebimento?
@@ -581,7 +589,15 @@ model PlanoLimpezaDiarioRegistro {
   turno                 TurnoPlanoLimpeza
   area                  String
   assinaturaResponsavel String             @default("")
+  assinaturaResponsavelUsuarioId Int?
+  assinaturaResponsavelNomeUsuario String?
+  assinaturaResponsavelPerfil PerfilUsuario?
+  assinaturaResponsavelDataHora DateTime?
   assinaturaSupervisor  String             @default("")
+  assinaturaSupervisorUsuarioId Int?
+  assinaturaSupervisorNomeUsuario String?
+  assinaturaSupervisorPerfil PerfilUsuario?
+  assinaturaSupervisorDataHora DateTime?
   observacao            String?
   observacaoResponsavel String?
   observacaoSupervisor  String?
@@ -594,6 +610,8 @@ model PlanoLimpezaDiarioRegistro {
   @@index([area])
   @@index([status])
   @@index([assinaturaResponsavel])
+  @@index([assinaturaResponsavelDataHora])
+  @@index([assinaturaSupervisorDataHora])
   @@map("plano_limpeza_diario_registro")
 }
 
@@ -707,6 +725,7 @@ model ControleBuffetAmostraServico {
   tipoServico TipoServicoBuffetAmostra           @default(FIXO)
   dataInicio  DateTime?                          @db.Date
   dataFim     DateTime?                          @db.Date
+  observacao  String?                            @db.Text
   ativo       Boolean                            @default(true)
   ordem       Int                                @default(1)
   createdAt   DateTime                           @default(now())

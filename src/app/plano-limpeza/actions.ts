@@ -48,6 +48,9 @@ const SEMANAL_HISTORY_PATH = "/plano-limpeza/semanal/historico";
 const SEMANAL_OPCOES_PATH = "/plano-limpeza/semanal/opcoes";
 
 type FeedbackType = "success" | "error";
+type ActionUser = Awaited<ReturnType<typeof getCurrentUserForAction>>;
+const SELF_SUPERVISION_MESSAGE =
+  "Quem executou o serviço não pode assinar como supervisor. Solicite a assinatura de outro responsável autorizado.";
 
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -191,6 +194,20 @@ function ensureNonEmpty(value: string, label: string) {
   }
 }
 
+function isSameResponsibleUser(
+  record: {
+    assinaturaResponsavel: string;
+    assinaturaResponsavelUsuarioId?: number | null;
+  },
+  actor: ActionUser
+): boolean {
+  if (record.assinaturaResponsavelUsuarioId !== null && record.assinaturaResponsavelUsuarioId !== undefined) {
+    return record.assinaturaResponsavelUsuarioId === actor.id;
+  }
+
+  return record.assinaturaResponsavel.trim() === actor.nomeCompleto.trim();
+}
+
 async function ensureWeeklyAreaName(value: string): Promise<string> {
   ensureNonEmpty(value, "Área");
 
@@ -249,11 +266,16 @@ export async function updateDailyRecordAction(formData: FormData) {
 
     if (etapaPermitida === "responsavel") {
       ensureCanSignResponsible(actor.perfil);
+      const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaDiarioRegistro.update({
         where: { id },
         data: {
           assinaturaResponsavel: actor.nomeCompleto,
+          assinaturaResponsavelUsuarioId: actor.id,
+          assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+          assinaturaResponsavelPerfil: actor.perfil,
+          assinaturaResponsavelDataHora: signedAt,
           status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
           observacaoResponsavel: observacaoAssinatura || null
         }
@@ -270,11 +292,19 @@ export async function updateDailyRecordAction(formData: FormData) {
       if (!existing.assinaturaResponsavel) {
         throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
       }
+      if (isSameResponsibleUser(existing, actor)) {
+        throw new Error(SELF_SUPERVISION_MESSAGE);
+      }
+      const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaDiarioRegistro.update({
         where: { id },
         data: {
           assinaturaSupervisor: actor.nomeCompleto,
+          assinaturaSupervisorUsuarioId: actor.id,
+          assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
+          assinaturaSupervisorPerfil: actor.perfil,
+          assinaturaSupervisorDataHora: signedAt,
           status: StatusPlanoLimpeza.CONCLUIDO,
           observacaoSupervisor: observacaoAssinatura || null
         }
@@ -478,15 +508,15 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
     const assinarComoResponsavel = formData.get("assinarComoResponsavel") === "on";
     const observacao = getInputValue(formData, "observacao");
     if (assinarComoResponsavel) {
-      ensureCanSignResponsible(actor.perfil);
+      throw new Error(
+        "A assinatura em lote não pode registrar o mesmo usuário como responsável e supervisor."
+      );
     }
 
     const data = parseDateInput(dataRaw);
     if (!data) {
       throw new Error("Data inválida para assinatura retroativa.");
     }
-
-    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
 
     const period = getMonthYear(data);
     if (await isMonthSigned(TipoPlanoLimpeza.DIARIO, period.mes, period.ano)) {
@@ -499,6 +529,7 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
         id: true,
         status: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelUsuarioId: true,
         assinaturaSupervisor: true
       }
     });
@@ -509,6 +540,7 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
 
     const aguardandoIds: number[] = [];
     const pendentesSemResponsavelIds: number[] = [];
+    const selfSupervisorIds: number[] = [];
 
     for (const registro of registrosDoDia) {
       const hasResponsavel = registro.assinaturaResponsavel.trim().length > 0;
@@ -519,6 +551,10 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
         hasResponsavel &&
         !hasSupervisor
       ) {
+        if (isSameResponsibleUser(registro, actor)) {
+          selfSupervisorIds.push(registro.id);
+          continue;
+        }
         aguardandoIds.push(registro.id);
       }
 
@@ -531,18 +567,33 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
       }
     }
 
+    if (selfSupervisorIds.length > 0) {
+      throw new Error(SELF_SUPERVISION_MESSAGE);
+    }
+
     if (aguardandoIds.length === 0 && (!assinarComoResponsavel || pendentesSemResponsavelIds.length === 0)) {
       throw new Error("Não há pendências elegíveis para assinatura retroativa neste dia.");
     }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+    const signedAt = getCurrentSystemDateTime();
 
     await prisma.$transaction(async (tx) => {
       if (aguardandoIds.length > 0) {
         const updateData: {
           assinaturaSupervisor: string;
+          assinaturaSupervisorUsuarioId: number;
+          assinaturaSupervisorNomeUsuario: string;
+          assinaturaSupervisorPerfil: typeof actor.perfil;
+          assinaturaSupervisorDataHora: Date;
           status: StatusPlanoLimpeza;
           observacaoSupervisor?: string;
         } = {
           assinaturaSupervisor: actor.nomeCompleto,
+          assinaturaSupervisorUsuarioId: actor.id,
+          assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
+          assinaturaSupervisorPerfil: actor.perfil,
+          assinaturaSupervisorDataHora: signedAt,
           status: StatusPlanoLimpeza.CONCLUIDO
         };
         if (observacao) {
@@ -554,30 +605,6 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
           data: updateData
         });
       }
-
-      if (assinarComoResponsavel && pendentesSemResponsavelIds.length > 0) {
-        const dataUpdate: {
-          assinaturaResponsavel: string;
-          assinaturaSupervisor: string;
-          status: StatusPlanoLimpeza;
-          observacaoResponsavel?: string;
-          observacaoSupervisor?: string;
-        } = {
-          assinaturaResponsavel: actor.nomeCompleto,
-          assinaturaSupervisor: actor.nomeCompleto,
-          status: StatusPlanoLimpeza.CONCLUIDO
-        };
-
-        if (observacao) {
-          dataUpdate.observacaoResponsavel = observacao;
-          dataUpdate.observacaoSupervisor = observacao;
-        }
-
-        await tx.planoLimpezaDiarioRegistro.updateMany({
-          where: { id: { in: pendentesSemResponsavelIds } },
-          data: dataUpdate
-        });
-      }
     });
 
     if (aguardandoIds.length > 0) {
@@ -586,16 +613,6 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
         tipo: "SUPERVISOR",
         modulo: "plano-limpeza/diario",
         referenciaId: dataRaw
-      });
-    }
-
-    if (assinarComoResponsavel && pendentesSemResponsavelIds.length > 0) {
-      await createSignatureLog({
-        user: actor,
-        tipo: "RESPONSAVEL",
-        modulo: "plano-limpeza/diario",
-        referenciaId: dataRaw,
-        observacao: observacao || null
       });
     }
 
@@ -678,6 +695,9 @@ export async function updateWeeklyRecordAction(formData: FormData) {
       ensureCanSignSupervisor(actor.perfil);
       if (!existing.assinaturaResponsavel.trim()) {
         throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
+      }
+      if (isSameResponsibleUser(existing, actor)) {
+        throw new Error(SELF_SUPERVISION_MESSAGE);
       }
       const signedAt = getCurrentSystemDateTime();
 

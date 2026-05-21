@@ -166,9 +166,11 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
     lote: item.lote ?? "",
     dataFabricacao: item.dataFabricacao ? formatDateInput(item.dataFabricacao) : "",
     dataValidade: item.dataValidade ? formatDateInput(item.dataValidade) : "",
+    validadeNaoAplicavel: item.validadeNaoAplicavel,
     sif: formatSifDisplayValue(item.sif, ""),
     temperatura:
       item.temperatura !== null ? String(item.temperatura).replace(".", ",") : "",
+    temperaturaTipo: item.temperaturaTipo,
     transporteEntregador: item.transporteEntregador ?? "",
     aspectoSensorial: item.aspectoSensorial ?? "",
     embalagem: item.embalagem ?? "",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,8 @@ type ActionState = {
   invalidField?: string;
 };
 
+type TemperaturaTipo = "NUMERICA" | "AMBIENTE" | "NAO_APLICAVEL";
+
 export type NoteItemFormRow = {
   id: number;
   produto: string;
@@ -29,8 +31,10 @@ export type NoteItemFormRow = {
   lote: string;
   dataFabricacao: string;
   dataValidade: string;
+  validadeNaoAplicavel: boolean;
   sif: string;
   temperatura: string;
+  temperaturaTipo: TemperaturaTipo;
   transporteEntregador: string;
   aspectoSensorial: string;
   embalagem: string;
@@ -66,9 +70,9 @@ const TABLE_CELL_CLASS = "px-2 py-1.5 align-top";
 const PRODUCT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[13rem]`;
 const INFO_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[5.5rem]`;
 const LOTE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[7rem]`;
-const DATE_TABLE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.75rem] max-w-[8.75rem]`;
+const DATE_TABLE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[11rem] max-w-[11rem]`;
 const SIF_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[11rem]`;
-const TEMPERATURE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[6.75rem]`;
+const TEMPERATURE_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[12rem]`;
 const SELECT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.5rem]`;
 const TEXT_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[10rem]`;
 const READONLY_CELL_CLASS = `${TABLE_CELL_CLASS} min-w-[8.5rem]`;
@@ -128,6 +132,24 @@ export function NoteItemsForm({
 }: NoteItemsFormProps) {
   const router = useRouter();
   const [state, formAction] = useActionState(saveNotaItemsStateAction, INITIAL_STATE);
+  const [validadeNaoAplicavelRows, setValidadeNaoAplicavelRows] = useState<
+    Record<string, boolean>
+  >(() =>
+    Object.fromEntries(
+      rows.map((item) => [`item-${item.id}`, item.validadeNaoAplicavel])
+    )
+  );
+  const [dataValidadeValues, setDataValidadeValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.dataValidade]))
+  );
+  const [temperaturaTipoValues, setTemperaturaTipoValues] = useState<
+    Record<string, TemperaturaTipo>
+  >(() =>
+    Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.temperaturaTipo]))
+  );
+  const [temperaturaValues, setTemperaturaValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.temperatura]))
+  );
 
   useEffect(() => {
     if (state.status === "success") {
@@ -154,7 +176,7 @@ export function NoteItemsForm({
         <input type="hidden" name="returnTo" value={returnTo} />
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-          <table className="min-w-[1420px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+          <table className="min-w-[1540px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-left dark:bg-slate-800">
               <tr>
                 <th className={TABLE_HEAD_CLASS}>Produto</th>
@@ -182,6 +204,13 @@ export function NoteItemsForm({
                 const invalidLote = invalid && state.invalidField === "lote";
                 const invalidSif = invalid && state.invalidField === "sif";
                 const loteErrorId = `${rowKey}-lote-error`;
+                const validadeNaoAplicavel =
+                  validadeNaoAplicavelRows[rowKey] ?? item.validadeNaoAplicavel;
+                const dataValidadeValue =
+                  dataValidadeValues[rowKey] ?? item.dataValidade;
+                const temperaturaTipo =
+                  temperaturaTipoValues[rowKey] ?? item.temperaturaTipo;
+                const temperaturaValue = temperaturaValues[rowKey] ?? item.temperatura;
 
                 return (
                   <tr
@@ -271,11 +300,40 @@ export function NoteItemsForm({
                       <input
                         type="date"
                         name={`${rowKey}-dataValidade`}
-                        defaultValue={item.dataValidade}
-                        required
-                        disabled={readOnlyMode}
+                        value={validadeNaoAplicavel ? "" : dataValidadeValue}
+                        onChange={(event) =>
+                          setDataValidadeValues((current) => ({
+                            ...current,
+                            [rowKey]: event.currentTarget.value
+                          }))
+                        }
+                        required={!validadeNaoAplicavel}
+                        disabled={readOnlyMode || validadeNaoAplicavel}
                         className={`${inputClassName} ${DATE_INPUT_CLASS}`}
                       />
+                      <label className="mt-2 flex items-start gap-2 text-[11px] leading-4 text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          name={`${rowKey}-validadeNaoAplicavel`}
+                          value="true"
+                          checked={validadeNaoAplicavel}
+                          disabled={readOnlyMode}
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            setValidadeNaoAplicavelRows((current) => ({
+                              ...current,
+                              [rowKey]: checked
+                            }));
+                            if (checked) {
+                              setDataValidadeValues((current) => ({
+                                ...current,
+                                [rowKey]: ""
+                              }));
+                            }
+                          }}
+                        />
+                        Produto sem validade
+                      </label>
                     </td>
                     <td className={SIF_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>SIF *</span>
@@ -291,13 +349,42 @@ export function NoteItemsForm({
                     </td>
                     <td className={TEMPERATURE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Temperatura *</span>
+                      <select
+                        name={`${rowKey}-temperaturaTipo`}
+                        value={temperaturaTipo}
+                        disabled={readOnlyMode}
+                        className={inputClassName}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value as TemperaturaTipo;
+                          setTemperaturaTipoValues((current) => ({
+                            ...current,
+                            [rowKey]: value
+                          }));
+                          if (value !== "NUMERICA") {
+                            setTemperaturaValues((current) => ({
+                              ...current,
+                              [rowKey]: ""
+                            }));
+                          }
+                        }}
+                      >
+                        <option value="NUMERICA">Aferida</option>
+                        <option value="AMBIENTE">Ambiente</option>
+                        <option value="NAO_APLICAVEL">Não se aplica</option>
+                      </select>
                       <input
                         type="text"
                         name={`${rowKey}-temperatura`}
                         inputMode="text"
-                        defaultValue={item.temperatura}
-                        required
-                        disabled={readOnlyMode}
+                        value={temperaturaTipo === "NUMERICA" ? temperaturaValue : ""}
+                        onChange={(event) =>
+                          setTemperaturaValues((current) => ({
+                            ...current,
+                            [rowKey]: event.currentTarget.value
+                          }))
+                        }
+                        required={temperaturaTipo === "NUMERICA"}
+                        disabled={readOnlyMode || temperaturaTipo !== "NUMERICA"}
                         className={inputClassName}
                       />
                     </td>

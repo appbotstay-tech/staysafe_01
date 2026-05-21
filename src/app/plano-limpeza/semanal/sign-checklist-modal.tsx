@@ -9,6 +9,8 @@ type WeeklySignChecklistModalProps = {
   closeHref: string;
   returnTo: string;
   usuarioAssinando: string;
+  usuarioAssinandoId: number | null;
+  podeAssinarSupervisor: boolean;
   dataHoraAtual: string;
   execution: {
     executionId: number;
@@ -29,6 +31,7 @@ type WeeklySignChecklistModalProps = {
     id: number;
     status: StatusPlanoLimpeza;
     assinaturaResponsavel: string;
+    assinaturaResponsavelUsuarioId: number | null;
     assinaturaSupervisor: string;
     observacaoResponsavel: string | null;
     observacaoSupervisor: string | null;
@@ -49,6 +52,8 @@ export function WeeklySignChecklistModal({
   closeHref,
   returnTo,
   usuarioAssinando,
+  usuarioAssinandoId,
+  podeAssinarSupervisor,
   dataHoraAtual,
   execution,
   items
@@ -139,7 +144,16 @@ export function WeeklySignChecklistModal({
                     </td>
                   </tr>
                 ) : (
-                  items.map((executionItem) => (
+                  items.map((executionItem) => {
+                    const supervisorMesmoExecutor =
+                      executionItem.etapa === "supervisor" &&
+                      ((usuarioAssinandoId !== null &&
+                        executionItem.assinaturaResponsavelUsuarioId === usuarioAssinandoId) ||
+                        (!executionItem.assinaturaResponsavelUsuarioId &&
+                          executionItem.assinaturaResponsavel.trim() ===
+                            usuarioAssinando.trim()));
+
+                    return (
                     <tr key={executionItem.id}>
                       <td className="px-3 py-2">{executionItem.item.ordem}</td>
                       <td className="px-3 py-2">{executionItem.item.oQueLimpar}</td>
@@ -186,6 +200,15 @@ export function WeeklySignChecklistModal({
                             </button>
                           </form>
                         ) : executionItem.etapa === "supervisor" ? (
+                          supervisorMesmoExecutor ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Outro supervisor
+                            </span>
+                          ) : !podeAssinarSupervisor ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Sem permissão
+                            </span>
+                          ) : (
                           <form action={updateWeeklyRecordAction} className="grid min-w-[320px] gap-2">
                             <input type="hidden" name="id" value={String(executionItem.id)} />
                             <input type="hidden" name="returnTo" value={returnTo} />
@@ -207,6 +230,7 @@ export function WeeklySignChecklistModal({
                               Assinar
                             </button>
                           </form>
+                          )
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             Item Concluído
@@ -214,7 +238,8 @@ export function WeeklySignChecklistModal({
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

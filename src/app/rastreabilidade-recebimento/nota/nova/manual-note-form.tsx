@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { createManualNoteStateAction } from "../../actions";
 import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
@@ -22,11 +22,17 @@ const INITIAL_STATE: ActionState = {
   message: ""
 };
 
+type TemperaturaTipo = "NUMERICA" | "AMBIENTE" | "NAO_APLICAVEL";
+
 export function ManualNoteForm({
   responsavelLogado,
   inputClassName
 }: ManualNoteFormProps) {
   const [state, formAction] = useActionState(createManualNoteStateAction, INITIAL_STATE);
+  const [validadeNaoAplicavel, setValidadeNaoAplicavel] = useState(false);
+  const [dataValidade, setDataValidade] = useState("");
+  const [temperaturaTipo, setTemperaturaTipo] = useState<TemperaturaTipo>("NUMERICA");
+  const [temperatura, setTemperatura] = useState("");
 
   return (
     <form action={formAction} className="grid gap-4 md:grid-cols-2">
@@ -59,10 +65,33 @@ export function ManualNoteForm({
         Data de Fabricação *
         <input type="date" name="dataFabricacao" required className={inputClassName} />
       </label>
-      <label className="text-sm text-slate-700 dark:text-slate-200">
-        Validade *
-        <input type="date" name="dataValidade" required className={inputClassName} />
-      </label>
+      <div className="text-sm text-slate-700 dark:text-slate-200">
+        <p>Validade *</p>
+        <input
+          type="date"
+          name="dataValidade"
+          required={!validadeNaoAplicavel}
+          disabled={validadeNaoAplicavel}
+          value={validadeNaoAplicavel ? "" : dataValidade}
+          onChange={(event) => setDataValidade(event.currentTarget.value)}
+          className={inputClassName}
+        />
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <input
+            type="checkbox"
+            name="validadeNaoAplicavel"
+            value="true"
+            checked={validadeNaoAplicavel}
+            onChange={(event) => {
+              setValidadeNaoAplicavel(event.currentTarget.checked);
+              if (event.currentTarget.checked) {
+                setDataValidade("");
+              }
+            }}
+          />
+          Produto sem validade
+        </label>
+      </div>
       <label className="text-sm text-slate-700 dark:text-slate-200">
         SIF *
         <SifInput
@@ -76,11 +105,30 @@ export function ManualNoteForm({
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Temperatura (°C) *
+        <select
+          name="temperaturaTipo"
+          value={temperaturaTipo}
+          onChange={(event) => {
+            const value = event.currentTarget.value as TemperaturaTipo;
+            setTemperaturaTipo(value);
+            if (value !== "NUMERICA") {
+              setTemperatura("");
+            }
+          }}
+          className={inputClassName}
+        >
+          <option value="NUMERICA">Temperatura aferida</option>
+          <option value="AMBIENTE">Produto ambiente / não exige aferição</option>
+          <option value="NAO_APLICAVEL">Temperatura não se aplica</option>
+        </select>
         <input
           type="text"
           name="temperatura"
-          required
+          required={temperaturaTipo === "NUMERICA"}
+          disabled={temperaturaTipo !== "NUMERICA"}
           inputMode="text"
+          value={temperaturaTipo === "NUMERICA" ? temperatura : ""}
+          onChange={(event) => setTemperatura(event.currentTarget.value)}
           className={inputClassName}
         />
       </label>

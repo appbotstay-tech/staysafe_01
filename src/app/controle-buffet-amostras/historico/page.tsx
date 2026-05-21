@@ -310,7 +310,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
         </h2>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1300px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+          <table className="min-w-[1220px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Data</th>
@@ -319,8 +319,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                 <th className="px-3 py-2">Item</th>
                 <th className="px-3 py-2">Classificação</th>
                 <th className="px-3 py-2">TC Equip.</th>
-                <th className="px-3 py-2">1ª TC</th>
-                <th className="px-3 py-2">2ª TC</th>
+                <th className="px-3 py-2">TC Alimento</th>
                 <th className="px-3 py-2">Status Temperatura</th>
                 <th className="px-3 py-2">Ação Corretiva</th>
                 <th className="px-3 py-2">Status do Item</th>
@@ -331,7 +330,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={12} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -362,9 +361,6 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                     </td>
                     <td className="px-3 py-2">
                       {registro.primeiraTc !== null ? `${registro.primeiraTc}°C` : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {registro.segundaTc !== null ? `${registro.segundaTc}°C` : "-"}
                     </td>
                     <td className="px-3 py-2">
                       <TemperatureStatusBadge status={registro.statusTemperatura} />

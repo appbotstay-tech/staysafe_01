@@ -12,6 +12,7 @@ import {
   StatusRecebimento,
   StatusTemperaturaBuffetAmostra,
   StatusTemperaturaEquipamento,
+  TipoTemperaturaRecebimento,
   TurnoPlanoLimpeza,
   TurnoTemperaturaEquipamento
 } from "@prisma/client";
@@ -150,6 +151,22 @@ function valueOrDash(value: unknown): string {
 
 function formatTemperature(value: number | null | undefined): string {
   return value === null || value === undefined ? "-" : `${String(value).replace(".", ",")} °C`;
+}
+
+function formatRecebimentoValidade(
+  date: Date | null | undefined,
+  validadeNaoAplicavel: boolean
+): string {
+  return validadeNaoAplicavel ? "Sem validade" : formatDateDisplay(date);
+}
+
+function formatRecebimentoTemperatura(
+  value: number | null | undefined,
+  tipo: TipoTemperaturaRecebimento
+): string {
+  if (tipo === TipoTemperaturaRecebimento.AMBIENTE) return "Ambiente";
+  if (tipo === TipoTemperaturaRecebimento.NAO_APLICAVEL) return "Não se aplica";
+  return formatTemperature(value);
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -448,7 +465,7 @@ async function generateRecebimentoReport(moduleId: ReportModuleId, reportId: str
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length }
     ],
     columns: columns([["dataNota", "Data da nota"], ["fornecedor", "Fornecedor"], ["notaFiscal", "Número da nota"], ["produto", "Produto"], ["codigoProduto", "Código produto"], ["ncm", "NCM"], ["cfop", "CFOP"], ["quantidadeComprada", "Quantidade comprada"], ["unidadeMedidaCompra", "Unidade"], ["valorUnitario", "Valor unitário"], ["valorTotalItem", "Valor total item"], ["lote", "Lote"], ["fabricacao", "Fabricação"], ["validade", "Validade"], ["sif", "SIF"], ["temperatura", "Temperatura"], ["transporte", "Transporte"], ["aspecto", "Aspecto"], ["embalagem", "Embalagem"], ["acaoCorretiva", "Ação corretiva"], ["responsavel", "Responsável"], ["status", "Status"]]),
-    rows: filtered.map((item) => ({ dataNota: formatDateDisplay(item.data), fornecedor: item.fornecedor, notaFiscal: item.notaFiscal, produto: item.produto, codigoProduto: valueOrDash(item.codigoProdutoXml), ncm: valueOrDash(item.ncm), cfop: valueOrDash(item.cfop), quantidadeComprada: formatNumber(item.quantidadeComprada), unidadeMedidaCompra: valueOrDash(item.unidadeMedidaCompra), valorUnitario: formatCurrency(item.valorUnitario), valorTotalItem: formatCurrency(item.valorTotalItem), lote: valueOrDash(item.lote), fabricacao: formatDateDisplay(item.dataFabricacao), validade: formatDateDisplay(item.dataValidade), sif: formatSifDisplayValue(item.sif), temperatura: formatTemperature(item.temperatura), transporte: labelConformidade(item.transporteEntregador), aspecto: labelConformidade(item.aspectoSensorial), embalagem: labelConformidade(item.embalagem), acaoCorretiva: valueOrDash(item.acaoCorretiva), responsavel: valueOrDash(item.responsavelRecebimento), status: `${labelStatusRecebimento(item.statusGeral)} / Nota ${labelStatusNota(item.nota?.statusNota)}` }))
+    rows: filtered.map((item) => ({ dataNota: formatDateDisplay(item.data), fornecedor: item.fornecedor, notaFiscal: item.notaFiscal, produto: item.produto, codigoProduto: valueOrDash(item.codigoProdutoXml), ncm: valueOrDash(item.ncm), cfop: valueOrDash(item.cfop), quantidadeComprada: formatNumber(item.quantidadeComprada), unidadeMedidaCompra: valueOrDash(item.unidadeMedidaCompra), valorUnitario: formatCurrency(item.valorUnitario), valorTotalItem: formatCurrency(item.valorTotalItem), lote: valueOrDash(item.lote), fabricacao: formatDateDisplay(item.dataFabricacao), validade: formatRecebimentoValidade(item.dataValidade, item.validadeNaoAplicavel), sif: formatSifDisplayValue(item.sif), temperatura: formatRecebimentoTemperatura(item.temperatura, item.temperaturaTipo), transporte: labelConformidade(item.transporteEntregador), aspecto: labelConformidade(item.aspectoSensorial), embalagem: labelConformidade(item.embalagem), acaoCorretiva: valueOrDash(item.acaoCorretiva), responsavel: valueOrDash(item.responsavelRecebimento), status: `${labelStatusRecebimento(item.statusGeral)} / Nota ${labelStatusNota(item.nota?.statusNota)}` }))
   });
 }
 
@@ -486,8 +503,8 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
       { label: "Temperatura fora da regra", value: filtered.filter((item) => item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO).length },
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length }
     ],
-    columns: columns([["data", "Data"], ["servico", "Serviço"], ["tipoServico", "Tipo de serviço"], ["periodoServico", "Período do serviço"], ["item", "Item"], ["classificacao", "Classificação"], ["tcEquipamento", "TC equipamento"], ["primeiraTc", "1ª TC"], ["segundaTc", "2ª TC"], ["acaoCorretiva", "Ação corretiva"], ["observacao", "Observação"], ["responsavel", "Responsável"], ["status", "Status"]]),
-    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), servico: item.servico.nome, tipoServico: getTipoServicoLabel(item.servico.tipoServico), periodoServico: getServicoPeriodoLabel(item.servico), item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: formatTemperature(item.tcEquipamento), primeiraTc: formatTemperature(item.primeiraTc), segundaTc: formatTemperature(item.segundaTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, status: labelStatusBuffet(item.status) }))
+    columns: columns([["data", "Data"], ["servico", "Serviço"], ["tipoServico", "Tipo de serviço"], ["periodoServico", "Período do serviço"], ["item", "Item"], ["classificacao", "Classificação"], ["tcEquipamento", "TC equipamento"], ["primeiraTc", "TC alimento"], ["acaoCorretiva", "Ação corretiva"], ["observacao", "Observação"], ["responsavel", "Executor"], ["supervisor", "Supervisor"], ["dataHoraAssinatura", "Data/hora da supervisão"], ["status", "Status"]]),
+    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), servico: item.servico.nome, tipoServico: getTipoServicoLabel(item.servico.tipoServico), periodoServico: getServicoPeriodoLabel(item.servico), item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: formatTemperature(item.tcEquipamento), primeiraTc: formatTemperature(item.primeiraTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, supervisor: valueOrDash(item.assinaturaNome), dataHoraAssinatura: formatDateTimeDisplay(item.assinaturaDataHora), status: labelStatusBuffet(item.status) }))
   });
 }
 

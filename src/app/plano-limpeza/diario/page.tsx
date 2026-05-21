@@ -70,6 +70,7 @@ function buildPathWithParams(params: URLSearchParams): string {
 export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
+  const usuarioLogadoId = authUser?.id ?? null;
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
@@ -210,6 +211,13 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         )
       )
     : false;
+  const assinaturaBloqueadaPorExecutor =
+    registroParaAssinatura && etapaAssinatura === "supervisor"
+      ? (usuarioLogadoId !== null &&
+          registroParaAssinatura.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
+        (!registroParaAssinatura.assinaturaResponsavelUsuarioId &&
+          registroParaAssinatura.assinaturaResponsavel.trim() === responsavelLogado.trim())
+      : false;
 
   const paramsRetorno = new URLSearchParams();
   if (filtroData) paramsRetorno.set("filtroData", filtroData);
@@ -293,6 +301,12 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       {registroParaAssinatura && assinaturaBloqueadaPorFechamento ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           Este checklist pertence a um mês fechado e não pode receber assinatura.
+        </section>
+      ) : null}
+
+      {registroParaAssinatura && assinaturaBloqueadaPorExecutor ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          Quem executou o serviço não pode assinar como supervisor. Solicite a assinatura de outro responsável autorizado.
         </section>
       ) : null}
 
@@ -438,6 +452,12 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                   const periodo = getMonthYear(registro.data);
                   const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
                   const etapa = getDailySignStage(registro);
+                  const supervisorMesmoExecutor =
+                    etapa === "supervisor" &&
+                    ((usuarioLogadoId !== null &&
+                      registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
+                      (!registro.assinaturaResponsavelUsuarioId &&
+                        registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
                   const detalhamentoLimpeza = detalhamentoPorArea.get(registro.area);
                   const hrefAssinar = (() => {
                     const q = new URLSearchParams(paramsRetorno);
@@ -467,6 +487,10 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                       <td className="px-3 py-2">
                         {bloqueado ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
+                        ) : supervisorMesmoExecutor ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Outro supervisor
+                          </span>
                         ) : etapa ? (
                           <Link href={hrefAssinar} className="btn-action">
                             Assinar
@@ -683,7 +707,10 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       </section>
       ) : null}
 
-      {registroParaAssinatura && etapaAssinatura && !assinaturaBloqueadaPorFechamento ? (
+      {registroParaAssinatura &&
+      etapaAssinatura &&
+      !assinaturaBloqueadaPorFechamento &&
+      !assinaturaBloqueadaPorExecutor ? (
         <DailySignChecklistModal
           closeHref={returnTo}
           returnTo={returnTo}

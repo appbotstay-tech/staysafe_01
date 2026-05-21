@@ -45,7 +45,6 @@ export type ServiceItemFormRow = {
   avaliacaoOrientacao: string | null;
   tcEquipamento: string;
   primeiraTc: string;
-  segundaTc: string;
   acaoCorretiva: string;
   observacao: string;
   responsavelNome: string | null;
@@ -221,13 +220,11 @@ export function ServiceItemsForm({
 
       const tcEquipamento = String(formData.get(`${row.rowKey}-tcEquipamento`) ?? "").trim();
       const primeiraTc = String(formData.get(`${row.rowKey}-primeiraTc`) ?? "").trim();
-      const segundaTc = String(formData.get(`${row.rowKey}-segundaTc`) ?? "").trim();
       const acaoCorretiva = String(formData.get(`${row.rowKey}-acaoCorretiva`) ?? "").trim();
       const observacao = String(formData.get(`${row.rowKey}-observacao`) ?? "").trim();
       const hasAnyValue = [
         tcEquipamento,
         primeiraTc,
-        segundaTc,
         acaoCorretiva,
         observacao
       ].some(Boolean);
@@ -245,20 +242,15 @@ export function ServiceItemsForm({
       const missingFields: string[] = [];
       const tcEquipamentoNumber = parseTemperatureInput(tcEquipamento);
       const primeiraTcNumber = parseTemperatureInput(primeiraTc);
-      const segundaTcNumber = parseTemperatureInput(segundaTc);
 
       if (tcEquipamentoNumber === null) {
         missingFields.push("TC Equipamento");
       }
 
       if (primeiraTcNumber === null) {
-        missingFields.push("1ª TC");
-      }
-
-      if (segundaTcNumber === null) {
-        missingFields.push("2ª TC");
+        missingFields.push("TC do Alimento");
       } else {
-        const avaliacao = avaliarTemperaturaBuffet(row.classificacao, segundaTcNumber);
+        const avaliacao = avaliarTemperaturaBuffet(row.classificacao, primeiraTcNumber);
         if (avaliacao.exigeAcaoCorretiva && !acaoCorretiva) {
           missingFields.push("ação corretiva");
         }
@@ -417,7 +409,7 @@ export function ServiceItemsForm({
                   </p>
                 ) : null}
 
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <label className="text-sm text-slate-700 dark:text-slate-200">
                     TC Equipamento
                     <input
@@ -431,25 +423,13 @@ export function ServiceItemsForm({
                     />
                   </label>
                   <label className="text-sm text-slate-700 dark:text-slate-200">
-                    1ª TC
+                    TC do Alimento
                     <input
                       type="text"
                       name={`${row.rowKey}-primeiraTc`}
                       inputMode="text"
                       placeholder="Ex.: -12,5"
                       defaultValue={row.primeiraTc}
-                      className={inputClassName}
-                      disabled={row.bloqueado}
-                    />
-                  </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-200">
-                    2ª TC
-                    <input
-                      type="text"
-                      name={`${row.rowKey}-segundaTc`}
-                      inputMode="text"
-                      placeholder="Ex.: 10,5"
-                      defaultValue={row.segundaTc}
                       className={inputClassName}
                       disabled={row.bloqueado}
                     />
