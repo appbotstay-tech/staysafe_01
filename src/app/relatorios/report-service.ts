@@ -47,6 +47,7 @@ import {
   getServicoPeriodoLabel,
   getTipoServicoLabel
 } from "../controle-buffet-amostras/utils";
+import { formatWeeklyExecutionQuando } from "../plano-limpeza/utils";
 
 export type ReportSearchParams = Record<string, string | string[] | undefined>;
 export type ReportColumn = { key: string; label: string };
@@ -541,7 +542,6 @@ async function generateSemanalReport(moduleId: ReportModuleId, reportId: string,
     if (!includesText(item.assinaturaSupervisor, getParam(params, "supervisor"))) return false;
     const status = getParam(params, "statusPlanoLimpeza");
     if (status && item.status !== status) return false;
-    if (!includesText(item.quando ?? item.item.quando, getParam(params, "diaSemana"))) return false;
     return true;
   });
   return finalizeReport({
@@ -552,8 +552,8 @@ async function generateSemanalReport(moduleId: ReportModuleId, reportId: string,
       { label: "Aguardando supervisor", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR).length },
       { label: "Concluídas", value: filtered.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length }
     ],
-    columns: columns([["semana", "Semana"], ["area", "Área"], ["item", "Item"], ["produto", "Produto"], ["diaSemana", "Dia da semana"], ["setorResponsavel", "Setor responsável"], ["funcionarioResponsavel", "Funcionário responsável"], ["responsavel", "Responsável pela execução"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"]]),
-    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.itemDescricao ?? item.item.oQueLimpar, produto: valueOrDash(item.qualProduto ?? item.item.qualProduto), diaSemana: item.quando ?? item.item.quando, setorResponsavel: valueOrDash(item.setorResponsavel ?? item.item.setorResponsavel), funcionarioResponsavel: valueOrDash(item.funcionarioResponsavel ?? item.item.quem), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
+    columns: columns([["semana", "Semana"], ["area", "Área"], ["item", "Item"], ["produto", "Produto"], ["quando", "Quando"], ["setorResponsavel", "Setor responsável"], ["funcionarioResponsavel", "Funcionário responsável"], ["responsavel", "Responsável pela execução"], ["supervisor", "Supervisor"], ["status", "Status"], ["observacao", "Observação"]]),
+    rows: filtered.map((item) => ({ semana: formatDateDisplay(item.dataExecucao), area: item.area, item: item.itemDescricao ?? item.item.oQueLimpar, produto: valueOrDash(item.qualProduto ?? item.item.qualProduto), quando: formatWeeklyExecutionQuando(item), setorResponsavel: valueOrDash(item.setorResponsavel ?? item.item.setorResponsavel), funcionarioResponsavel: valueOrDash(item.funcionarioResponsavel ?? item.item.quem), responsavel: valueOrDash(item.assinaturaResponsavel), supervisor: valueOrDash(item.assinaturaSupervisor), status: labelStatusPlano(item.status), observacao: valueOrDash(item.observacaoResponsavel ?? item.observacaoSupervisor) }))
   });
 }
 

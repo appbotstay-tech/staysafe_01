@@ -20,7 +20,7 @@ import {
 } from "@/lib/rbac";
 
 import { closeWeeklyMonthAction, reopenWeeklyMonthAction } from "../actions";
-import { MONTH_OPTIONS, WEEKLY_DAY_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
+import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
 import { ReopenMonthModal } from "../reopen-month-modal";
 import {
   consolidateWeeklyExecutionsByAreaWeek,
@@ -32,12 +32,12 @@ import {
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
+  formatWeeklyExecutionQuando,
   getCurrentSystemDateTime,
   getCurrentWeekDateRange,
-  getWeekDateRangeForDate,
   getMonthDateRange,
   getMonthYear,
-  getWeeklyDayLabel,
+  getWeekDateRangeForDate,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -48,10 +48,8 @@ import { WeeklySignChecklistModal } from "./sign-checklist-modal";
 import { WeeklyChecklistSync } from "./weekly-checklist-sync";
 
 const PAGE_PATH = "/plano-limpeza/semanal";
-const CARD_CLASS =
-  "bpma-card";
-const INPUT_CLASS =
-  "bpma-input";
+const CARD_CLASS = "bpma-card";
+const INPUT_CLASS = "bpma-input";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
@@ -76,6 +74,7 @@ type WeeklyExecutionPageRecord = {
   dataExecucao: Date;
   area: string;
   assinaturaResponsavel: string;
+  assinaturaResponsavelDataHora: Date | null;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
   itemDescricao: string | null;
@@ -88,49 +87,21 @@ type WeeklyExecutionPageRecord = {
     ordem: number;
     oQueLimpar: string;
     qualProduto: string;
-    quando: string;
+    quando: string | null;
     setorResponsavel: string | null;
     quem: string;
   };
-};
-
-type WeeklyDayAreaSummary = {
-  executionId: number;
-  area: string;
-  quando: string;
-  dayLabel: string;
-  dayDate: Date;
-  weekStart: Date;
-  weekEnd: Date;
-  assinaturaResponsavel: string;
-  assinaturaSupervisor: string;
-  status: StatusPlanoLimpeza;
-  statusGeral: "Pendente" | "Parcial" | "Aguardando Supervisor" | "Concluído";
-  totalRegistrosOriginais: number;
-  recordIds: number[];
-  itemNames: string[];
 };
 
 function getExecutionItemDescription(record: WeeklyExecutionPageRecord): string {
   return record.itemDescricao?.trim() || record.item.oQueLimpar;
 }
 
-function getExecutionItemQuando(record: WeeklyExecutionPageRecord): string {
-  return record.quando?.trim() || record.item.quando;
-}
-
-function getWeeklyDayIndex(value: string): number {
-  const index = WEEKLY_DAY_OPTIONS.findIndex((day) => day.value === value);
-  return index >= 0 ? index : 0;
-}
-
-function getDateForWeeklyDay(weekStart: Date, value: string): Date {
-  const date = new Date(weekStart);
-  date.setUTCDate(date.getUTCDate() + getWeeklyDayIndex(value));
-  return date;
-}
-
-function getWeeklyRecordStatus(record: WeeklyExecutionPageRecord): StatusPlanoLimpeza {
+function getWeeklyRecordStatus(record: {
+  status: StatusPlanoLimpeza;
+  assinaturaResponsavel: string;
+  assinaturaSupervisor: string;
+}): StatusPlanoLimpeza {
   const hasResponsavel = record.assinaturaResponsavel.trim().length > 0;
   const hasSupervisor = record.assinaturaSupervisor.trim().length > 0;
 
@@ -145,121 +116,35 @@ function getWeeklyRecordStatus(record: WeeklyExecutionPageRecord): StatusPlanoLi
   return record.status;
 }
 
-function consolidateWeeklyDayAreaStatus(records: WeeklyExecutionPageRecord[]): {
+function getWeeklyExecutionQuandoLabel(record: {
   assinaturaResponsavel: string;
-  assinaturaSupervisor: string;
-  status: StatusPlanoLimpeza;
-  statusGeral: WeeklyDayAreaSummary["statusGeral"];
-} {
-  const responsaveis = Array.from(
-    new Set(records.map((record) => record.assinaturaResponsavel.trim()).filter(Boolean))
-  );
-  const supervisores = Array.from(
-    new Set(records.map((record) => record.assinaturaSupervisor.trim()).filter(Boolean))
-  );
-  const itemStatuses = records.map(getWeeklyRecordStatus);
-
-  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.CONCLUIDO)) {
-    return {
-      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
-      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
-      status: StatusPlanoLimpeza.CONCLUIDO,
-      statusGeral: "Concluído"
-    };
-  }
-
-  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.PENDENTE)) {
-    return {
-      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
-      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
-      status: StatusPlanoLimpeza.PENDENTE,
-      statusGeral: "Pendente"
-    };
-  }
-
-  if (itemStatuses.every((status) => status !== StatusPlanoLimpeza.PENDENTE)) {
-    return {
-      assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
-      assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
-      status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
-      statusGeral: "Aguardando Supervisor"
-    };
-  }
-
-  return {
-    assinaturaResponsavel: responsaveis.length <= 1 ? responsaveis[0] ?? "" : "Múltiplos",
-    assinaturaSupervisor: supervisores.length <= 1 ? supervisores[0] ?? "" : "Múltiplos",
-    status: StatusPlanoLimpeza.PENDENTE,
-    statusGeral: "Parcial"
-  };
+  assinaturaResponsavelDataHora: Date | null;
+  quando: string | null;
+}): string {
+  return formatWeeklyExecutionQuando(record);
 }
 
-function buildWeeklyDayAreaSummaries(records: WeeklyExecutionPageRecord[]): WeeklyDayAreaSummary[] {
-  const grouped = new Map<
-    string,
-    {
-      area: string;
-      quando: string;
-      weekStart: Date;
-      weekEnd: Date;
-      records: WeeklyExecutionPageRecord[];
-    }
-  >();
-
-  for (const record of records) {
-    const weekRange = getWeekDateRangeForDate(record.dataExecucao);
-    const quando = getExecutionItemQuando(record);
-    const key = `${formatDateInput(weekRange.start)}|${quando}|${record.area}`;
-
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        area: record.area,
-        quando,
-        weekStart: weekRange.start,
-        weekEnd: weekRange.end,
-        records: []
-      });
-    }
-
-    grouped.get(key)!.records.push(record);
+function summaryMatchesStatus(
+  summary: ReturnType<typeof consolidateWeeklyExecutionsByAreaWeek>[number],
+  recordsById: Map<number, WeeklyExecutionPageRecord>,
+  filtroStatus: StatusPlanoLimpeza | null
+): boolean {
+  if (!filtroStatus) {
+    return true;
   }
 
-  return Array.from(grouped.values())
-    .map((group) => {
-      const orderedRecords = [...group.records].sort((a, b) => {
-        if (a.item.ordem !== b.item.ordem) {
-          return a.item.ordem - b.item.ordem;
-        }
-        return getExecutionItemDescription(a).localeCompare(getExecutionItemDescription(b), "pt-BR");
-      });
-      const signableRecord =
-        orderedRecords.find((record) => getWeeklySignStage(record) !== null) ?? orderedRecords[0];
-      const consolidated = consolidateWeeklyDayAreaStatus(orderedRecords);
+  if (filtroStatus === StatusPlanoLimpeza.CONCLUIDO) {
+    return summary.statusGeral === "Concluído";
+  }
 
-      return {
-        executionId: signableRecord.id,
-        area: group.area,
-        quando: group.quando,
-        dayLabel: getWeeklyDayLabel(group.quando),
-        dayDate: getDateForWeeklyDay(group.weekStart, group.quando),
-        weekStart: group.weekStart,
-        weekEnd: group.weekEnd,
-        assinaturaResponsavel: consolidated.assinaturaResponsavel,
-        assinaturaSupervisor: consolidated.assinaturaSupervisor,
-        status: consolidated.status,
-        statusGeral: consolidated.statusGeral,
-        totalRegistrosOriginais: orderedRecords.length,
-        recordIds: orderedRecords.map((record) => record.id),
-        itemNames: orderedRecords.map(getExecutionItemDescription)
-      };
-    })
-    .sort((a, b) => {
-      const weekDiff = b.weekStart.getTime() - a.weekStart.getTime();
-      if (weekDiff !== 0) return weekDiff;
-      const dayDiff = getWeeklyDayIndex(a.quando) - getWeeklyDayIndex(b.quando);
-      if (dayDiff !== 0) return dayDiff;
-      return a.area.localeCompare(b.area, "pt-BR");
-    });
+  if (filtroStatus === StatusPlanoLimpeza.PENDENTE) {
+    return summary.statusGeral === "Pendente";
+  }
+
+  return summary.recordIds.some((id) => {
+    const record = recordsById.get(id);
+    return record ? getWeeklyRecordStatus(record) === filtroStatus : false;
+  });
 }
 
 export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProps) {
@@ -342,6 +227,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         setorResponsavel: true,
         funcionarioResponsavel: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
         status: true,
         item: {
@@ -356,7 +242,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           }
         }
       },
-      orderBy: [{ dataExecucao: "desc" }, { createdAt: "desc" }]
+      orderBy: [{ dataExecucao: "desc" }, { area: "asc" }, { createdAt: "desc" }]
     }),
     prisma.planoLimpezaSemanalItem.findMany({
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
@@ -371,13 +257,14 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     })
   ]);
 
+  const recordsById = new Map(rawExecutions.map((record) => [record.id, record]));
   const activeAreaNames = new Set(
     weeklyAreas.filter((area) => area.ativo && !area.excluidoEm).map((area) => area.nome)
   );
   const activeItems = allItems.filter(
     (item) => item.ativo && !item.excluidoEm && activeAreaNames.has(item.area)
   );
-  const summariesAll = buildWeeklyDayAreaSummaries(rawExecutions);
+  const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawExecutions);
   const filteredByItemNames =
     filtroItem.trim().length > 0
       ? new Set(
@@ -391,7 +278,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     if (filtroArea && summary.area !== filtroArea) {
       return false;
     }
-    if (filtroStatus && summary.status !== filtroStatus) {
+    if (!summaryMatchesStatus(summary, recordsById, filtroStatus)) {
       return false;
     }
     if (filtroResponsavel && !includesIgnoreCase(summary.assinaturaResponsavel, filtroResponsavel)) {
@@ -430,6 +317,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           funcionarioResponsavel: true,
           status: true,
           assinaturaResponsavel: true,
+          assinaturaResponsavelDataHora: true,
           assinaturaSupervisor: true,
           observacaoResponsavel: true,
           observacaoSupervisor: true,
@@ -539,7 +427,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       <DocumentosModuleHeader
         title="Plano de Limpeza Semanal"
-        description="Execução semanal por área com detalhamento interno dos itens configurados."
+        description="Ciclo semanal por área, com assinatura individual dos itens/locais cadastrados."
         modulo={ModuloDocumento.PLANO_LIMPEZA_SEMANAL}
         modulePath={PAGE_PATH}
         searchParams={params}
@@ -600,12 +488,12 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {isColaborador ? "Rotinas Semanais Operacionais" : "Execuções Semanais por Dia e Área"}
+          {isColaborador ? "Rotinas Semanais Operacionais" : "Áreas do Ciclo Semanal"}
         </h2>
 
         {isColaborador ? (
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            Exibindo automaticamente as rotinas da semana atual que exigem execução operacional.
+            Exibindo automaticamente as áreas da semana atual que exigem execução operacional.
           </p>
         ) : (
           <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
@@ -684,37 +572,35 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
         {!hasManualFilters && !isColaborador ? (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Exibindo automaticamente os itens da semana atual agrupados por dia e área.
+            Exibindo automaticamente o ciclo semanal atual, de segunda a domingo.
           </p>
         ) : null}
 
         <div className="mt-4 space-y-3 md:hidden">
           {summaries.length === 0 ? (
             <div className="rounded-lg border border-slate-200 p-3 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Nenhuma execução semanal encontrada.
+              Nenhuma área semanal encontrada.
             </div>
           ) : (
             summaries.map((summary) => {
               const period = getMonthYear(summary.weekStart);
               const bloqueado = fechadosSet.has(periodKey(period.mes, period.ano));
-              const podeAssinar = summary.statusGeral !== "Concluído";
-              const hrefAssinar = (() => {
+              const hrefAbrir = (() => {
                 const q = new URLSearchParams(paramsRetorno);
                 q.set("signId", String(summary.executionId));
                 return buildPathWithParams(q);
               })();
 
               return (
-                <article key={`${summary.area}-${summary.quando}-${formatDateInput(summary.weekStart)}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <article key={`${summary.area}-${formatDateInput(summary.weekStart)}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                   <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {summary.dayLabel} • {formatDateDisplay(summary.dayDate)}
+                    {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {summary.area}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {summary.totalRegistrosOriginais} item(ns): {summary.itemNames.slice(0, 3).join(", ")}
-                    {summary.itemNames.length > 3 ? "..." : ""}
+                    Itens: {summary.completedItems} de {summary.totalRegistrosOriginais} concluídos
                   </p>
                   <div className="mt-2">
                     <StatusBadge status={summary.statusGeral} />
@@ -722,12 +608,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                   <div className="mt-3">
                     {bloqueado ? (
                       <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
-                    ) : podeAssinar ? (
-                      <Link href={hrefAssinar} className="btn-action">
-                        Abrir Itens
-                      </Link>
                     ) : (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Sem Ação</span>
+                      <Link href={hrefAbrir} className="btn-action">
+                        Abrir
+                      </Link>
                     )}
                   </div>
                 </article>
@@ -741,10 +625,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Semana</th>
-                <th className="px-3 py-2">Dia</th>
                 <th className="px-3 py-2">Área</th>
-                <th className="px-3 py-2">Itens/Locais</th>
-                <th className="px-3 py-2">Status Geral</th>
+                <th className="px-3 py-2">Itens</th>
+                <th className="px-3 py-2">Status da Área</th>
+                <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
@@ -752,51 +636,42 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               {summaries.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhuma execução semanal encontrada.
+                    Nenhuma área semanal encontrada.
                   </td>
                 </tr>
               ) : (
                 summaries.map((summary) => {
                   const period = getMonthYear(summary.weekStart);
                   const bloqueado = fechadosSet.has(periodKey(period.mes, period.ano));
-                  const podeAssinar = summary.statusGeral !== "Concluído";
-                  const hrefAssinar = (() => {
+                  const hrefAbrir = (() => {
                     const q = new URLSearchParams(paramsRetorno);
                     q.set("signId", String(summary.executionId));
                     return buildPathWithParams(q);
                   })();
 
                   return (
-                    <tr key={`${summary.area}-${summary.quando}-${formatDateInput(summary.weekStart)}`}>
+                    <tr key={`${summary.area}-${formatDateInput(summary.weekStart)}`}>
                       <td className="px-3 py-2">
                         {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
                       </td>
-                      <td className="px-3 py-2">
-                        {summary.dayLabel}
-                        <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          {formatDateDisplay(summary.dayDate)}
-                        </span>
-                      </td>
                       <td className="px-3 py-2">{summary.area}</td>
                       <td className="px-3 py-2">
-                        <span className="font-medium">{summary.totalRegistrosOriginais}</span>
-                        <span className="block max-w-md text-xs text-slate-500 dark:text-slate-400">
-                          {summary.itemNames.slice(0, 4).join(", ")}
-                          {summary.itemNames.length > 4 ? "..." : ""}
+                        {summary.completedItems} de {summary.totalRegistrosOriginais} concluídos
+                        <span className="block text-xs text-slate-500 dark:text-slate-400">
+                          {summary.pendingItems} pendente(s)
                         </span>
                       </td>
                       <td className="px-3 py-2">
                         <StatusBadge status={summary.statusGeral} />
                       </td>
+                      <td className="px-3 py-2">{summary.assinaturaResponsavel || "-"}</td>
                       <td className="px-3 py-2">
                         {bloqueado ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
-                        ) : podeAssinar ? (
-                          <Link href={hrefAssinar} className="btn-action">
-                            Abrir Itens
-                          </Link>
                         ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">Sem Ação</span>
+                          <Link href={hrefAbrir} className="btn-action">
+                            Abrir
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -809,137 +684,139 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
       </section>
 
       {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
+        <section className={CARD_CLASS}>
+          <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
 
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroData" value={filtroData} />
-          <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
-          <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
-          <input type="hidden" name="filtroArea" value={filtroArea} />
-          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-          <input type="hidden" name="filtroItem" value={filtroItem} />
+          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
+            <input type="hidden" name="filtroData" value={filtroData} />
+            <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
+            <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
+            <input type="hidden" name="filtroArea" value={filtroArea} />
+            <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
+            <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
+            <input type="hidden" name="filtroItem" value={filtroItem} />
 
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input type="number" name="fechamentoAno" min={2020} max={2100} defaultValue={fechamentoAno} className={INPUT_CLASS} />
-          </label>
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} -{" "}
-            {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-
-          <div className="mb-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Semana</th>
-                  <th className="px-3 py-2">Área</th>
-                  <th className="px-3 py-2">Itens</th>
-                  <th className="px-3 py-2">Status Geral</th>
-                  <th className="px-3 py-2">Responsável</th>
-                  <th className="px-3 py-2">Supervisor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {fechamentoSummaries.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                      Nenhuma execução no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  fechamentoSummaries.map((summary) => (
-                    <tr key={`${summary.area}-${formatDateInput(summary.weekStart)}`}>
-                      <td className="px-3 py-2">
-                        {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
-                      </td>
-                      <td className="px-3 py-2">{summary.area}</td>
-                      <td className="px-3 py-2">{summary.totalRegistrosOriginais}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={summary.statusGeral} />
-                      </td>
-                      <td className="px-3 py-2">{summary.assinaturaResponsavel || "-"}</td>
-                      <td className="px-3 py-2">{summary.assinaturaSupervisor || "-"}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura:{" "}
-                <strong>
-                  {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
-                </strong>
-              </p>
-              {podeReabrir ? (
-                <>
-                  <form id={reaberturaFormId} action={reopenWeeklyMonthAction} className="mt-4">
-                    <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                    <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                    <input type="hidden" name="returnTo" value={returnTo} />
-                  </form>
-                  <ReopenMonthModal
-                    mes={fechamentoMes}
-                    ano={fechamentoAno}
-                    formId={reaberturaFormId}
-                  />
-                </>
-              ) : null}
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Mês
+              <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
+                {MONTH_OPTIONS.map((month) => (
+                  <option key={month.value} value={String(month.value)}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Ano
+              <input type="number" name="fechamentoAno" min={2020} max={2100} defaultValue={fechamentoAno} className={INPUT_CLASS} />
+            </label>
+            <div className="md:col-span-2 md:flex md:items-end">
+              <button type="submit" className="btn-secondary">
+                Carregar Período
+              </button>
             </div>
-          ) : podeFechar ? (
-            <form action={closeWeeklyMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Seu perfil não possui permissão para assinar o fechamento mensal.
+          </form>
+
+          <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+            <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
+              Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} -{" "}
+              {fechamentoAssinado ? "Assinado" : "Aberto"}
             </p>
-          )}
-        </div>
-      </section>
+
+            <div className="mb-4 overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2">Semana</th>
+                    <th className="px-3 py-2">Área</th>
+                    <th className="px-3 py-2">Itens</th>
+                    <th className="px-3 py-2">Status Geral</th>
+                    <th className="px-3 py-2">Responsável</th>
+                    <th className="px-3 py-2">Supervisor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {fechamentoSummaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                        Nenhuma execução no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    fechamentoSummaries.map((summary) => (
+                      <tr key={`${summary.area}-${formatDateInput(summary.weekStart)}`}>
+                        <td className="px-3 py-2">
+                          {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
+                        </td>
+                        <td className="px-3 py-2">{summary.area}</td>
+                        <td className="px-3 py-2">
+                          {summary.completedItems} de {summary.totalRegistrosOriginais}
+                        </td>
+                        <td className="px-3 py-2">
+                          <StatusBadge status={summary.statusGeral} />
+                        </td>
+                        <td className="px-3 py-2">{summary.assinaturaResponsavel || "-"}</td>
+                        <td className="px-3 py-2">{summary.assinaturaSupervisor || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {fechamentoAssinado ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
+                <p>
+                  Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
+                </p>
+                <p>
+                  Data da assinatura:{" "}
+                  <strong>
+                    {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
+                  </strong>
+                </p>
+                {podeReabrir ? (
+                  <>
+                    <form id={reaberturaFormId} action={reopenWeeklyMonthAction} className="mt-4">
+                      <input type="hidden" name="mes" value={String(fechamentoMes)} />
+                      <input type="hidden" name="ano" value={String(fechamentoAno)} />
+                      <input type="hidden" name="returnTo" value={returnTo} />
+                    </form>
+                    <ReopenMonthModal
+                      mes={fechamentoMes}
+                      ano={fechamentoAno}
+                      formId={reaberturaFormId}
+                    />
+                  </>
+                ) : null}
+              </div>
+            ) : podeFechar ? (
+              <form action={closeWeeklyMonthAction} className="grid gap-3 md:grid-cols-2">
+                <input type="hidden" name="mes" value={String(fechamentoMes)} />
+                <input type="hidden" name="ano" value={String(fechamentoAno)} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <label className="text-sm text-slate-700 dark:text-slate-200">
+                  Confirme sua Senha *
+                  <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
+                </label>
+                <SignatureContextCard
+                  nomeUsuario={responsavelLogado}
+                  perfil={perfilLogado}
+                  dataHora={formatDateTimeDisplay(now)}
+                />
+                <div className="md:col-span-2">
+                  <button type="submit" className="btn-primary">
+                    Fechar Mês
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                Seu perfil não possui permissão para assinar o fechamento mensal.
+              </p>
+            )}
+          </div>
+        </section>
       ) : null}
 
       {executionParaAssinatura &&
@@ -953,18 +830,18 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           execution={executionParaAssinatura}
           items={executionItemsParaAssinatura.map((executionItem) => ({
             id: executionItem.id,
-            status: executionItem.status,
+            status: getWeeklyRecordStatus(executionItem),
             assinaturaResponsavel: executionItem.assinaturaResponsavel,
             assinaturaSupervisor: executionItem.assinaturaSupervisor,
             observacaoResponsavel: executionItem.observacaoResponsavel,
             observacaoSupervisor: executionItem.observacaoSupervisor,
             etapa: getWeeklySignStage(executionItem),
+            quandoAssinado: getWeeklyExecutionQuandoLabel(executionItem),
             item: {
               id: executionItem.item.id,
               ordem: executionItem.item.ordem,
               oQueLimpar: executionItem.itemDescricao ?? executionItem.item.oQueLimpar,
               qualProduto: executionItem.qualProduto ?? executionItem.item.qualProduto,
-              quando: executionItem.quando ?? executionItem.item.quando,
               setorResponsavel: executionItem.setorResponsavel ?? executionItem.item.setorResponsavel,
               quem: executionItem.funcionarioResponsavel ?? executionItem.item.quem
             }

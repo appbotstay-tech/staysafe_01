@@ -618,7 +618,7 @@ model PlanoLimpezaSemanalItem {
   area               String
   oQueLimpar         String
   qualProduto        String
-  quando             String
+  quando             String?
   setorResponsavel   String?
   quem               String
   ativo              Boolean                       @default(true)
@@ -660,7 +660,15 @@ model PlanoLimpezaSemanalExecucao {
   setorResponsavel      String?
   funcionarioResponsavel String?
   assinaturaResponsavel String
+  assinaturaResponsavelUsuarioId Int?
+  assinaturaResponsavelNomeUsuario String?
+  assinaturaResponsavelPerfil PerfilUsuario?
+  assinaturaResponsavelDataHora DateTime?
   assinaturaSupervisor  String
+  assinaturaSupervisorUsuarioId Int?
+  assinaturaSupervisorNomeUsuario String?
+  assinaturaSupervisorPerfil PerfilUsuario?
+  assinaturaSupervisorDataHora DateTime?
   observacaoResponsavel String?
   observacaoSupervisor  String?
   status                StatusPlanoLimpeza      @default(PENDENTE)
@@ -672,6 +680,8 @@ model PlanoLimpezaSemanalExecucao {
   @@index([status])
   @@index([itemId])
   @@index([assinaturaResponsavel])
+  @@index([assinaturaResponsavelDataHora])
+  @@index([assinaturaSupervisorDataHora])
   @@map("plano_limpeza_semanal_execucao")
 }
 

@@ -338,7 +338,7 @@ export async function ensureWeeklyChecklistForDateRange(params: {
             itemId: desired.itemId,
             itemDescricao: activeItemById.get(desired.itemId)?.oQueLimpar ?? null,
             qualProduto: activeItemById.get(desired.itemId)?.qualProduto ?? null,
-            quando: activeItemById.get(desired.itemId)?.quando ?? null,
+            quando: null,
             setorResponsavel: activeItemById.get(desired.itemId)?.setorResponsavel ?? null,
             funcionarioResponsavel: activeItemById.get(desired.itemId)?.quem ?? null,
             assinaturaResponsavel: "",
@@ -372,7 +372,7 @@ export async function ensureWeeklyChecklistForDateRange(params: {
           }
           updateData.itemDescricao = expectedItem.oQueLimpar;
           updateData.qualProduto = expectedItem.qualProduto;
-          updateData.quando = expectedItem.quando;
+          updateData.quando = null;
           updateData.setorResponsavel = expectedItem.setorResponsavel;
           updateData.funcionarioResponsavel = expectedItem.quem;
         }
@@ -459,8 +459,10 @@ export type WeeklyExecutionSummary = {
   assinaturaResponsavel: string;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
-  statusGeral: "Pendente" | "Parcial" | "Aguardando Supervisor" | "Concluído";
+  statusGeral: "Pendente" | "Parcial" | "Concluído";
   totalRegistrosOriginais: number;
+  completedItems: number;
+  pendingItems: number;
   recordIds: number[];
 };
 
@@ -468,7 +470,9 @@ function consolidateWeeklyStatus(records: WeeklyExecutionForSummary[]): {
   assinaturaResponsavel: string;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
-  statusGeral: "Pendente" | "Parcial" | "Aguardando Supervisor" | "Concluído";
+  statusGeral: "Pendente" | "Parcial" | "Concluído";
+  completedItems: number;
+  pendingItems: number;
 } {
   const responsaveis = Array.from(
     new Set(
@@ -490,43 +494,30 @@ function consolidateWeeklyStatus(records: WeeklyExecutionForSummary[]): {
   const assinaturaSupervisor =
     supervisores.length <= 1 ? (supervisores[0] ?? "") : "Múltiplos";
 
-  const itemStatuses = records.map((record) => {
-    const hasResponsavel = record.assinaturaResponsavel.trim().length > 0;
-    const hasSupervisor = record.assinaturaSupervisor.trim().length > 0;
+  const completedItems = records.filter(
+    (record) => record.assinaturaResponsavel.trim().length > 0
+  ).length;
+  const pendingItems = records.length - completedItems;
 
-    if (hasResponsavel && hasSupervisor) {
-      return StatusPlanoLimpeza.CONCLUIDO;
-    }
-    if (hasResponsavel) {
-      return StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR;
-    }
-    return record.status;
-  });
-
-  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.CONCLUIDO)) {
+  if (records.length > 0 && completedItems === records.length) {
     return {
       assinaturaResponsavel,
       assinaturaSupervisor,
       status: StatusPlanoLimpeza.CONCLUIDO,
-      statusGeral: "Concluído"
+      statusGeral: "Concluído",
+      completedItems,
+      pendingItems
     };
   }
 
-  if (itemStatuses.every((status) => status === StatusPlanoLimpeza.PENDENTE)) {
+  if (completedItems === 0) {
     return {
       assinaturaResponsavel,
       assinaturaSupervisor,
       status: StatusPlanoLimpeza.PENDENTE,
-      statusGeral: "Pendente"
-    };
-  }
-
-  if (itemStatuses.every((status) => status !== StatusPlanoLimpeza.PENDENTE)) {
-    return {
-      assinaturaResponsavel,
-      assinaturaSupervisor,
-      status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
-      statusGeral: "Aguardando Supervisor"
+      statusGeral: "Pendente",
+      completedItems,
+      pendingItems
     };
   }
 
@@ -534,7 +525,9 @@ function consolidateWeeklyStatus(records: WeeklyExecutionForSummary[]): {
     assinaturaResponsavel,
     assinaturaSupervisor,
     status: StatusPlanoLimpeza.PENDENTE,
-    statusGeral: "Parcial"
+    statusGeral: "Parcial",
+    completedItems,
+    pendingItems
   };
 }
 
@@ -584,6 +577,8 @@ export function consolidateWeeklyExecutionsByAreaWeek(
       status: consolidated.status,
       statusGeral: consolidated.statusGeral,
       totalRegistrosOriginais: records.length,
+      completedItems: consolidated.completedItems,
+      pendingItems: consolidated.pendingItems,
       recordIds: records.map((record) => record.id)
     });
   }

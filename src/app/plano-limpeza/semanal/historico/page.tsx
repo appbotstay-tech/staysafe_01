@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
@@ -10,9 +10,9 @@ import { ThemeToggleButton } from "../../theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
+  formatWeeklyExecutionQuando,
   getWeekDateRangeForDate,
   getMonthDateRange,
-  getWeeklyDayLabel,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt,
@@ -37,6 +37,22 @@ function firstParam(value: string | string[] | undefined): string {
 
 function includesIgnoreCase(text: string, search: string): boolean {
   return text.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"));
+}
+
+function getWeeklyRecordStatus(record: {
+  status: StatusPlanoLimpeza;
+  assinaturaResponsavel: string;
+  assinaturaSupervisor: string;
+}): StatusPlanoLimpeza {
+  if (record.assinaturaResponsavel.trim() && record.assinaturaSupervisor.trim()) {
+    return StatusPlanoLimpeza.CONCLUIDO;
+  }
+
+  if (record.assinaturaResponsavel.trim()) {
+    return StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR;
+  }
+
+  return record.status;
 }
 
 export default async function PlanoLimpezaSemanalHistoricoPage({
@@ -81,6 +97,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         dataExecucao: true,
         area: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
         status: true,
         observacaoResponsavel: true,
@@ -151,20 +168,16 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 
   const filteredRecords = rawRecords.filter((record) => {
     const itemNome = record.itemDescricao ?? record.item.oQueLimpar;
-    const quando = record.quando ?? record.item.quando;
     if (filtroArea && record.area !== filtroArea) {
       return false;
     }
-    if (filtroStatus && record.status !== filtroStatus) {
+    if (filtroStatus && getWeeklyRecordStatus(record) !== filtroStatus) {
       return false;
     }
     if (filtroResponsavel && !includesIgnoreCase(record.assinaturaResponsavel, filtroResponsavel)) {
       return false;
     }
     if (filtroItem && !includesIgnoreCase(itemNome, filtroItem)) {
-      return false;
-    }
-    if (!includesIgnoreCase(quando, firstParam(params.diaSemana).trim())) {
       return false;
     }
     return true;
@@ -363,25 +376,28 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((record) => {
-                  const quando = record.quando ?? record.item.quando;
-                  return (
+                filteredRecords.map((record) => (
                     <tr key={record.id}>
                       <td className="px-3 py-2">{formatDateDisplay(record.dataExecucao)}</td>
                       <td className="px-3 py-2">{record.area}</td>
                       <td className="px-3 py-2">{record.itemDescricao ?? record.item.oQueLimpar}</td>
                       <td className="px-3 py-2">{record.qualProduto ?? record.item.qualProduto}</td>
-                      <td className="px-3 py-2">{getWeeklyDayLabel(quando)}</td>
+                      <td className="px-3 py-2">
+                        {formatWeeklyExecutionQuando({
+                          assinaturaResponsavel: record.assinaturaResponsavel,
+                          assinaturaResponsavelDataHora: record.assinaturaResponsavelDataHora,
+                          quando: record.quando
+                        })}
+                      </td>
                       <td className="px-3 py-2">{record.setorResponsavel ?? record.item.setorResponsavel ?? "-"}</td>
                       <td className="px-3 py-2">{record.funcionarioResponsavel ?? record.item.quem}</td>
                       <td className="px-3 py-2">{record.assinaturaResponsavel || "-"}</td>
                       <td className="px-3 py-2">{record.assinaturaSupervisor || "-"}</td>
                       <td className="px-3 py-2">
-                        <StatusBadge status={record.status} />
+                        <StatusBadge status={getWeeklyRecordStatus(record)} />
                       </td>
                     </tr>
-                  );
-                })
+                ))
               )}
             </tbody>
           </table>

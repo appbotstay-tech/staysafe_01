@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { updateWeeklyRecordAction } from "../actions";
 import { StatusBadge } from "../status-badge";
-import { formatDateDisplay, getWeeklyDayLabel } from "../utils";
+import { formatDateDisplay } from "../utils";
 
 type WeeklySignChecklistModalProps = {
   closeHref: string;
@@ -18,9 +18,12 @@ type WeeklySignChecklistModalProps = {
     weekStart: Date;
     weekEnd: Date;
     status: StatusPlanoLimpeza;
-    statusGeral: "Pendente" | "Parcial" | "Aguardando Supervisor" | "Concluído";
+    statusGeral: "Pendente" | "Parcial" | "Concluído";
     assinaturaResponsavel: string;
     assinaturaSupervisor: string;
+    totalRegistrosOriginais: number;
+    completedItems: number;
+    pendingItems: number;
   };
   items: Array<{
     id: number;
@@ -30,12 +33,12 @@ type WeeklySignChecklistModalProps = {
     observacaoResponsavel: string | null;
     observacaoSupervisor: string | null;
     etapa: "responsavel" | "supervisor" | null;
+    quandoAssinado: string;
     item: {
       id: number;
       ordem: number;
       oQueLimpar: string;
       qualProduto: string;
-      quando: string;
       setorResponsavel: string | null;
       quem: string;
     };
@@ -63,11 +66,12 @@ export function WeeklySignChecklistModal({
             <p className="font-medium text-slate-800 dark:text-slate-100">{execution.area}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Dia</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Itens</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">
-              {execution.dayLabel
-                ? `${execution.dayLabel}${execution.dayDate ? ` • ${formatDateDisplay(execution.dayDate)}` : ""}`
-                : "-"}
+              {execution.completedItems} de {execution.totalRegistrosOriginais} concluídos
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {execution.pendingItems} pendente(s)
             </p>
           </div>
           <div>
@@ -107,7 +111,7 @@ export function WeeklySignChecklistModal({
 
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="border-b border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-            Itens/Locais do Dia ({items.length})
+            Itens/Locais da Área ({items.length})
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[1180px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
@@ -140,7 +144,7 @@ export function WeeklySignChecklistModal({
                       <td className="px-3 py-2">{executionItem.item.ordem}</td>
                       <td className="px-3 py-2">{executionItem.item.oQueLimpar}</td>
                       <td className="px-3 py-2">{executionItem.item.qualProduto}</td>
-                      <td className="px-3 py-2">{getWeeklyDayLabel(executionItem.item.quando)}</td>
+                      <td className="px-3 py-2">{executionItem.quandoAssinado}</td>
                       <td className="px-3 py-2">{executionItem.item.setorResponsavel || "-"}</td>
                       <td className="px-3 py-2">{executionItem.item.quem}</td>
                       <td className="px-3 py-2">

@@ -16,9 +16,8 @@ import {
   updateWeeklyAreaConfigAction,
   updateWeeklyConfigItemAction
 } from "../../actions";
-import { WEEKLY_DAY_OPTIONS } from "../../constants";
 import { ThemeToggleButton } from "../../theme-toggle-button";
-import { getWeeklyDayLabel, parsePositiveInt } from "../../utils";
+import { parsePositiveInt } from "../../utils";
 
 const PAGE_PATH = "/plano-limpeza/semanal/opcoes";
 const CARD_CLASS = "bpma-card";
@@ -113,7 +112,7 @@ function WeeklyItemFields(props: {
     ordem: number;
     oQueLimpar: string;
     qualProduto: string;
-    quando: string;
+    quando?: string | null;
     setorResponsavel: string;
     quem: string;
     ativo: boolean;
@@ -124,7 +123,7 @@ function WeeklyItemFields(props: {
     ordem: 1,
     oQueLimpar: "",
     qualProduto: "",
-    quando: "",
+    quando: null,
     setorResponsavel: "",
     quem: "",
     ativo: true
@@ -180,22 +179,6 @@ function WeeklyItemFields(props: {
           className={INPUT_CLASS}
           placeholder="Ex.: Oasis Pro Peroxide + Álcool A&B"
         />
-      </label>
-      <label className="text-sm text-slate-700 dark:text-slate-200">
-        Quando? *
-        <select
-          name="quando"
-          required
-          defaultValue={getDraftValue(props.params, "quando", defaults.quando)}
-          className={INPUT_CLASS}
-        >
-          <option value="">Selecione</option>
-          {WEEKLY_DAY_OPTIONS.map((day) => (
-            <option key={day.value} value={day.value}>
-              {day.label}
-            </option>
-          ))}
-        </select>
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Qual setor responsável?
@@ -415,7 +398,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
               ordem: 1,
               oQueLimpar: "",
               qualProduto: "",
-              quando: "",
+              quando: null,
               setorResponsavel: "",
               quem: "",
               ativo: true
@@ -462,10 +445,6 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                           <div>
                             <dt className="font-medium">Produto</dt>
                             <dd>{item.qualProduto}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium">Quando</dt>
-                            <dd>{getWeeklyDayLabel(item.quando)}</dd>
                           </div>
                           <div>
                             <dt className="font-medium">Setor responsável</dt>

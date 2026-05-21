@@ -22,7 +22,7 @@ export type ReportFilterKey =
   | "transporte" | "aspecto" | "embalagem" | "responsavelConferencia" | "statusNota"
   | "servico" | "tipoServicoBuffet" | "item" | "classificacao" | "itemExtra" | "statusBuffet"
   | "temperaturaForaRegra" | "area" | "turnoLimpeza" | "supervisor"
-  | "statusPlanoLimpeza" | "semana" | "mes" | "ano" | "diaSemana"
+  | "statusPlanoLimpeza" | "semana" | "mes" | "ano"
   | "origem" | "usuario" | "statusChamado" | "chamadoSituacao";
 
 export type ReportFilterDefinition = {
@@ -149,7 +149,6 @@ export const FILTER_DEFINITIONS: Record<ReportFilterKey, ReportFilterDefinition>
   semana: { key: "semana", label: "Semana", type: "number", placeholder: "1 a 53" },
   mes: { key: "mes", label: "Mês", type: "number", placeholder: "1 a 12" },
   ano: { key: "ano", label: "Ano", type: "number", placeholder: "Ex.: 2026" },
-  diaSemana: { key: "diaSemana", label: "Dia da semana", type: "text", placeholder: "Ex.: segunda" },
   origem: { key: "origem", label: "Origem / módulo", type: "select", options: [
     { value: "", label: "Todas" }, { value: "TEMPERATURA", label: "Temperatura" }, { value: "LIMPEZA", label: "Limpeza" },
     { value: "OLEO", label: "Óleo" }, { value: "RECEBIMENTO", label: "Recebimento" }, { value: "HORTIFRUTI", label: "Hortifruti" },
@@ -172,7 +171,7 @@ const oleo = ["dataInicial", "dataFinal", "fita", "temperatura", "responsavel", 
 const receb = ["dataInicial", "dataFinal", "fornecedor", "notaFiscal", "produto", "lote", "sif", "sifNa", "temperatura", "transporte", "aspecto", "embalagem", "responsavelConferencia", "statusNota", "acaoCorretiva"] as ReportFilterKey[];
 const buffet = ["dataInicial", "dataFinal", "servico", "tipoServicoBuffet", "item", "classificacao", "itemExtra", "acaoCorretiva", "responsavel", "statusBuffet", "temperaturaForaRegra"] as ReportFilterKey[];
 const diario = ["dataInicial", "dataFinal", "area", "turnoLimpeza", "responsavel", "supervisor", "statusPlanoLimpeza"] as ReportFilterKey[];
-const semanal = ["semana", "mes", "ano", "area", "item", "responsavel", "supervisor", "statusPlanoLimpeza", "diaSemana"] as ReportFilterKey[];
+const semanal = ["semana", "mes", "ano", "area", "item", "responsavel", "supervisor", "statusPlanoLimpeza"] as ReportFilterKey[];
 const chamados = ["dataInicial", "dataFinal", "origem", "usuario", "statusChamado", "comFoto", "chamadoSituacao"] as ReportFilterKey[];
 
 function report(id: string, label: string, description: string, filterKeys: ReportFilterKey[]): ReportDefinition {

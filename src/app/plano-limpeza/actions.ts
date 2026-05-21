@@ -35,7 +35,7 @@ import {
   getMonthDateRange,
   getMonthYear,
   parseDateInput,
-  parseWeeklyDay,
+  formatWeeklySignatureDateTime,
   parsePositiveInt
 } from "./utils";
 
@@ -103,7 +103,6 @@ function redirectWithFeedback(
       "area",
       "oQueLimpar",
       "qualProduto",
-      "quando",
       "setorResponsavel",
       "quem"
     ].forEach((key) => url.searchParams.delete(key));
@@ -144,7 +143,6 @@ function buildWeeklyConfigItemErrorReturnTo(returnTo: string, formData: FormData
     "ordem",
     "oQueLimpar",
     "qualProduto",
-    "quando",
     "setorResponsavel",
     "quem",
     "ativo"
@@ -194,7 +192,7 @@ function ensureNonEmpty(value: string, label: string) {
 }
 
 async function ensureWeeklyAreaName(value: string): Promise<string> {
-  ensureNonEmpty(value, "O que limpar");
+  ensureNonEmpty(value, "Área");
 
   const area = await prisma.planoLimpezaSemanalArea.findUnique({
     where: { nome: value }
@@ -654,11 +652,17 @@ export async function updateWeeklyRecordAction(formData: FormData) {
 
     if (etapaPermitida === "responsavel") {
       ensureCanSignResponsible(actor.perfil);
+      const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaSemanalExecucao.update({
         where: { id },
         data: {
           assinaturaResponsavel: actor.nomeCompleto,
+          assinaturaResponsavelUsuarioId: actor.id,
+          assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+          assinaturaResponsavelPerfil: actor.perfil,
+          assinaturaResponsavelDataHora: signedAt,
+          quando: formatWeeklySignatureDateTime(signedAt),
           status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
           observacaoResponsavel: observacaoAssinatura || null
         }
@@ -675,11 +679,16 @@ export async function updateWeeklyRecordAction(formData: FormData) {
       if (!existing.assinaturaResponsavel.trim()) {
         throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
       }
+      const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaSemanalExecucao.update({
         where: { id },
         data: {
           assinaturaSupervisor: actor.nomeCompleto,
+          assinaturaSupervisorUsuarioId: actor.id,
+          assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
+          assinaturaSupervisorPerfil: actor.perfil,
+          assinaturaSupervisorDataHora: signedAt,
           status: StatusPlanoLimpeza.CONCLUIDO,
           observacaoSupervisor: observacaoAssinatura || null
         }
@@ -774,6 +783,8 @@ function disposableWeeklyExecutionWhere(
       { status: StatusPlanoLimpeza.PENDENTE },
       { assinaturaResponsavel: "" },
       { assinaturaSupervisor: "" },
+      { assinaturaResponsavelDataHora: null },
+      { assinaturaSupervisorDataHora: null },
       { observacaoResponsavel: null },
       { observacaoSupervisor: null }
     ]
@@ -791,6 +802,8 @@ function realWeeklyHistoryWhere(
           { status: { not: StatusPlanoLimpeza.PENDENTE } },
           { assinaturaResponsavel: { not: "" } },
           { assinaturaSupervisor: { not: "" } },
+          { assinaturaResponsavelDataHora: { not: null } },
+          { assinaturaSupervisorDataHora: { not: null } },
           { observacaoResponsavel: { not: null } },
           { observacaoSupervisor: { not: null } }
         ]
@@ -1053,14 +1066,10 @@ export async function createWeeklyConfigItemAction(formData: FormData) {
     const quem = getInputValue(formData, "quem");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
     const ativo = getInputValue(formData, "ativo") !== "false";
-    const quandoSelecionado = parseWeeklyDay(getInputValue(formData, "quando"));
 
     ensureNonEmpty(oQueLimpar, "Item/local específico");
     ensureNonEmpty(qualProduto, "Qual produto usar");
     ensureNonEmpty(quem, "Funcionário responsável");
-    if (!quandoSelecionado) {
-      throw new Error("Selecione um dia da semana válido.");
-    }
 
     await prisma.$transaction(async (tx) => {
       await tx.planoLimpezaSemanalItem.create({
@@ -1068,7 +1077,7 @@ export async function createWeeklyConfigItemAction(formData: FormData) {
           area,
           oQueLimpar,
           qualProduto,
-          quando: quandoSelecionado,
+          quando: null,
           setorResponsavel: setorResponsavel || null,
           quem,
           ordem,
@@ -1118,14 +1127,10 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
     const quem = getInputValue(formData, "quem");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
-    const quandoSelecionado = parseWeeklyDay(getInputValue(formData, "quando"));
 
     ensureNonEmpty(oQueLimpar, "Item/local específico");
     ensureNonEmpty(qualProduto, "Qual produto usar");
     ensureNonEmpty(quem, "Funcionário responsável");
-    if (!quandoSelecionado) {
-      throw new Error("Selecione um dia da semana válido.");
-    }
 
     await prisma.$transaction(async (tx) => {
       await tx.planoLimpezaSemanalItem.update({
@@ -1134,7 +1139,6 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
           area,
           oQueLimpar,
           qualProduto,
-          quando: quandoSelecionado,
           setorResponsavel: setorResponsavel || null,
           quem,
           ordem,

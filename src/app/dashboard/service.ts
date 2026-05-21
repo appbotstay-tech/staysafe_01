@@ -20,6 +20,7 @@ import {
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
+  formatWeeklyExecutionQuando,
   getCurrentSystemDateTime,
   getCurrentWeekDateRange,
   getMonthDateRange,
@@ -1413,17 +1414,19 @@ async function buildWeeklyCleaningStats(
   const moduleInfo = MODULES.limpezaSemanal;
   const stats = moduleStatsBase(moduleInfo);
   const weekStarts = enumerateWeekStarts(range);
+  const firstWeekStart = weekStarts[0] ?? range.start;
+  const lastWeekStart = weekStarts[weekStarts.length - 1] ?? range.end;
   const executionWhere = hasOpenPendenciesBeforeRange(range, openRange)
     ? {
         OR: [
-          { dataExecucao: { gte: range.start, lte: range.end } },
+          { dataExecucao: { gte: firstWeekStart, lte: lastWeekStart } },
           {
             dataExecucao: { gte: openRange.start, lt: range.start },
             status: { not: StatusPlanoLimpeza.CONCLUIDO }
           }
         ]
       }
-    : { dataExecucao: { gte: range.start, lte: range.end } };
+    : { dataExecucao: { gte: firstWeekStart, lte: lastWeekStart } };
 
   const [weeklyAreas, rawItems, execucoes] = await Promise.all([
     prisma.planoLimpezaSemanalArea.findMany({
@@ -1435,8 +1438,7 @@ async function buildWeeklyCleaningStats(
       select: {
         id: true,
         area: true,
-        oQueLimpar: true,
-        quando: true
+        oQueLimpar: true
       },
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     }),
@@ -1450,12 +1452,12 @@ async function buildWeeklyCleaningStats(
         quando: true,
         itemId: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
         status: true,
         item: {
           select: {
             oQueLimpar: true,
-            quando: true,
             ativo: true,
             excluidoEm: true
           }
@@ -1499,7 +1501,7 @@ async function buildWeeklyCleaningStats(
             moduleId: moduleInfo.id,
             moduleName: moduleInfo.name,
             title: `${item.area} | ${item.oQueLimpar}`,
-            description: `Semana de ${formatDateDisplay(weekStart)}. Frequência: ${item.quando}.`,
+            description: `Semana de ${formatDateDisplay(weekStart)}.`,
             status: "Aguardando responsável",
             dateTime: formatDateDisplay(weekStart),
             href
@@ -1509,20 +1511,28 @@ async function buildWeeklyCleaningStats(
         continue;
       }
 
-      const status = cleaningStatusLabel(execution.status);
+      const hasResponsible = execution.assinaturaResponsavel.trim().length > 0;
+      const status = hasResponsible
+        ? cleaningStatusLabel(execution.status)
+        : "Aguardando responsável";
       const detail = {
         id: `${moduleInfo.id}:${execution.id}`,
         moduleId: moduleInfo.id,
         moduleName: moduleInfo.name,
         title: `${execution.area} | ${execution.itemDescricao ?? execution.item.oQueLimpar}`,
-        description: `Semana de ${formatDateDisplay(getWeekStartDateForDate(execution.dataExecucao))}. Frequência: ${execution.quando ?? execution.item.quando}.`,
+        description: `Semana de ${formatDateDisplay(getWeekStartDateForDate(execution.dataExecucao))}. Quando: ${formatWeeklyExecutionQuando(execution)}.`,
         status,
         responsible: execution.assinaturaSupervisor || execution.assinaturaResponsavel || undefined,
-        dateTime: formatDateDisplay(execution.dataExecucao),
+        dateTime: execution.assinaturaResponsavelDataHora
+          ? formatDateTimeDisplay(execution.assinaturaResponsavelDataHora)
+          : formatDateDisplay(execution.dataExecucao),
         href
       };
 
-      if (execution.status === StatusPlanoLimpeza.CONCLUIDO) {
+      if (hasResponsible) {
+        if (execution.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) {
+          stats.waitingSupervisor = (stats.waitingSupervisor ?? 0) + 1;
+        }
         addCompleted(stats, detail);
       } else {
         addPending(stats, detail, status);
@@ -1540,20 +1550,28 @@ async function buildWeeklyCleaningStats(
       continue;
     }
 
-    const status = cleaningStatusLabel(execution.status);
+    const hasResponsible = execution.assinaturaResponsavel.trim().length > 0;
+    const status = hasResponsible
+      ? cleaningStatusLabel(execution.status)
+      : "Aguardando responsável";
     const detail = {
       id: `${moduleInfo.id}:${execution.id}`,
       moduleId: moduleInfo.id,
       moduleName: moduleInfo.name,
       title: `${execution.area} | ${execution.itemDescricao ?? execution.item.oQueLimpar}`,
-      description: "Execução existente fora da configuração ativa atual.",
+      description: `Execução existente fora da configuração ativa atual. Quando: ${formatWeeklyExecutionQuando(execution)}.`,
       status,
       responsible: execution.assinaturaSupervisor || execution.assinaturaResponsavel || undefined,
-      dateTime: formatDateDisplay(execution.dataExecucao),
+      dateTime: execution.assinaturaResponsavelDataHora
+        ? formatDateTimeDisplay(execution.assinaturaResponsavelDataHora)
+        : formatDateDisplay(execution.dataExecucao),
       href: `${moduleInfo.href}?filtroData=${formatDateInput(execution.dataExecucao)}`
     };
 
-    if (execution.status === StatusPlanoLimpeza.CONCLUIDO) {
+    if (hasResponsible) {
+      if (execution.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) {
+        stats.waitingSupervisor = (stats.waitingSupervisor ?? 0) + 1;
+      }
       addCompleted(stats, detail);
     } else {
       addPending(stats, detail, status);
@@ -1891,7 +1909,7 @@ export async function getOperationalDashboardData(params: {
       buildDailyCleaningStats(ranges.daily, ranges.openPendencies)
     ),
     safeModuleStats(MODULES.limpezaSemanal, () =>
-      buildWeeklyCleaningStats(ranges.weekly, ranges.openPendencies)
+      buildWeeklyCleaningStats(ranges.weekly)
     ),
     safeModuleStats(MODULES.chamados, () =>
       buildMaintenanceStats({ user: params.user, range: ranges.dateTime })
@@ -2169,10 +2187,10 @@ async function buildNonConformitySummary(params: {
     prisma.planoLimpezaSemanalExecucao.findMany({
       where: {
         dataExecucao: {
-          gte: params.ranges.openPendencies.start,
+          gte: params.ranges.weekly.start,
           lte: params.ranges.weekly.end
         },
-        status: { not: StatusPlanoLimpeza.CONCLUIDO },
+        assinaturaResponsavel: "",
         item: { ativo: true, excluidoEm: null }
       },
       select: {
@@ -2182,6 +2200,8 @@ async function buildNonConformitySummary(params: {
         itemDescricao: true,
         status: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelDataHora: true,
+        quando: true,
         item: { select: { oQueLimpar: true } },
         updatedAt: true
       },
@@ -2366,11 +2386,8 @@ async function buildNonConformitySummary(params: {
       moduleId: MODULES.limpezaSemanal.id,
       moduleName: MODULES.limpezaSemanal.name,
       title: `${record.area} | ${record.itemDescricao ?? record.item.oQueLimpar}`,
-      description:
-        record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
-          ? "Item semanal aguardando supervisão."
-          : "Item semanal pendente.",
-      status: cleaningStatusLabel(record.status),
+      description: `Item semanal pendente. Quando: ${formatWeeklyExecutionQuando(record)}.`,
+      status: "Aguardando responsável",
       responsible: record.assinaturaResponsavel || undefined,
       dateTime: formatDateDisplay(record.dataExecucao),
       href: `${MODULES.limpezaSemanal.href}?filtroData=${formatDateInput(record.dataExecucao)}&filtroArea=${encodeURIComponent(record.area)}`,
