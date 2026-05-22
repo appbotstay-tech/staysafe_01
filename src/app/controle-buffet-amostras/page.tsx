@@ -19,6 +19,11 @@ import {
 
 import { closeMonthAction, reopenMonthAction } from "./actions";
 import { ReopenMonthModal } from "./reopen-month-modal";
+import {
+  buildBuffetServiceHistoryGroups,
+  buildBuffetServiceHistoryTotals
+} from "./service-history";
+import { BuffetServiceHistoryList } from "./service-history-list";
 import { SporadicServiceModal } from "./sporadic-service-modal";
 import { ServiceStatusBadge } from "./status-badges";
 import {
@@ -26,13 +31,11 @@ import {
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
-  getClassificacaoLabel,
   getCurrentSystemDateTime,
   getServicoPeriodoLabel,
   getTipoServicoLabel,
   getMonthDateRange,
   getMonthYear,
-  getStatusItemLabel,
   getTodaySystemDate,
   isServicoDisponivelNaData,
   parsePositiveInt
@@ -192,8 +195,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       }
     },
     include: {
-      servico: { select: { nome: true } },
-      item: { select: { nome: true } }
+      servico: {
+        select: {
+          nome: true,
+          tipoServico: true,
+          dataInicio: true,
+          dataFim: true
+        }
+      }
     },
     orderBy: [
       { data: "asc" },
@@ -202,6 +211,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       { itemNome: "asc" }
     ]
   });
+  const gruposFechamento = buildBuffetServiceHistoryGroups(registrosFechamento);
+  const totalizadoresFechamento = buildBuffetServiceHistoryTotals(gruposFechamento);
 
   const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
   const fechamentoDiaAssinado =
@@ -368,55 +379,11 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
             {fechamentoAssinado ? "Assinado" : "Aberto"}
           </p>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">Serviço</th>
-                  <th className="px-3 py-2">Item</th>
-                  <th className="px-3 py-2">Classificação</th>
-                  <th className="px-3 py-2">TC Equip.</th>
-                  <th className="px-3 py-2">TC Alimento</th>
-                  <th className="px-3 py-2">Status do Item</th>
-                  <th className="px-3 py-2">Responsável</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {registrosFechamento.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={8}>
-                      Nenhum registro no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  registrosFechamento.map((registro) => (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">{registro.servico.nome}</td>
-                      <td className="px-3 py-2">
-                        {registro.itemNome || registro.item?.nome}
-                        {registro.itemExtra ? (
-                          <span className="ml-2 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
-                            Item extra
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2">{getClassificacaoLabel(registro.classificacao)}</td>
-                      <td className="px-3 py-2">
-                        {registro.tcEquipamento !== null ? `${registro.tcEquipamento}°C` : "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {registro.primeiraTc !== null ? `${registro.primeiraTc}°C` : "-"}
-                      </td>
-                      <td className="px-3 py-2">{getStatusItemLabel(registro.status)}</td>
-                      <td className="px-3 py-2">{registro.responsavelNome}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <BuffetServiceHistoryList
+            groups={gruposFechamento}
+            totals={totalizadoresFechamento}
+            emptyMessage="Nenhum registro no período selecionado."
+          />
 
           {fechamentoAssinado ? (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">

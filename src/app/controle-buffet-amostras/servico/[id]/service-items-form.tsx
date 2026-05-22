@@ -14,7 +14,7 @@ import {
   saveServicoItemsStateAction
 } from "../../actions";
 import { ItemStatusBadge, TemperatureStatusBadge } from "../../status-badges";
-import { avaliarTemperaturaBuffet, getClassificacaoLabel } from "../../utils";
+import { avaliarTemperaturaBuffet, getClassificacaoLabel, normalizeSearchText } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -196,7 +196,12 @@ export function ServiceItemsForm({
   const bypassConfirmationRef = useRef(false);
   const [pendingIssues, setPendingIssues] = useState<PendingItemIssue[]>([]);
   const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set());
+  const [itemSearch, setItemSearch] = useState("");
   const hasEditableRows = rows.some((row) => !row.bloqueado);
+  const normalizedItemSearch = normalizeSearchText(itemSearch);
+  const hasSearchMatches =
+    !normalizedItemSearch ||
+    rows.some((row) => normalizeSearchText(row.nome).includes(normalizedItemSearch));
 
   useEffect(() => {
     if (state.status === "success") {
@@ -349,6 +354,17 @@ export function ServiceItemsForm({
         </div>
       ) : null}
 
+      <label className="block text-sm text-slate-700 dark:text-slate-200">
+        Buscar item pelo nome
+        <input
+          type="search"
+          value={itemSearch}
+          onChange={(event) => setItemSearch(event.target.value)}
+          placeholder="Buscar item pelo nome..."
+          className={inputClassName}
+        />
+      </label>
+
       <form ref={formRef} action={formAction} className="space-y-4" onSubmit={handleSubmit}>
         <input type="hidden" name="servicoId" value={String(servicoId)} />
         <input type="hidden" name="data" value={dataInput} />
@@ -360,6 +376,12 @@ export function ServiceItemsForm({
           defaultValue="false"
         />
 
+        {normalizedItemSearch && !hasSearchMatches ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            Nenhum item encontrado.
+          </p>
+        ) : null}
+
         <div className="grid gap-3 xl:grid-cols-2">
           {rows.map((row) => {
             const acaoEstaAtiva = acoesCorretivas.some(
@@ -367,11 +389,15 @@ export function ServiceItemsForm({
             );
             const invalid =
               state.invalidRowKey === row.rowKey || highlightedRows.has(row.rowKey);
+            const matchesSearch =
+              !normalizedItemSearch ||
+              normalizeSearchText(row.nome).includes(normalizedItemSearch);
+            const hiddenBySearch = !matchesSearch && !invalid;
 
             return (
               <section
                 key={row.rowKey}
-                className={`rounded-lg border p-4 ${
+                className={`${hiddenBySearch ? "hidden" : ""} rounded-lg border p-4 ${
                   invalid
                     ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950"
                     : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"

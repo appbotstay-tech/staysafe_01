@@ -9,13 +9,12 @@ import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
-import { ItemStatusBadge, TemperatureStatusBadge } from "../status-badges";
 import {
-  formatDateDisplay,
-  formatDateTimeDisplay,
-  getClassificacaoLabel,
-  getServicoPeriodoLabel,
-  getTipoServicoLabel,
+  buildBuffetServiceHistoryGroups,
+  buildBuffetServiceHistoryTotals
+} from "../service-history";
+import { BuffetServiceHistoryList } from "../service-history-list";
+import {
   getMonthDateRange,
   getYearDateRange,
   parseDateInput,
@@ -160,11 +159,17 @@ export default async function ControleBuffetAmostrasHistoricoPage({
           dataInicio: true,
           dataFim: true
         }
-      },
-      item: { select: { nome: true } }
+      }
     },
-    orderBy: [{ data: "desc" }, { createdAt: "desc" }]
+    orderBy: [
+      { data: "desc" },
+      { servico: { ordem: "asc" } },
+      { itemExtra: "asc" },
+      { itemNome: "asc" }
+    ]
   });
+  const gruposHistorico = buildBuffetServiceHistoryGroups(registros);
+  const totalizadoresHistorico = buildBuffetServiceHistoryTotals(gruposHistorico);
 
   const limparHref = HISTORY_PATH;
 
@@ -306,97 +311,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Registros
+          Serviços Encontrados
         </h2>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-[1220px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <tr>
-                <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">Serviço</th>
-                <th className="px-3 py-2">Tipo do Serviço</th>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2">Classificação</th>
-                <th className="px-3 py-2">TC Equip.</th>
-                <th className="px-3 py-2">TC Alimento</th>
-                <th className="px-3 py-2">Status Temperatura</th>
-                <th className="px-3 py-2">Ação Corretiva</th>
-                <th className="px-3 py-2">Status do Item</th>
-                <th className="px-3 py-2">Responsável</th>
-                <th className="px-3 py-2">Assinatura</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {registros.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
-              ) : (
-                registros.map((registro) => (
-                  <tr key={registro.id}>
-                    <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                    <td className="px-3 py-2">{registro.servico.nome}</td>
-                    <td className="px-3 py-2">
-                      {getTipoServicoLabel(registro.servico.tipoServico)}
-                      {registro.servico.tipoServico === "ESPORADICO" ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {getServicoPeriodoLabel(registro.servico)}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2">
-                      {registro.itemNome || registro.item?.nome}
-                      {registro.itemExtra ? (
-                        <span className="ml-2 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
-                          Item extra
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2">{getClassificacaoLabel(registro.classificacao)}</td>
-                    <td className="px-3 py-2">
-                      {registro.tcEquipamento !== null ? `${registro.tcEquipamento}°C` : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {registro.primeiraTc !== null ? `${registro.primeiraTc}°C` : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <TemperatureStatusBadge status={registro.statusTemperatura} />
-                    </td>
-                    <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                      {registro.acaoCorretiva ?? "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <ItemStatusBadge status={registro.status} />
-                    </td>
-                    <td className="px-3 py-2">
-                      {registro.responsavelNome}
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatDateTimeDisplay(registro.dataHoraRegistro)}
-                      </p>
-                    </td>
-                    <td className="px-3 py-2">
-                      {registro.assinaturaNome ? (
-                        <>
-                          <p>{registro.assinaturaNome}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {registro.assinaturaDataHora
-                              ? formatDateTimeDisplay(registro.assinaturaDataHora)
-                              : "-"}
-                          </p>
-                        </>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <BuffetServiceHistoryList
+          groups={gruposHistorico}
+          totals={totalizadoresHistorico}
+          emptyMessage="Nenhum registro encontrado."
+        />
       </section>
     </div>
   );

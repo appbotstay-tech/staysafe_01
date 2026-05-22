@@ -58,6 +58,14 @@ export function parseTemperatureInput(value: string): number | null {
   return parsed;
 }
 
+export function normalizeSearchText(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export function formatDateInput(date: Date): string {
   return formatAppDateInput(date);
 }

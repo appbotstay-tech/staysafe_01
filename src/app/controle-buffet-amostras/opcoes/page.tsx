@@ -15,7 +15,6 @@ import {
   createItemAction,
   createServicoAction,
   toggleAcaoCorretivaStatusAction,
-  toggleItemStatusAction,
   toggleServicoStatusAction,
   updateAcaoCorretivaAction,
   updateItemAction,
@@ -29,6 +28,7 @@ import {
   parsePositiveInt
 } from "../utils";
 import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
+import { BuffetItemsManagementTable } from "./items-management-table";
 
 const MODULE_PATH = "/controle-buffet-amostras";
 const PAGE_PATH = "/controle-buffet-amostras/opcoes";
@@ -92,6 +92,18 @@ export default async function ControleBuffetAmostrasOpcoesPage({
   const itemEdicaoServicos = new Set(
     itemEdicao?.servicos.map((vinculo) => vinculo.servicoId) ?? []
   );
+  const itensGerenciamento = itens.map((item) => ({
+    id: item.id,
+    nome: item.nome,
+    classificacaoLabel: getClassificacaoLabel(item.classificacao),
+    servicosLabel:
+      item.servicos.length > 0
+        ? item.servicos.map((vinculo) => vinculo.servico.nome).join(", ")
+        : "-",
+    ordem: item.ordem,
+    ativo: item.ativo,
+    editHref: `${PAGE_PATH}?editItemId=${item.id}`
+  }));
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -387,65 +399,7 @@ export default async function ControleBuffetAmostrasOpcoesPage({
           </div>
         </form>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <tr>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2">Classificação</th>
-                <th className="px-3 py-2">Serviços</th>
-                <th className="px-3 py-2">Ordem</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {itens.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhum item cadastrado.
-                  </td>
-                </tr>
-              ) : (
-                itens.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-3 py-2">{item.nome}</td>
-                    <td className="px-3 py-2">{getClassificacaoLabel(item.classificacao)}</td>
-                    <td className="px-3 py-2 max-w-72 whitespace-normal break-words">
-                      {item.servicos.length > 0
-                        ? item.servicos.map((vinculo) => vinculo.servico.nome).join(", ")
-                        : "-"}
-                    </td>
-                    <td className="px-3 py-2">{item.ordem}</td>
-                    <td className="px-3 py-2">{item.ativo ? "Ativo" : "Inativo"}</td>
-                    <td className="px-3 py-2">
-                      <div className="btn-group">
-                        <Link href={`${PAGE_PATH}?editItemId=${item.id}`} className="btn-action">
-                          Editar
-                        </Link>
-                        <form action={toggleItemStatusAction}>
-                          <input type="hidden" name="returnTo" value={PAGE_PATH} />
-                          <input type="hidden" name="itemId" value={String(item.id)} />
-                          <input
-                            type="hidden"
-                            name="ativo"
-                            value={item.ativo ? "false" : "true"}
-                          />
-                          <button
-                            type="submit"
-                            className={item.ativo ? "btn-danger" : "btn-secondary"}
-                          >
-                            {item.ativo ? "Inativar" : "Ativar"}
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <BuffetItemsManagementTable items={itensGerenciamento} pagePath={PAGE_PATH} />
       </section>
 
       <section className={CARD_CLASS}>
