@@ -10,9 +10,11 @@ const INPUT_CLASS =
 type DailySignChecklistModalProps = {
   closeHref: string;
   returnTo: string;
+  successReturnTo?: string;
   usuarioAssinando: string;
   dataHoraAtual: string;
   detalhamentoLimpeza?: string | null;
+  errorMessage?: string;
   record: {
     id: number;
     data: Date;
@@ -32,9 +34,11 @@ type DailySignChecklistModalProps = {
 export function DailySignChecklistModal({
   closeHref,
   returnTo,
+  successReturnTo,
   usuarioAssinando,
   dataHoraAtual,
   detalhamentoLimpeza,
+  errorMessage,
   record,
   etapa
 }: DailySignChecklistModalProps) {
@@ -44,6 +48,12 @@ export function DailySignChecklistModal({
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Assinar Checklist Diário
         </h3>
+
+        {errorMessage ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-2">
           <div>
@@ -98,6 +108,9 @@ export function DailySignChecklistModal({
         <form action={updateDailyRecordAction} className="mt-4 space-y-4">
           <input type="hidden" name="id" value={String(record.id)} />
           <input type="hidden" name="returnTo" value={returnTo} />
+          {successReturnTo ? (
+            <input type="hidden" name="successReturnTo" value={successReturnTo} />
+          ) : null}
           <input type="hidden" name="etapa" value={etapa} />
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
@@ -142,7 +155,7 @@ export function DailySignChecklistModal({
           </label>
 
           <div className="btn-group">
-            <Link href={closeHref} className="btn-secondary">
+            <Link href={closeHref} scroll={false} className="btn-secondary">
               Cancelar
             </Link>
             <button type="submit" className="btn-primary">

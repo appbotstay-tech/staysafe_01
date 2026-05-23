@@ -256,6 +256,10 @@ async function ensureWeeklyAreaName(value: string): Promise<string> {
 
 export async function updateDailyRecordAction(formData: FormData) {
   const returnTo = getReturnToPath(formData, DIARIO_PATH);
+  const successReturnToRaw = getInputValue(formData, "successReturnTo");
+  const successReturnTo = successReturnToRaw.startsWith(MODULE_PATH)
+    ? successReturnToRaw
+    : returnTo;
 
   try {
     const actor = await getCurrentUserForAction();
@@ -347,7 +351,7 @@ export async function updateDailyRecordAction(formData: FormData) {
     }
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Checklist Diário Assinado com Sucesso.");
+    redirectWithFeedback(successReturnTo, "success", "Checklist Diário Assinado com Sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));

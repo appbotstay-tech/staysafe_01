@@ -26,7 +26,12 @@ export function ActionModal({
               <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{description}</div>
             ) : null}
           </div>
-          <Link href={cancelHref} className="btn-secondary shrink-0" aria-label={`Fechar ${title}`}>
+          <Link
+            href={cancelHref}
+            scroll={false}
+            className="btn-secondary shrink-0"
+            aria-label={`Fechar ${title}`}
+          >
             Fechar
           </Link>
         </div>

@@ -8,6 +8,7 @@ import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
+import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -353,6 +354,29 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       : null;
 
   const returnTo = buildPathWithParams(paramsRetorno);
+  const openSummaryReturnTo = openedSummary
+    ? (() => {
+        const query = new URLSearchParams(paramsRetorno);
+        query.set("openData", formatDateInput(openedSummary.data));
+        query.set("openArea", openedSummary.area);
+        query.set("openTurno", openedSummary.turno);
+        return buildPathWithParams(query);
+      })()
+    : returnTo;
+  const signModalReturnTo = registroParaAssinatura
+    ? (() => {
+        const query = new URLSearchParams(paramsRetorno);
+        if (openedSummary) {
+          query.set("openData", formatDateInput(openedSummary.data));
+          query.set("openArea", openedSummary.area);
+          query.set("openTurno", openedSummary.turno);
+        }
+        query.set("signId", String(registroParaAssinatura.id));
+        return buildPathWithParams(query);
+      })()
+    : returnTo;
+  const signModalError =
+    registroParaAssinatura && feedbackType === "error" ? feedback : "";
 
   const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
   const [registrosFechamento, fechamentoAtual] = await Promise.all([
@@ -586,7 +610,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <Link href={buildPathWithParams(q)} className="btn-action">
+                        <Link href={buildPathWithParams(q)} scroll={false} className="btn-action">
                           Abrir
                         </Link>
                       </td>
@@ -597,90 +621,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             </tbody>
           </table>
         </div>
-
-        {openedSummary ? (
-          <div className="mt-5 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {openedSummary.area} • {getTurnoLabel(openedSummary.turno)}
-                </h3>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  {formatDateDisplay(openedSummary.data)} •{" "}
-                  {openedSummary.totalItems > 0
-                    ? `${openedSummary.signedItems} de ${openedSummary.totalItems} itens assinados`
-                    : "Sem itens cadastrados"}
-                </p>
-              </div>
-              <Link href={returnTo} className="btn-secondary">
-                Fechar
-              </Link>
-            </div>
-
-            {openedSummary.records.length === 0 ? (
-              <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                Esta área ainda não possui itens/locais cadastrados.
-              </p>
-            ) : (
-              <div className="mt-4 grid gap-3">
-                {openedSummary.records.map((registro) => {
-                  const periodo = getMonthYear(registro.data);
-                  const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
-                  const etapa = getDailySignStage(registro);
-                  const supervisorMesmoExecutor =
-                    etapa === "supervisor" &&
-                    ((usuarioLogadoId !== null &&
-                      registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
-                      (!registro.assinaturaResponsavelUsuarioId &&
-                        registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
-                  const hrefAssinar = (() => {
-                    const q = new URLSearchParams(paramsRetorno);
-                    q.set("openData", formatDateInput(openedSummary.data));
-                    q.set("openArea", openedSummary.area);
-                    q.set("openTurno", openedSummary.turno);
-                    q.set("signId", String(registro.id));
-                    return buildPathWithParams(q);
-                  })();
-
-                  return (
-                    <article key={registro.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <p className="font-medium text-slate-900 dark:text-slate-100">
-                            {getDailyItemDescription(registro)}
-                          </p>
-                          <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-3">
-                            <p>Produto: <strong>{registro.produtoUtilizado || "-"}</strong></p>
-                            <p>Setor: <strong>{registro.setorResponsavel || "-"}</strong></p>
-                            <p>Funcionário: <strong>{registro.funcionarioResponsavel || "-"}</strong></p>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                          <StatusBadge status={registro.status} />
-                          {bloqueado ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
-                          ) : supervisorMesmoExecutor ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              Outro supervisor
-                            </span>
-                          ) : etapa ? (
-                            <Link href={hrefAssinar} className="btn-action">
-                              Assinar
-                            </Link>
-                          ) : (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              Sem Ação
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : null}
 
         <h3 className="mt-6 text-base font-semibold text-slate-900 dark:text-slate-100">
           Registros detalhados
@@ -753,7 +693,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                             Outro supervisor
                           </span>
                         ) : etapa ? (
-                          <Link href={hrefAssinar} className="btn-action">
+                          <Link href={hrefAssinar} scroll={false} className="btn-action">
                             Assinar
                           </Link>
                         ) : (
@@ -968,18 +908,161 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       </section>
       ) : null}
 
+      {openedSummary ? (
+        <ActionModal
+          title={`${openedSummary.area} • ${getTurnoLabel(openedSummary.turno)}`}
+          cancelHref={returnTo}
+          maxWidthClassName="max-w-5xl"
+          description={
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <span>{formatDateDisplay(openedSummary.data)}</span>
+              <span aria-hidden="true" className="hidden text-slate-400 sm:inline">
+                •
+              </span>
+              <span>
+                {openedSummary.totalItems > 0
+                  ? `${openedSummary.signedItems} de ${openedSummary.totalItems} itens assinados`
+                  : "Sem itens cadastrados"}
+              </span>
+              {openedSummary.status === "Sem itens cadastrados" ? (
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Sem itens cadastrados
+                </span>
+              ) : (
+                <StatusBadge status={openedSummary.status} />
+              )}
+            </div>
+          }
+        >
+          {feedback ? (
+            <p
+              className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+                feedbackType === "error"
+                  ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+              }`}
+            >
+              {feedback}
+            </p>
+          ) : null}
+
+          {detalhamentoPorArea.get(openedSummary.area) ? (
+            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Orientação geral da área
+              </p>
+              <p className="mt-1 whitespace-pre-line break-words text-slate-700 dark:text-slate-200">
+                {detalhamentoPorArea.get(openedSummary.area)}
+              </p>
+            </div>
+          ) : null}
+
+          {openedSummary.records.length === 0 ? (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Esta área ainda não possui itens/locais cadastrados.
+            </p>
+          ) : (
+            <div className="grid gap-3">
+              {openedSummary.records.map((registro) => {
+                const periodo = getMonthYear(registro.data);
+                const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
+                const etapa = getDailySignStage(registro);
+                const supervisorMesmoExecutor =
+                  etapa === "supervisor" &&
+                  ((usuarioLogadoId !== null &&
+                    registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
+                    (!registro.assinaturaResponsavelUsuarioId &&
+                      registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
+                const hrefAssinar = (() => {
+                  const query = new URLSearchParams(paramsRetorno);
+                  query.set("openData", formatDateInput(openedSummary.data));
+                  query.set("openArea", openedSummary.area);
+                  query.set("openTurno", openedSummary.turno);
+                  query.set("signId", String(registro.id));
+                  return buildPathWithParams(query);
+                })();
+
+                return (
+                  <article
+                    key={registro.id}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-slate-900 dark:text-slate-100">
+                          {getDailyItemDescription(registro)}
+                        </p>
+                        <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-3">
+                          <p>Produto: <strong>{registro.produtoUtilizado || "-"}</strong></p>
+                          <p>Setor: <strong>{registro.setorResponsavel || "-"}</strong></p>
+                          <p>Funcionário: <strong>{registro.funcionarioResponsavel || "-"}</strong></p>
+                        </div>
+                        <div className="mt-3 grid gap-1 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2">
+                          <p>
+                            Responsável: <strong>{registro.assinaturaResponsavel || "-"}</strong>
+                          </p>
+                          <p>
+                            Assinado em:{" "}
+                            <strong>
+                              {registro.assinaturaResponsavelDataHora
+                                ? formatDateTimeDisplay(registro.assinaturaResponsavelDataHora)
+                                : "-"}
+                            </strong>
+                          </p>
+                          <p>
+                            Supervisor: <strong>{registro.assinaturaSupervisor || "-"}</strong>
+                          </p>
+                          <p>
+                            Visto em:{" "}
+                            <strong>
+                              {registro.assinaturaSupervisorDataHora
+                                ? formatDateTimeDisplay(registro.assinaturaSupervisorDataHora)
+                                : "-"}
+                            </strong>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <StatusBadge status={registro.status} />
+                        {bloqueado ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
+                        ) : supervisorMesmoExecutor ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Outro supervisor
+                          </span>
+                        ) : etapa ? (
+                          <Link href={hrefAssinar} scroll={false} className="btn-action">
+                            Assinar
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Sem Ação
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </ActionModal>
+      ) : null}
+
       {registroParaAssinatura &&
       etapaAssinatura &&
       !assinaturaBloqueadaPorFechamento &&
       !assinaturaBloqueadaPorExecutor ? (
         <DailySignChecklistModal
-          closeHref={returnTo}
-          returnTo={returnTo}
+          closeHref={openSummaryReturnTo}
+          returnTo={signModalReturnTo}
+          successReturnTo={openSummaryReturnTo}
           record={registroParaAssinatura}
           detalhamentoLimpeza={detalhamentoPorArea.get(registroParaAssinatura.area) ?? null}
           etapa={etapaAssinatura}
           usuarioAssinando={responsavelLogado}
           dataHoraAtual={formatDateTimeDisplay(now)}
+          errorMessage={signModalError}
         />
       ) : null}
     </div>

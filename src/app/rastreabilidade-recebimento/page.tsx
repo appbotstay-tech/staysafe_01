@@ -40,6 +40,7 @@ import {
 } from "./utils";
 
 const MODULE_PATH = "/rastreabilidade-recebimento";
+const ITEM_SEARCH_ANCHOR = "busca-item-recebido";
 const CARD_CLASS =
   "bpma-card";
 const INPUT_CLASS =
@@ -169,7 +170,9 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const buscaItemRecebido = firstParam(params.buscaItemRecebido).trim();
   const filtroItemProduto = firstParam(params.filtroItemProduto).trim();
   const filtroItemLote = firstParam(params.filtroItemLote).trim();
-  const filtroValidadeInicial = firstParam(params.filtroValidadeInicial).trim();
+  const filtroDataFabricacao =
+    firstParam(params.filtroDataFabricacao).trim() ||
+    firstParam(params.filtroValidadeInicial).trim();
   const filtroValidadeFinal = firstParam(params.filtroValidadeFinal).trim();
   const filtroItemStatus = parseItemStatusFilter(firstParam(params.filtroItemStatus).trim());
 
@@ -188,13 +191,17 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
 
   const dataInicialFiltro = parseDateInput(filtroDataInicial);
   const dataFinalFiltro = parseDateInput(filtroDataFinal);
+  const dataRecebimentoInvalida =
+    dataInicialFiltro && dataFinalFiltro && dataInicialFiltro.getTime() > dataFinalFiltro.getTime();
 
-  if (dataInicialFiltro && dataFinalFiltro) {
+  if (!dataRecebimentoInvalida && dataInicialFiltro && dataFinalFiltro) {
     whereNotasPendentes.data = { gte: dataInicialFiltro, lte: dataFinalFiltro };
-  } else if (dataInicialFiltro) {
+  } else if (!dataRecebimentoInvalida && dataInicialFiltro) {
     whereNotasPendentes.data = { gte: dataInicialFiltro };
-  } else if (dataFinalFiltro) {
+  } else if (!dataRecebimentoInvalida && dataFinalFiltro) {
     whereNotasPendentes.data = { lte: dataFinalFiltro };
+  } else if (dataRecebimentoInvalida) {
+    whereNotasPendentes.id = -1;
   }
 
   if (filtroFornecedor) {
@@ -252,14 +259,25 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   ]);
 
   const itemSearchDate = parseDateInput(buscaItemRecebido);
-  const validadeInicialFiltro = parseDateInput(filtroValidadeInicial);
+  const dataFabricacaoFiltro = parseDateInput(filtroDataFabricacao);
   const validadeFinalFiltro = parseDateInput(filtroValidadeFinal);
+  const datasItemInvalidas =
+    dataFabricacaoFiltro &&
+    validadeFinalFiltro &&
+    dataFabricacaoFiltro.getTime() > validadeFinalFiltro.getTime();
+  const itemFilterError = dataRecebimentoInvalida
+    ? "A data inicial de recebimento não pode ser maior que a data final."
+    : datasItemInvalidas
+      ? "A Data de Fabricação não pode ser maior que a Validade Final."
+      : "";
   const deveBuscarItens = Boolean(
     buscaItemRecebido ||
       filtroItemProduto ||
       filtroItemLote ||
-      filtroValidadeInicial ||
+      filtroDataFabricacao ||
       filtroValidadeFinal ||
+      filtroDataInicial ||
+      filtroDataFinal ||
       filtroFornecedor ||
       filtroNotaFiscal ||
       filtroItemStatus
@@ -268,15 +286,30 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const itemAndFilters: Prisma.RastreabilidadeRecebimentoRegistroWhereInput[] = [];
 
   if (buscaItemRecebido) {
+    const itemSearchOr: Prisma.RastreabilidadeRecebimentoRegistroWhereInput[] = [
+      { produto: { contains: buscaItemRecebido, mode: "insensitive" } },
+      { lote: { contains: buscaItemRecebido, mode: "insensitive" } },
+      { notaFiscal: { contains: buscaItemRecebido, mode: "insensitive" } },
+      { fornecedor: { contains: buscaItemRecebido, mode: "insensitive" } }
+    ];
+    if (itemSearchDate) {
+      itemSearchOr.push(
+        { data: itemSearchDate },
+        { dataFabricacao: itemSearchDate },
+        { dataValidade: itemSearchDate }
+      );
+    }
+
     itemAndFilters.push({
-      OR: [
-        { produto: { contains: buscaItemRecebido, mode: "insensitive" } },
-        { lote: { contains: buscaItemRecebido, mode: "insensitive" } },
-        { notaFiscal: { contains: buscaItemRecebido, mode: "insensitive" } },
-        { fornecedor: { contains: buscaItemRecebido, mode: "insensitive" } },
-        ...(itemSearchDate ? [{ dataValidade: itemSearchDate }] : [])
-      ]
+      OR: itemSearchOr
     });
+  }
+  if (dataInicialFiltro && dataFinalFiltro) {
+    itemAndFilters.push({ data: { gte: dataInicialFiltro, lte: dataFinalFiltro } });
+  } else if (dataInicialFiltro) {
+    itemAndFilters.push({ data: { gte: dataInicialFiltro } });
+  } else if (dataFinalFiltro) {
+    itemAndFilters.push({ data: { lte: dataFinalFiltro } });
   }
   if (filtroItemProduto) {
     itemAndFilters.push({ produto: { contains: filtroItemProduto, mode: "insensitive" } });
@@ -290,11 +323,10 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   if (filtroNotaFiscal) {
     itemAndFilters.push({ notaFiscal: { contains: filtroNotaFiscal, mode: "insensitive" } });
   }
-  if (validadeInicialFiltro && validadeFinalFiltro) {
-    itemAndFilters.push({ dataValidade: { gte: validadeInicialFiltro, lte: validadeFinalFiltro } });
-  } else if (validadeInicialFiltro) {
-    itemAndFilters.push({ dataValidade: { gte: validadeInicialFiltro } });
-  } else if (validadeFinalFiltro) {
+  if (dataFabricacaoFiltro) {
+    itemAndFilters.push({ dataFabricacao: dataFabricacaoFiltro });
+  }
+  if (validadeFinalFiltro) {
     itemAndFilters.push({ dataValidade: { lte: validadeFinalFiltro } });
   }
   if (filtroItemStatus) {
@@ -304,7 +336,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     whereItensRecebidos.AND = itemAndFilters;
   }
 
-  const itensRecebidosEncontrados = deveBuscarItens
+  const itensRecebidosEncontrados = deveBuscarItens && !itemFilterError
     ? await prisma.rastreabilidadeRecebimentoRegistro.findMany({
         where: whereItensRecebidos,
         include: {
@@ -336,7 +368,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   if (buscaItemRecebido) paramsRetorno.set("buscaItemRecebido", buscaItemRecebido);
   if (filtroItemProduto) paramsRetorno.set("filtroItemProduto", filtroItemProduto);
   if (filtroItemLote) paramsRetorno.set("filtroItemLote", filtroItemLote);
-  if (filtroValidadeInicial) paramsRetorno.set("filtroValidadeInicial", filtroValidadeInicial);
+  if (filtroDataFabricacao) paramsRetorno.set("filtroDataFabricacao", filtroDataFabricacao);
   if (filtroValidadeFinal) paramsRetorno.set("filtroValidadeFinal", filtroValidadeFinal);
   if (filtroItemStatus) paramsRetorno.set("filtroItemStatus", filtroItemStatus);
   paramsRetorno.set("fechamentoMes", String(fechamentoMes));
@@ -354,6 +386,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
       fechamentoAno: String(fechamentoAno)
     })
   );
+  const limparBuscaItensHref = `${limparFiltrosHref}#${ITEM_SEARCH_ANCHOR}`;
   const reaberturaFormId = `reabertura-form-${fechamentoMes}-${fechamentoAno}`;
 
   return (
@@ -541,6 +574,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           </form>
         )}
 
+        {dataRecebimentoInvalida ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+            A data inicial de recebimento não pode ser maior que a data final.
+          </p>
+        ) : null}
+
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -616,17 +655,27 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
         </div>
       </section>
 
-      <section className={CARD_CLASS}>
+      <section id={ITEM_SEARCH_ANCHOR} className={`${CARD_CLASS} scroll-mt-6`}>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Buscar item recebido
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Pesquise por produto, lote, validade, fornecedor ou número da nota.
+          Pesquise por produto, lote, data de fabricação, validade, fornecedor ou número da nota.
         </p>
 
-        <form method="get" className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-7 dark:bg-slate-800">
+        <form
+          method="get"
+          action={`${MODULE_PATH}#${ITEM_SEARCH_ANCHOR}`}
+          className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-7 dark:bg-slate-800"
+        >
           <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
           <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
+          <input type="hidden" name="filtroDataInicial" value={filtroDataInicial} />
+          <input type="hidden" name="filtroDataFinal" value={filtroDataFinal} />
+          <input type="hidden" name="filtroFornecedor" value={filtroFornecedor} />
+          <input type="hidden" name="filtroNotaFiscal" value={filtroNotaFiscal} />
+          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
+          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
 
           <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
             Busca única
@@ -647,8 +696,8 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
             <input type="text" name="filtroItemLote" defaultValue={filtroItemLote} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
-            Validade inicial
-            <input type="date" name="filtroValidadeInicial" defaultValue={filtroValidadeInicial} className={INPUT_CLASS} />
+            Data de Fabricação
+            <input type="date" name="filtroDataFabricacao" defaultValue={filtroDataFabricacao} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Validade final
@@ -668,13 +717,17 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
             <button type="submit" className="btn-primary">
               Buscar
             </button>
-            <Link href={limparFiltrosHref} className="btn-secondary">
+            <Link href={limparBuscaItensHref} className="btn-secondary">
               Limpar
             </Link>
           </div>
         </form>
 
-        {!deveBuscarItens ? (
+        {itemFilterError ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+            {itemFilterError}
+          </p>
+        ) : !deveBuscarItens ? (
           <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             Informe ao menos um termo ou filtro para buscar itens dentro das notas.
           </p>
@@ -687,6 +740,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                   <th className="px-3 py-2">Fornecedor</th>
                   <th className="px-3 py-2">Nota</th>
                   <th className="px-3 py-2">Lote</th>
+                  <th className="px-3 py-2">Data de fabricação</th>
                   <th className="px-3 py-2">Validade</th>
                   <th className="px-3 py-2">Recebimento</th>
                   <th className="px-3 py-2">Status</th>
@@ -696,7 +750,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {itensRecebidosEncontrados.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                    <td colSpan={9} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                       Nenhum item encontrado para os filtros informados.
                     </td>
                   </tr>
@@ -707,6 +761,9 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                       <td className="px-3 py-2">{item.nota?.fornecedor ?? item.fornecedor}</td>
                       <td className="px-3 py-2">{item.nota?.notaFiscal ?? item.notaFiscal}</td>
                       <td className="px-3 py-2">{item.lote || "-"}</td>
+                      <td className="px-3 py-2">
+                        {item.dataFabricacao ? formatDateDisplay(item.dataFabricacao) : "-"}
+                      </td>
                       <td className="px-3 py-2">
                         {item.validadeNaoAplicavel
                           ? "Sem validade"
