@@ -8,7 +8,6 @@ import {
   parseDashboardPeriod
 } from "@/app/dashboard/service";
 import type { DashboardData, DashboardPeriod } from "@/app/dashboard/types";
-import { ThemeToggleButton } from "@/app/plano-limpeza/theme-toggle-button";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
 
@@ -54,7 +53,6 @@ function DashboardHeaderActions({ data }: { data: DashboardData }) {
             {option.label}
           </Link>
         ))}
-        <ThemeToggleButton />
       </div>
 
       {data.period === "personalizado" ? (

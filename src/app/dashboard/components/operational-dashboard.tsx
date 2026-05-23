@@ -100,7 +100,7 @@ function CompletionDonut({
   return (
     <div className="flex shrink-0 flex-col items-center gap-2">
       <div
-        className="relative grid h-24 w-24 place-items-center rounded-full sm:h-28 sm:w-28"
+        className="relative grid h-20 w-20 place-items-center rounded-full sm:h-24 sm:w-24 xl:h-28 xl:w-28"
         style={{ background: chartBackground }}
         aria-label={`${percentCompleted}% concluído, ${completed} concluídas e ${pending} pendentes`}
       >
@@ -114,7 +114,7 @@ function CompletionDonut({
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap justify-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+      <div className="flex max-w-full flex-wrap justify-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
         <span className="inline-flex items-center gap-1">
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
           Concluídas
@@ -401,12 +401,12 @@ function SummaryCard({
 
   return (
     <article
-      className={`bpma-card-compact flex flex-col gap-3 ${
+      className={`bpma-card-compact flex min-w-0 flex-col gap-3 overflow-hidden ${
         expandedKind ? "sm:col-span-2 xl:col-span-4" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <h2 className="min-w-0 whitespace-normal break-normal text-base font-semibold text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">
           {card.title}
         </h2>
         {card.href && card.href !== "/" ? (
@@ -416,31 +416,31 @@ function SummaryCard({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <CompletionDonut
           completed={card.completed}
           pending={card.pending}
           percentCompleted={card.percentCompleted}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="whitespace-normal break-normal text-2xl font-bold text-slate-900 [overflow-wrap:anywhere] sm:text-3xl dark:text-slate-100">
                 {card.percentCompleted}%
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">concluídas</p>
             </div>
-            <p className="text-right text-sm font-medium text-slate-700 dark:text-slate-200">
+            <p className="whitespace-normal break-normal text-sm font-medium text-slate-700 [overflow-wrap:anywhere] sm:text-right dark:text-slate-200">
               {card.completed} de {card.total}
             </p>
           </div>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          <p className="mt-2 whitespace-normal break-normal text-sm text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">
             {card.completed} concluídas | {card.pending} pendentes
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="grid min-w-0 grid-cols-1 gap-2 text-sm sm:grid-cols-2">
         <button
           type="button"
           onClick={() => onToggle(card.id, "completed")}

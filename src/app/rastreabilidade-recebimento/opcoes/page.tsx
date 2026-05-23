@@ -9,7 +9,6 @@ import {
   toggleCategoryStatusAction,
   updateCategoryAction
 } from "../actions";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import { parsePositiveInt } from "../utils";
 
 const PAGE_PATH = "/rastreabilidade-recebimento/opcoes";
@@ -53,9 +52,8 @@ export default async function RastreabilidadeRecebimentoOpcoesPage({
           </div>
           <div className="btn-group">
             <Link href="/rastreabilidade-recebimento" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

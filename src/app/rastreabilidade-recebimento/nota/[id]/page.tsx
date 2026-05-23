@@ -10,7 +10,6 @@ import {
   deleteItemAction
 } from "../../actions";
 import { DeleteNoteModal } from "../../delete-note-modal";
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -197,10 +196,9 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
           </div>
           <div className="btn-group">
             <Link href="/rastreabilidade-recebimento" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
             {canDeleteNote ? <DeleteNoteModal formId={`delete-note-from-note-${note.id}`} /> : null}
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

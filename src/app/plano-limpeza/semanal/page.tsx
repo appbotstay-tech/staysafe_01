@@ -28,7 +28,6 @@ import {
   getWeeklySignStage
 } from "../service";
 import { StatusBadge } from "../status-badge";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -436,25 +435,16 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         modulo={ModuloDocumento.PLANO_LIMPEZA_SEMANAL}
         modulePath={PAGE_PATH}
         searchParams={params}
+        managementHref={podeGerenciarOpcoes ? "/plano-limpeza/semanal/opcoes" : undefined}
+        maintenanceHref="/chamados-manutencao?origem=LIMPEZA"
+        backHref="/plano-limpeza"
         actions={
           <>
-            <Link href="/plano-limpeza" className="btn-secondary">
-              Voltar para Módulo
-            </Link>
             {podeVerGestao ? (
               <Link href="/plano-limpeza/semanal/historico" className="btn-secondary">
                 Histórico Completo
               </Link>
             ) : null}
-            {podeGerenciarOpcoes ? (
-              <Link href="/plano-limpeza/semanal/opcoes" className="btn-secondary">
-                Gerenciar Plano Semanal
-              </Link>
-            ) : null}
-            <Link href="/chamados-manutencao?origem=LIMPEZA" className="btn-secondary">
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
           </>
         }
       />

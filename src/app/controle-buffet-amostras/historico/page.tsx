@@ -20,7 +20,6 @@ import {
   parseDateInput,
   parsePositiveInt
 } from "../utils";
-import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 
 const MODULE_PATH = "/controle-buffet-amostras";
 const HISTORY_PATH = "/controle-buffet-amostras/historico";
@@ -190,9 +189,8 @@ export default async function ControleBuffetAmostrasHistoricoPage({
           </div>
           <div className="btn-group">
             <Link href={MODULE_PATH} className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

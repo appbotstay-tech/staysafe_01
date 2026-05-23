@@ -26,7 +26,6 @@ import {
 } from "@/lib/rbac";
 
 import { createChamadoAction } from "./actions";
-import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 
 const PAGE_PATH = "/chamados-manutencao";
 const CARD_CLASS =
@@ -154,19 +153,9 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
         modulo={ModuloDocumento.CHAMADOS_MANUTENCAO}
         modulePath={PAGE_PATH}
         searchParams={params}
-        actions={
-          <>
-            <Link href="/" className="btn-secondary">
-              Voltar para Início
-            </Link>
-            {podeGerenciarOpcoes ? (
-              <Link href="/chamados-manutencao/opcoes" className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <ThemeToggleButton />
-          </>
-        }
+        managementHref={podeGerenciarOpcoes ? "/chamados-manutencao/opcoes" : undefined}
+        backHref="/"
+        backLabel="Voltar ao Módulo"
       />
 
       {feedback ? (

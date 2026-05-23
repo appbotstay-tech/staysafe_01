@@ -40,7 +40,6 @@ import {
   isServicoDisponivelNaData,
   parsePositiveInt
 } from "./utils";
-import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 
 const MODULE_PATH = "/controle-buffet-amostras";
 const CARD_CLASS =
@@ -233,6 +232,8 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
         modulo={ModuloDocumento.CONTROLE_BUFFET_AMOSTRAS}
         modulePath={MODULE_PATH}
         searchParams={params}
+        managementHref={podeGerenciarOpcoes ? `${MODULE_PATH}/opcoes` : undefined}
+        maintenanceHref="/chamados-manutencao?origem=BUFFET_AMOSTRAS"
         actions={
           <>
             {podeVerGestao ? (
@@ -240,18 +241,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
                 Histórico Completo
               </Link>
             ) : null}
-            {podeGerenciarOpcoes ? (
-              <Link href={`${MODULE_PATH}/opcoes`} className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <Link
-              href="/chamados-manutencao?origem=BUFFET_AMOSTRAS"
-              className="btn-secondary"
-            >
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
           </>
         }
       />

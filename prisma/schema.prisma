@@ -588,6 +588,12 @@ model PlanoLimpezaDiarioRegistro {
   data                  DateTime           @db.Date
   turno                 TurnoPlanoLimpeza
   area                  String
+  itemId                Int?
+  item                  PlanoLimpezaDiarioItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemDescricao         String?
+  produtoUtilizado      String?
+  setorResponsavel      String?
+  funcionarioResponsavel String?
   assinaturaResponsavel String             @default("")
   assinaturaResponsavelUsuarioId Int?
   assinaturaResponsavelNomeUsuario String?
@@ -609,9 +615,11 @@ model PlanoLimpezaDiarioRegistro {
   @@index([turno])
   @@index([area])
   @@index([status])
+  @@index([itemId])
   @@index([assinaturaResponsavel])
   @@index([assinaturaResponsavelDataHora])
   @@index([assinaturaSupervisorDataHora])
+  @@unique([data, turno, itemId])
   @@map("plano_limpeza_diario_registro")
 }
 
@@ -626,9 +634,31 @@ model PlanoLimpezaDiarioArea {
   ordem                Int      @default(1)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  itens                PlanoLimpezaDiarioItem[]
 
   @@index([ativo, ordem, nome])
   @@map("plano_limpeza_diario_area")
+}
+
+model PlanoLimpezaDiarioItem {
+  id                    Int                       @id @default(autoincrement())
+  areaId                Int
+  area                  PlanoLimpezaDiarioArea    @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  descricao             String
+  produtoUtilizado      String?
+  setorResponsavel      String?
+  funcionarioResponsavel String?
+  ordem                 Int                       @default(1)
+  ativo                 Boolean                   @default(true)
+  excluidoEm            DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  execucoes             PlanoLimpezaDiarioRegistro[]
+
+  @@index([areaId])
+  @@index([excluidoEm])
+  @@index([areaId, ativo, ordem])
+  @@map("plano_limpeza_diario_item")
 }
 
 model PlanoLimpezaSemanalItem {
@@ -793,6 +823,7 @@ model ControleBuffetAmostraRegistro {
   tcEquipamento        Float?
   primeiraTc           Float?
   segundaTc            Float?
+  temperaturaAmbiente  Boolean                         @default(false)
   statusTemperatura    StatusTemperaturaBuffetAmostra?
   acaoCorretiva        String?
   observacao           String?

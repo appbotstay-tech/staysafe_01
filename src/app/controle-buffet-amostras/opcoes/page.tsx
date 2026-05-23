@@ -27,7 +27,6 @@ import {
   getTipoServicoLabel,
   parsePositiveInt
 } from "../utils";
-import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 import { BuffetItemsManagementTable } from "./items-management-table";
 
 const MODULE_PATH = "/controle-buffet-amostras";
@@ -122,9 +121,8 @@ export default async function ControleBuffetAmostrasOpcoesPage({
           </div>
           <div className="btn-group">
             <Link href={MODULE_PATH} className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

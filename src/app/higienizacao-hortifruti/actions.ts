@@ -195,6 +195,10 @@ export async function updateRegistroAction(formData: FormData) {
       throw new Error("Registro não encontrado.");
     }
 
+    if (actor.perfil === "COLABORADOR") {
+      throw new Error("Você não possui permissão para editar este registro.");
+    }
+
     const existingPeriod = getMonthYear(existing.data);
     if (await isMonthSigned(existingPeriod.mes, existingPeriod.ano)) {
       throw new Error("O mês deste registro já foi fechado e não pode ser editado.");

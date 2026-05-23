@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth-session";
 
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import { ManualNoteForm } from "./manual-note-form";
 
 const CARD_CLASS =
@@ -33,9 +32,8 @@ export default async function NovaNotaRecebimentoPage() {
           </div>
           <div className="btn-group">
             <Link href="/rastreabilidade-recebimento" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

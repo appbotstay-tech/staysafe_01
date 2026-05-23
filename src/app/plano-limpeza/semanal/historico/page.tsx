@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../../constants";
 import { consolidateWeeklyExecutionsByAreaWeek } from "../../service";
 import { StatusBadge } from "../../status-badge";
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -226,9 +225,8 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/semanal" className="btn-secondary">
-              Voltar para Semanal
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

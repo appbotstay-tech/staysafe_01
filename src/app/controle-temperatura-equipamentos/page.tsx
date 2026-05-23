@@ -32,7 +32,6 @@ import {
 import { AutomaticCorrectiveActionFields } from "./automatic-corrective-action-fields";
 import { ReopenMonthModal } from "./reopen-month-modal";
 import { TemperatureStatusBadge } from "./temperature-status-badge";
-import { ThemeToggleButton } from "./theme-toggle-button";
 import {
   formatDateInput,
   formatDateDisplay,
@@ -369,6 +368,8 @@ export default async function ControleTemperaturaEquipamentosPage({
         modulo={ModuloDocumento.CONTROLE_TEMPERATURA}
         modulePath={MODULE_PATH}
         searchParams={params}
+        managementHref={podeGerenciarOpcoes ? "/controle-temperatura-equipamentos/opcoes" : undefined}
+        maintenanceHref="/chamados-manutencao?origem=TEMPERATURA"
         actions={
           <>
             {podeVerGestao ? (
@@ -376,18 +377,6 @@ export default async function ControleTemperaturaEquipamentosPage({
                 Histórico Completo
               </Link>
             ) : null}
-            {podeGerenciarOpcoes ? (
-              <Link href="/controle-temperatura-equipamentos/opcoes" className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <Link
-              href="/chamados-manutencao?origem=TEMPERATURA"
-              className="btn-secondary"
-            >
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
           </>
         }
       />

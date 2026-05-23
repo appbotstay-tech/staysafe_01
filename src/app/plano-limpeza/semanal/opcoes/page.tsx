@@ -16,7 +16,6 @@ import {
   updateWeeklyAreaConfigAction,
   updateWeeklyConfigItemAction
 } from "../../actions";
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import { parsePositiveInt } from "../../utils";
 
 const PAGE_PATH = "/plano-limpeza/semanal/opcoes";
@@ -294,12 +293,11 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/semanal" className="btn-secondary">
-              Voltar para Semanal
+              ← Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/semanal/historico" className="btn-secondary">
               Histórico Completo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

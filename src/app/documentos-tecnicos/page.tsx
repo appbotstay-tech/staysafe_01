@@ -31,7 +31,6 @@ import {
   canManageTechnicalDocuments
 } from "@/lib/rbac";
 
-import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 import {
   createDocumentoAction,
   deleteDocumentoAction,
@@ -261,9 +260,6 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               Gestão de PDFs técnicos, legais e operacionais vinculados aos módulos do BPMA.
             </p>
-          </div>
-          <div className="btn-group">
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

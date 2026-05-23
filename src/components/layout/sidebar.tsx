@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import type { AppModule } from "@/lib/modules";
+import { ThemeToggleButton } from "./theme-toggle-button";
 
 type SidebarProps = {
   modules: AppModule[];
@@ -143,6 +144,9 @@ export function Sidebar({
                 {userManagementNavItem}
                 {resetRequestsNavItem}
               </ul>
+              <div className="mt-4">
+                <ThemeToggleButton compact />
+              </div>
               <form action={onLogout} className="mt-4">
                 <button type="submit" className="btn-secondary w-full">
                   Sair
@@ -173,6 +177,9 @@ export function Sidebar({
             {userManagementNavItem}
             {resetRequestsNavItem}
           </ul>
+          <div className="mt-4">
+            <ThemeToggleButton compact />
+          </div>
           <form action={onLogout} className="mt-4">
             <button type="submit" className="btn-secondary w-full">
               Sair

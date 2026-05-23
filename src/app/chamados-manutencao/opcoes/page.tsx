@@ -6,8 +6,6 @@ import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-
 import { getCurrentUser } from "@/lib/auth-session";
 import { canManageModuleOptions } from "@/lib/rbac";
 
-import { ThemeToggleButton } from "../../higienizacao-hortifruti/theme-toggle-button";
-
 const PAGE_PATH = "/chamados-manutencao/opcoes";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -45,9 +43,8 @@ export default async function ChamadosManutencaoOpcoesPage({
           </div>
           <div className="btn-group">
             <Link href="/chamados-manutencao" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

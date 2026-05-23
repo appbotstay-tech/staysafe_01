@@ -90,9 +90,11 @@ function redirectWithFeedback(
     url.searchParams.delete("new");
     url.searchParams.delete("editId");
     url.searchParams.delete("editAreaId");
+    url.searchParams.delete("editDailyItemId");
     url.searchParams.delete("editItemId");
     url.searchParams.delete("editWeeklyAreaId");
     url.searchParams.delete("deleteAreaId");
+    url.searchParams.delete("deleteDailyItemId");
     url.searchParams.delete("deleteItemId");
     url.searchParams.delete("deleteWeeklyAreaId");
     [
@@ -103,6 +105,10 @@ function redirectWithFeedback(
       "turnoManha",
       "turnoTarde",
       "turnoNoite",
+      "areaId",
+      "descricao",
+      "produtoUtilizado",
+      "funcionarioResponsavel",
       "area",
       "oQueLimpar",
       "qualProduto",
@@ -129,6 +135,28 @@ function buildDailyAreaConfigErrorReturnTo(returnTo: string, formData: FormData)
 
   for (const key of ["turnoManha", "turnoTarde", "turnoNoite"]) {
     url.searchParams.set(key, formData.get(key) === "on" ? "true" : "false");
+  }
+
+  return `${url.pathname}?${url.searchParams.toString()}`;
+}
+
+function buildDailyItemConfigErrorReturnTo(returnTo: string, formData: FormData): string {
+  const url = new URL(returnTo, "http://localhost");
+  const itemId = getInputValue(formData, "dailyItemId");
+  if (itemId) {
+    url.searchParams.set("editDailyItemId", itemId);
+  }
+
+  for (const key of [
+    "areaId",
+    "descricao",
+    "produtoUtilizado",
+    "setorResponsavel",
+    "funcionarioResponsavel",
+    "ordem",
+    "ativo"
+  ]) {
+    url.searchParams.set(key, getInputValue(formData, key));
   }
 
   return `${url.pathname}?${url.searchParams.toString()}`;
@@ -490,6 +518,245 @@ export async function deleteDailyAreaConfigAction(formData: FormData) {
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Área do Plano Diário Excluída com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+function pendingUnsignedDailyItemExecutionWhere(itemId: number): Prisma.PlanoLimpezaDiarioRegistroWhereInput {
+  return {
+    itemId,
+    status: StatusPlanoLimpeza.PENDENTE,
+    assinaturaResponsavel: "",
+    assinaturaSupervisor: ""
+  };
+}
+
+function realDailyItemHistoryWhere(itemId: number): Prisma.PlanoLimpezaDiarioRegistroWhereInput {
+  return {
+    itemId,
+    OR: [
+      { status: { not: StatusPlanoLimpeza.PENDENTE } },
+      { assinaturaResponsavel: { not: "" } },
+      { assinaturaSupervisor: { not: "" } }
+    ]
+  };
+}
+
+async function getDailyAreaForItem(areaId: number) {
+  const area = await prisma.planoLimpezaDiarioArea.findUnique({
+    where: { id: areaId },
+    select: { id: true, nome: true }
+  });
+
+  if (!area) {
+    throw new Error("Selecione uma área diária cadastrada.");
+  }
+
+  return area;
+}
+
+export async function createDailyItemConfigAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_OPCOES_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanManageOptions(actor.perfil);
+
+    const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
+    const descricao = getInputValue(formData, "descricao");
+    const produtoUtilizado = getInputValue(formData, "produtoUtilizado");
+    const setorResponsavel = getInputValue(formData, "setorResponsavel");
+    const funcionarioResponsavel = getInputValue(formData, "funcionarioResponsavel");
+    const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
+
+    if (!areaId) {
+      throw new Error("Selecione a área do item/local diário.");
+    }
+    ensureNonEmpty(descricao, "Item/local");
+    await getDailyAreaForItem(areaId);
+
+    await prisma.planoLimpezaDiarioItem.create({
+      data: {
+        areaId,
+        descricao,
+        produtoUtilizado: produtoUtilizado || null,
+        setorResponsavel: setorResponsavel || null,
+        funcionarioResponsavel: funcionarioResponsavel || null,
+        ordem,
+        ativo: true
+      }
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Item do Plano Diário Criado com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      buildDailyItemConfigErrorReturnTo(returnTo, formData),
+      "error",
+      getErrorMessage(error)
+    );
+  }
+}
+
+export async function updateDailyItemConfigAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_OPCOES_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanManageOptions(actor.perfil);
+
+    const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
+    const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
+    if (!itemId || !areaId) {
+      throw new Error("Item diário inválido para edição.");
+    }
+
+    const existing = await prisma.planoLimpezaDiarioItem.findUnique({
+      where: { id: itemId }
+    });
+    if (!existing || existing.excluidoEm) {
+      throw new Error("Item diário não encontrado.");
+    }
+
+    const area = await getDailyAreaForItem(areaId);
+    const descricao = getInputValue(formData, "descricao");
+    const produtoUtilizado = getInputValue(formData, "produtoUtilizado");
+    const setorResponsavel = getInputValue(formData, "setorResponsavel");
+    const funcionarioResponsavel = getInputValue(formData, "funcionarioResponsavel");
+    const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
+    const ativo = getInputValue(formData, "ativo") === "true";
+
+    ensureNonEmpty(descricao, "Item/local");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.planoLimpezaDiarioItem.update({
+        where: { id: itemId },
+        data: {
+          areaId,
+          descricao,
+          produtoUtilizado: produtoUtilizado || null,
+          setorResponsavel: setorResponsavel || null,
+          funcionarioResponsavel: funcionarioResponsavel || null,
+          ordem,
+          ativo
+        }
+      });
+
+      await tx.planoLimpezaDiarioRegistro.updateMany({
+        where: pendingUnsignedDailyItemExecutionWhere(itemId),
+        data: {
+          area: area.nome,
+          itemDescricao: descricao,
+          produtoUtilizado: produtoUtilizado || null,
+          setorResponsavel: setorResponsavel || null,
+          funcionarioResponsavel: funcionarioResponsavel || null
+        }
+      });
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Item do Plano Diário Atualizado com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      buildDailyItemConfigErrorReturnTo(returnTo, formData),
+      "error",
+      getErrorMessage(error)
+    );
+  }
+}
+
+export async function toggleDailyItemConfigStatusAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_OPCOES_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanManageOptions(actor.perfil);
+
+    const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
+    const ativo = getInputValue(formData, "ativo") === "true";
+    if (!itemId) {
+      throw new Error("Item diário inválido para atualização.");
+    }
+
+    const existing = await prisma.planoLimpezaDiarioItem.findUnique({
+      where: { id: itemId }
+    });
+    if (!existing || existing.excluidoEm) {
+      throw new Error("Item diário não encontrado.");
+    }
+
+    await prisma.planoLimpezaDiarioItem.update({
+      where: { id: itemId },
+      data: { ativo }
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      ativo ? "Item Ativado com Sucesso." : "Item Inativado com Sucesso."
+    );
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function deleteDailyItemConfigAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_OPCOES_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanManageOptions(actor.perfil);
+
+    const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
+    if (!itemId) {
+      throw new Error("Item diário inválido para exclusão.");
+    }
+
+    const existing = await prisma.planoLimpezaDiarioItem.findUnique({
+      where: { id: itemId }
+    });
+    if (!existing || existing.excluidoEm) {
+      throw new Error("Item diário não encontrado.");
+    }
+
+    const linkedRealHistory = await prisma.planoLimpezaDiarioRegistro.count({
+      where: realDailyItemHistoryWhere(itemId)
+    });
+
+    if (linkedRealHistory === 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.planoLimpezaDiarioRegistro.deleteMany({
+          where: pendingUnsignedDailyItemExecutionWhere(itemId)
+        });
+        await tx.planoLimpezaDiarioItem.delete({ where: { id: itemId } });
+      });
+
+      revalidateModulePaths();
+      redirectWithFeedback(returnTo, "success", "Item do Plano Diário Excluído com Sucesso.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.planoLimpezaDiarioRegistro.deleteMany({
+        where: pendingUnsignedDailyItemExecutionWhere(itemId)
+      });
+      await tx.planoLimpezaDiarioItem.update({
+        where: { id: itemId },
+        data: { ativo: false, excluidoEm: getCurrentSystemDateTime() }
+      });
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Este item possui histórico. Para preservar a auditoria, ele foi removido das rotinas futuras, mas os registros antigos permanecerão no histórico."
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));

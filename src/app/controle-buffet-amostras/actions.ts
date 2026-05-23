@@ -23,7 +23,6 @@ import { prisma } from "@/lib/prisma";
 
 import {
   findAcaoCorretivaByName,
-  getAcoesCorretivas,
   hasAcaoCorretivaWithSameName,
   hasItemWithSameName,
   hasServicoWithSameName,
@@ -71,6 +70,7 @@ const FORM_ACTION_INITIAL_STATE: FormActionState = {
 type RegistroTemperaturaInput = {
   tcEquipamentoInput: string;
   primeiraTcInput: string;
+  temperaturaTipo: string;
   acaoCorretivaInput: string;
   observacao: string;
 };
@@ -86,6 +86,7 @@ type RegistroItemPayload = {
   tcEquipamento: number | null;
   primeiraTc: number | null;
   segundaTc: number | null;
+  temperaturaAmbiente: boolean;
   statusTemperatura: ReturnType<typeof avaliarTemperaturaBuffet>["status"] | null;
   acaoCorretiva: string | null;
   observacao: string | null;
@@ -296,20 +297,46 @@ export async function createServicoEsporadicoStateAction(
   }
 }
 
-async function ensureAcoesCorretivasConfiguradas() {
-  const options = await getAcoesCorretivas(true);
-  if (options.length === 0) {
-    throw new Error(
-      "Não há ações corretivas ativas cadastradas. Solicite à gestão a configuração antes de registrar."
-    );
-  }
-}
-
 async function buildRegistroPayload(params: {
   actor: Awaited<ReturnType<typeof getCurrentUserForAction>>;
   item: RegistroItemSource;
   input: RegistroTemperaturaInput;
 }): Promise<RegistroItemPayload> {
+  const temperaturaAmbiente = params.input.temperaturaTipo === "AMBIENTE";
+  const acaoCorretivaOption = params.input.acaoCorretivaInput
+    ? await findAcaoCorretivaByName(params.input.acaoCorretivaInput, false)
+    : null;
+
+  if (params.input.acaoCorretivaInput && !acaoCorretivaOption) {
+    throw new Error("Selecione uma ação corretiva válida da lista cadastrada.");
+  }
+
+  const acaoCorretiva = acaoCorretivaOption
+    ? acaoCorretivaOption.nome
+    : await (async () => {
+        const naoSeAplica = await findAcaoCorretivaByName("Não se aplica", false);
+        return naoSeAplica?.nome ?? null;
+      })();
+
+  if (temperaturaAmbiente) {
+    return {
+      itemNome: params.item.nome,
+      classificacao: params.item.classificacao,
+      tcEquipamento: null,
+      primeiraTc: null,
+      segundaTc: null,
+      temperaturaAmbiente: true,
+      statusTemperatura: null,
+      acaoCorretiva,
+      observacao: params.input.observacao || null,
+      responsavelUsuarioId: params.actor.id,
+      responsavelNome: params.actor.nomeCompleto,
+      responsavelPerfil: params.actor.perfil,
+      dataHoraRegistro: getCurrentSystemDateTime(),
+      status: StatusItemBuffetAmostra.PREENCHIDO
+    };
+  }
+
   const tcEquipamento = parseTemperatureInput(params.input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(params.input.primeiraTcInput);
 
@@ -318,13 +345,6 @@ async function buildRegistroPayload(params: {
   }
 
   const avaliacao = avaliarTemperaturaBuffet(params.item.classificacao, primeiraTc);
-  const acaoCorretivaOption = params.input.acaoCorretivaInput
-    ? await findAcaoCorretivaByName(params.input.acaoCorretivaInput, false)
-    : null;
-
-  if (params.input.acaoCorretivaInput && !acaoCorretivaOption) {
-    throw new Error("Selecione uma ação corretiva válida da lista cadastrada.");
-  }
 
   if (
     avaliacao.exigeAcaoCorretiva &&
@@ -336,19 +356,13 @@ async function buildRegistroPayload(params: {
     );
   }
 
-  const acaoCorretiva = acaoCorretivaOption
-    ? acaoCorretivaOption.nome
-    : await (async () => {
-        const naoSeAplica = await findAcaoCorretivaByName("Não se aplica", false);
-        return naoSeAplica?.nome ?? null;
-      })();
-
   return {
     itemNome: params.item.nome,
     classificacao: params.item.classificacao,
     tcEquipamento,
     primeiraTc,
     segundaTc: null,
+    temperaturaAmbiente: false,
     statusTemperatura: avaliacao.status,
     acaoCorretiva,
     observacao: params.input.observacao || null,
@@ -364,6 +378,7 @@ function getRegistroItemIssue(
   item: RegistroItemSource,
   input: RegistroTemperaturaInput
 ): RegistroItemIssue | null {
+  const temperaturaAmbiente = input.temperaturaTipo === "AMBIENTE";
   const values = [
     input.tcEquipamentoInput,
     input.primeiraTcInput,
@@ -374,6 +389,10 @@ function getRegistroItemIssue(
 
   if (!hasAnyValue) {
     return { kind: "blank", missingFields: [] };
+  }
+
+  if (temperaturaAmbiente) {
+    return null;
   }
 
   const missingFields: string[] = [];
@@ -407,6 +426,7 @@ function buildNaoServidoPayload(params: {
     tcEquipamento: null,
     primeiraTc: null,
     segundaTc: null,
+    temperaturaAmbiente: false,
     statusTemperatura: null,
     acaoCorretiva: null,
     observacao:
@@ -429,6 +449,7 @@ export async function saveRegistroItemAction(formData: FormData) {
     const dataInput = getInputValue(formData, "data");
     const tcEquipamentoInput = getInputValue(formData, "tcEquipamento");
     const primeiraTcInput = getInputValue(formData, "primeiraTc");
+    const temperaturaTipo = getInputValue(formData, "temperaturaTipo");
     const acaoCorretivaInput = getInputValue(formData, "acaoCorretiva");
     const observacao = getInputValue(formData, "observacao");
 
@@ -442,7 +463,6 @@ export async function saveRegistroItemAction(formData: FormData) {
     }
 
     await ensurePeriodIsOpen(data);
-    await ensureAcoesCorretivasConfiguradas();
 
     const [servico, item, vinculacao] = await Promise.all([
       prisma.controleBuffetAmostraServico.findUnique({ where: { id: servicoId } }),
@@ -456,39 +476,6 @@ export async function saveRegistroItemAction(formData: FormData) {
       throw new Error("Item não configurado para o serviço selecionado.");
     }
     ensureServicoPrevistoNaData(servico, data);
-
-    const tcEquipamento = parseTemperatureInput(tcEquipamentoInput);
-    const primeiraTc = parseTemperatureInput(primeiraTcInput);
-
-    if (tcEquipamento === null || primeiraTc === null) {
-      throw new Error("Preencha TC Equipamento e TC do Alimento com valores válidos.");
-    }
-
-    const avaliacao = avaliarTemperaturaBuffet(item.classificacao, primeiraTc);
-    const acaoCorretivaOption = acaoCorretivaInput
-      ? await findAcaoCorretivaByName(acaoCorretivaInput, false)
-      : null;
-
-    if (acaoCorretivaInput && !acaoCorretivaOption) {
-      throw new Error("Selecione uma ação corretiva válida da lista cadastrada.");
-    }
-
-    if (
-      avaliacao.exigeAcaoCorretiva &&
-      (!acaoCorretivaOption ||
-        normalizeOption(acaoCorretivaOption.nome) === NAO_SE_APLICA_NORMALIZED)
-    ) {
-      throw new Error(
-        "A ação corretiva é obrigatória quando a temperatura estiver em Alerta ou Crítico."
-      );
-    }
-
-    const acaoCorretiva = acaoCorretivaOption
-      ? acaoCorretivaOption.nome
-      : await (async () => {
-          const naoSeAplica = await findAcaoCorretivaByName("Não se aplica", false);
-          return naoSeAplica?.nome ?? null;
-        })();
 
     const existing = await prisma.controleBuffetAmostraRegistro.findUnique({
       where: {
@@ -504,22 +491,17 @@ export async function saveRegistroItemAction(formData: FormData) {
       throw new Error("Este item já está assinado e não pode ser alterado.");
     }
 
-    const now = getCurrentSystemDateTime();
-    const payload = {
-      itemNome: item.nome,
-      classificacao: item.classificacao,
-      tcEquipamento,
-      primeiraTc,
-      segundaTc: null,
-      statusTemperatura: avaliacao.status,
-      acaoCorretiva,
-      observacao: observacao || null,
-      responsavelUsuarioId: actor.id,
-      responsavelNome: actor.nomeCompleto,
-      responsavelPerfil: actor.perfil,
-      dataHoraRegistro: now,
-      status: StatusItemBuffetAmostra.PREENCHIDO
-    };
+    const payload = await buildRegistroPayload({
+      actor,
+      item,
+      input: {
+        tcEquipamentoInput,
+        primeiraTcInput,
+        temperaturaTipo,
+        acaoCorretivaInput,
+        observacao
+      }
+    });
 
     await prisma.controleBuffetAmostraRegistro.upsert({
       where: {
@@ -579,7 +561,6 @@ export async function saveServicoItemsStateAction(
     }
 
     await ensurePeriodIsOpen(data);
-    await ensureAcoesCorretivasConfiguradas();
 
     const [servico, registros] = await Promise.all([
       prisma.controleBuffetAmostraServico.findUnique({
@@ -631,6 +612,7 @@ export async function saveServicoItemsStateAction(
         const input = {
           tcEquipamentoInput: getRowInputValue(formData, rowKey, "tcEquipamento"),
           primeiraTcInput: getRowInputValue(formData, rowKey, "primeiraTc"),
+          temperaturaTipo: getRowInputValue(formData, rowKey, "temperaturaTipo"),
           acaoCorretivaInput: getRowInputValue(formData, rowKey, "acaoCorretiva"),
           observacao: getRowInputValue(formData, rowKey, "observacao")
         };

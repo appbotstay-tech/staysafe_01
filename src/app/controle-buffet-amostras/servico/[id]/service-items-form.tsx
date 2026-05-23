@@ -45,6 +45,7 @@ export type ServiceItemFormRow = {
   avaliacaoOrientacao: string | null;
   tcEquipamento: string;
   primeiraTc: string;
+  temperaturaAmbiente: boolean;
   acaoCorretiva: string;
   observacao: string;
   responsavelNome: string | null;
@@ -197,6 +198,9 @@ export function ServiceItemsForm({
   const [pendingIssues, setPendingIssues] = useState<PendingItemIssue[]>([]);
   const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set());
   const [itemSearch, setItemSearch] = useState("");
+  const [ambientRows, setAmbientRows] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(rows.map((row) => [row.rowKey, row.temperaturaAmbiente]))
+  );
   const hasEditableRows = rows.some((row) => !row.bloqueado);
   const normalizedItemSearch = normalizeSearchText(itemSearch);
   const hasSearchMatches =
@@ -215,6 +219,10 @@ export function ServiceItemsForm({
     }
   }, [router, state.status]);
 
+  useEffect(() => {
+    setAmbientRows(Object.fromEntries(rows.map((row) => [row.rowKey, row.temperaturaAmbiente])));
+  }, [rows]);
+
   const collectPendingIssues = (formData: FormData): PendingItemIssue[] => {
     const issues: PendingItemIssue[] = [];
 
@@ -225,13 +233,16 @@ export function ServiceItemsForm({
 
       const tcEquipamento = String(formData.get(`${row.rowKey}-tcEquipamento`) ?? "").trim();
       const primeiraTc = String(formData.get(`${row.rowKey}-primeiraTc`) ?? "").trim();
+      const temperaturaTipo = String(formData.get(`${row.rowKey}-temperaturaTipo`) ?? "").trim();
       const acaoCorretiva = String(formData.get(`${row.rowKey}-acaoCorretiva`) ?? "").trim();
       const observacao = String(formData.get(`${row.rowKey}-observacao`) ?? "").trim();
+      const temperaturaAmbiente = temperaturaTipo === "AMBIENTE";
       const hasAnyValue = [
         tcEquipamento,
         primeiraTc,
         acaoCorretiva,
-        observacao
+        observacao,
+        temperaturaAmbiente ? "Ambiente" : ""
       ].some(Boolean);
 
       if (!hasAnyValue) {
@@ -245,6 +256,25 @@ export function ServiceItemsForm({
       }
 
       const missingFields: string[] = [];
+      if (temperaturaAmbiente) {
+        if (
+          acaoCorretiva &&
+          !acoesCorretivas.some((option) => option.nome === acaoCorretiva)
+        ) {
+          missingFields.push("ação corretiva válida");
+        }
+
+        if (missingFields.length > 0) {
+          issues.push({
+            rowKey: row.rowKey,
+            nome: row.nome,
+            kind: "incomplete",
+            missingFields
+          });
+        }
+        continue;
+      }
+
       const tcEquipamentoNumber = parseTemperatureInput(tcEquipamento);
       const primeiraTcNumber = parseTemperatureInput(primeiraTc);
 
@@ -393,6 +423,7 @@ export function ServiceItemsForm({
               !normalizedItemSearch ||
               normalizeSearchText(row.nome).includes(normalizedItemSearch);
             const hiddenBySearch = !matchesSearch && !invalid;
+            const temperaturaAmbiente = ambientRows[row.rowKey] ?? row.temperaturaAmbiente;
 
             return (
               <section
@@ -425,7 +456,13 @@ export function ServiceItemsForm({
                     <span className="text-sm text-slate-700 dark:text-slate-200">
                       {getClassificacaoLabel(row.classificacao)}
                     </span>
-                    <TemperatureStatusBadge status={row.statusTemperatura} />
+                    {temperaturaAmbiente ? (
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        Ambiente
+                      </span>
+                    ) : (
+                      <TemperatureStatusBadge status={row.statusTemperatura} />
+                    )}
                   </div>
                 </div>
 
@@ -435,7 +472,25 @@ export function ServiceItemsForm({
                   </p>
                 ) : null}
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="text-sm text-slate-700 dark:text-slate-200">
+                    Temperatura do item
+                    <select
+                      name={`${row.rowKey}-temperaturaTipo`}
+                      defaultValue={row.temperaturaAmbiente ? "AMBIENTE" : "NUMERICA"}
+                      className={inputClassName}
+                      disabled={row.bloqueado}
+                      onChange={(event) =>
+                        setAmbientRows((current) => ({
+                          ...current,
+                          [row.rowKey]: event.target.value === "AMBIENTE"
+                        }))
+                      }
+                    >
+                      <option value="NUMERICA">Numérica</option>
+                      <option value="AMBIENTE">Ambiente</option>
+                    </select>
+                  </label>
                   <label className="text-sm text-slate-700 dark:text-slate-200">
                     TC Equipamento
                     <input
@@ -445,7 +500,7 @@ export function ServiceItemsForm({
                       placeholder="Ex.: -18 ou 62,5"
                       defaultValue={row.tcEquipamento}
                       className={inputClassName}
-                      disabled={row.bloqueado}
+                      disabled={row.bloqueado || temperaturaAmbiente}
                     />
                   </label>
                   <label className="text-sm text-slate-700 dark:text-slate-200">
@@ -457,7 +512,7 @@ export function ServiceItemsForm({
                       placeholder="Ex.: -12,5"
                       defaultValue={row.primeiraTc}
                       className={inputClassName}
-                      disabled={row.bloqueado}
+                      disabled={row.bloqueado || temperaturaAmbiente}
                     />
                   </label>
                 </div>
@@ -515,7 +570,7 @@ export function ServiceItemsForm({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <SubmitItemsButton disabled={!hasEditableRows || acoesCorretivas.length === 0} />
+          <SubmitItemsButton disabled={!hasEditableRows} />
         </div>
       </form>
 

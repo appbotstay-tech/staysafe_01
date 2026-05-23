@@ -779,7 +779,18 @@ async function buildDailyCleaningStats(
         nome: true,
         turnoManha: true,
         turnoTarde: true,
-        turnoNoite: true
+        turnoNoite: true,
+        itens: {
+          where: {
+            ativo: true,
+            excluidoEm: null
+          },
+          select: {
+            id: true,
+            descricao: true
+          },
+          orderBy: [{ ordem: "asc" }, { descricao: "asc" }]
+        }
       },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
@@ -790,6 +801,8 @@ async function buildDailyCleaningStats(
         data: true,
         area: true,
         turno: true,
+        itemId: true,
+        itemDescricao: true,
         assinaturaResponsavel: true,
         assinaturaSupervisor: true,
         status: true,
@@ -799,24 +812,23 @@ async function buildDailyCleaningStats(
     })
   ]);
 
-  const turnosByArea = areaConfigs.map((area) => {
+  const turnosForArea = (area: (typeof areaConfigs)[number]): TurnoPlanoLimpeza[] => {
     const turnos: TurnoPlanoLimpeza[] = [];
     if (area.turnoManha) turnos.push("MANHA");
     if (area.turnoTarde) turnos.push("TARDE");
     if (area.turnoNoite) turnos.push("NOITE");
+    return turnos;
+  };
 
-    return {
-      area: area.nome,
-      turnos
-    };
-  });
-
-  const keyFor = (date: Date, area: string, turno: TurnoPlanoLimpeza) =>
-    `${dateOnlyKey(date)}|${area}|${turno}`;
+  const keyFor = (date: Date, turno: TurnoPlanoLimpeza, itemId: number) =>
+    `${dateOnlyKey(date)}|${turno}|${itemId}`;
   const recordsByKey = new Map<string, (typeof registros)[number]>();
 
   for (const record of registros) {
-    const key = keyFor(record.data, record.area, record.turno);
+    if (!record.itemId) {
+      continue;
+    }
+    const key = keyFor(record.data, record.turno, record.itemId);
     if (!recordsByKey.has(key)) {
       recordsByKey.set(key, record);
     }
@@ -825,59 +837,61 @@ async function buildDailyCleaningStats(
   const expectedKeys = new Set<string>();
 
   for (const date of dates) {
-    for (const area of turnosByArea) {
-      for (const turno of area.turnos) {
-        const key = keyFor(date, area.area, turno);
-        expectedKeys.add(key);
-        const record = recordsByKey.get(key);
-        const href = `${moduleInfo.href}?filtroData=${formatDateInput(date)}&filtroArea=${encodeURIComponent(area.area)}&filtroTurno=${turno}`;
+    for (const area of areaConfigs) {
+      for (const turno of turnosForArea(area)) {
+        for (const item of area.itens) {
+          const key = keyFor(date, turno, item.id);
+          expectedKeys.add(key);
+          const record = recordsByKey.get(key);
+          const href = `${moduleInfo.href}?filtroData=${formatDateInput(date)}&filtroArea=${encodeURIComponent(area.nome)}&filtroTurno=${turno}&openData=${formatDateInput(date)}&openArea=${encodeURIComponent(area.nome)}&openTurno=${turno}`;
 
-        if (!record) {
-          addPending(
-            stats,
-            {
-              id: `${moduleInfo.id}:${key}:missing`,
-              moduleId: moduleInfo.id,
-              moduleName: moduleInfo.name,
-              title: `${area.area} | ${getTurnoLabel(turno)}`,
-              description: `Sem registro em ${formatDateDisplay(date)}.`,
-              status: "Aguardando responsável",
-              dateTime: formatDateDisplay(date),
-              href
-            },
-            "Aguardando responsável"
-          );
-          continue;
-        }
+          if (!record) {
+            addPending(
+              stats,
+              {
+                id: `${moduleInfo.id}:${key}:missing`,
+                moduleId: moduleInfo.id,
+                moduleName: moduleInfo.name,
+                title: `${area.nome} | ${item.descricao}`,
+                description: `${getTurnoLabel(turno)} sem assinatura em ${formatDateDisplay(date)}.`,
+                status: "Aguardando responsável",
+                dateTime: formatDateDisplay(date),
+                href
+              },
+              "Aguardando responsável"
+            );
+            continue;
+          }
 
-        const status = cleaningStatusLabel(record.status);
-        const detail = {
-          id: `${moduleInfo.id}:${record.id}`,
-          moduleId: moduleInfo.id,
-          moduleName: moduleInfo.name,
-          title: `${record.area} | ${getTurnoLabel(record.turno)}`,
-          description:
-            record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
-              ? "Aguardando assinatura do supervisor."
-              : "Checklist diário registrado.",
-          status,
-          responsible: record.assinaturaSupervisor || record.assinaturaResponsavel || undefined,
-          dateTime: formatDateDisplay(record.data),
-          href
-        };
+          const status = cleaningStatusLabel(record.status);
+          const detail = {
+            id: `${moduleInfo.id}:${record.id}`,
+            moduleId: moduleInfo.id,
+            moduleName: moduleInfo.name,
+            title: `${record.area} | ${record.itemDescricao ?? item.descricao}`,
+            description:
+              record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+                ? `${getTurnoLabel(record.turno)} aguardando assinatura do supervisor.`
+                : `${getTurnoLabel(record.turno)} registrado.`,
+            status,
+            responsible: record.assinaturaSupervisor || record.assinaturaResponsavel || undefined,
+            dateTime: formatDateDisplay(record.data),
+            href
+          };
 
-        if (record.status === StatusPlanoLimpeza.CONCLUIDO) {
-          addCompleted(stats, detail);
-        } else {
-          addPending(stats, detail, status);
+          if (record.assinaturaResponsavel.trim().length > 0) {
+            addCompleted(stats, detail);
+          } else {
+            addPending(stats, detail, status);
+          }
         }
       }
     }
   }
 
   for (const record of registros) {
-    const key = keyFor(record.data, record.area, record.turno);
-    if (expectedKeys.has(key)) {
+    const key = record.itemId ? keyFor(record.data, record.turno, record.itemId) : null;
+    if (key && expectedKeys.has(key)) {
       continue;
     }
 

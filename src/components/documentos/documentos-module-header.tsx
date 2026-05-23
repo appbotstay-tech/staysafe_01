@@ -22,6 +22,12 @@ type DocumentosModuleHeaderProps = {
   modulePath: string;
   searchParams: SearchParams;
   actions?: ReactNode;
+  managementHref?: string;
+  managementLabel?: string;
+  maintenanceHref?: string;
+  maintenanceLabel?: string;
+  backHref?: string;
+  backLabel?: string;
 };
 
 function firstParam(value: string | string[] | undefined): string {
@@ -95,7 +101,13 @@ export async function DocumentosModuleHeader({
   modulo,
   modulePath,
   searchParams,
-  actions
+  actions,
+  managementHref,
+  managementLabel = "Gerenciar",
+  maintenanceHref,
+  maintenanceLabel = "Abrir chamado de manutenção",
+  backHref,
+  backLabel = "Voltar ao Módulo"
 }: DocumentosModuleHeaderProps) {
   const modalAberto = firstParam(searchParams.documentos) === "1";
   const anexosHref = buildHeaderHref(modulePath, searchParams, true);
@@ -132,28 +144,46 @@ export async function DocumentosModuleHeader({
   return (
     <>
       <section className="bpma-card">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              {title}
-            </h1>
-            {textoCabecalho ? (
-              <div className="mt-3 max-w-4xl rounded-lg border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:border-l-amber-400 dark:bg-amber-950/60">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
-                  Orientação
-                </p>
-                <p className="mt-1 whitespace-pre-line text-sm leading-6 text-amber-900 dark:text-amber-100">
-                  {textoCabecalho}
-                </p>
-              </div>
-            ) : null}
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+          {title}
+        </h1>
+        {textoCabecalho ? (
+          <div className="mt-3 max-w-4xl rounded-lg border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:border-l-amber-400 dark:bg-amber-950/60">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+              Orientação
+            </p>
+            <p className="mt-1 whitespace-pre-line text-sm leading-6 text-amber-900 dark:text-amber-100">
+              {textoCabecalho}
+            </p>
           </div>
-          <div className="btn-group">
-            <Link href={anexosHref} className="btn-secondary">
-              Anexos
+        ) : null}
+      </section>
+
+      <section className="bpma-card-compact">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          Ações do módulo
+        </h2>
+        <div className="btn-group">
+          {managementHref ? (
+            <Link href={managementHref} className="btn-secondary">
+              {managementLabel}
             </Link>
-            {actions}
-          </div>
+          ) : null}
+          <Link href={anexosHref} className="btn-secondary">
+            Anexos
+          </Link>
+          {maintenanceHref ? (
+            <Link href={maintenanceHref} className="btn-secondary">
+              {maintenanceLabel}
+            </Link>
+          ) : null}
+          {actions}
+          {backHref ? (
+            <Link href={backHref} className="btn-secondary gap-2">
+              <span aria-hidden="true">←</span>
+              {backLabel}
+            </Link>
+          ) : null}
         </div>
       </section>
 

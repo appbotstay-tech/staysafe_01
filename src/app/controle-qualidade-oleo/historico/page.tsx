@@ -4,7 +4,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
 import { OilStatusBadge } from "../oil-status-badge";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import {
   formatDateDisplay,
   formatTemperatureDisplay,
@@ -114,9 +113,8 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
           </div>
           <div className="btn-group">
             <Link href="/controle-qualidade-oleo" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

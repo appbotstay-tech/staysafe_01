@@ -2,7 +2,8 @@ import {
   ModuloDocumento,
   Prisma,
   StatusFechamentoRastreabilidadeRecebimento,
-  StatusNotaRecebimento
+  StatusNotaRecebimento,
+  StatusRecebimento
 } from "@prisma/client";
 import Link from "next/link";
 
@@ -28,7 +29,6 @@ import {
 import { DeleteNoteModal } from "./delete-note-modal";
 import { RECEBIMENTO_ORIENTACOES } from "./options";
 import { ReopenMonthModal } from "./reopen-month-modal";
-import { ThemeToggleButton } from "./theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateTimeDisplay,
@@ -107,8 +107,27 @@ function getNotaStatusClass(status: StatusNotaRecebimento): string {
   return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200";
 }
 
+function getItemStatusLabel(status: StatusRecebimento): string {
+  if (status === StatusRecebimento.CONFORME) {
+    return "Conferido";
+  }
+
+  if (status === StatusRecebimento.NAO_CONFORME) {
+    return "Não Conforme";
+  }
+
+  return "Pendente";
+}
+
 function canImportXml(role: string | null): boolean {
   return role === "DEV" || role === "GERENTE";
+}
+
+function parseItemStatusFilter(value: string): StatusRecebimento | null {
+  if (value === StatusRecebimento.PENDENTE) return StatusRecebimento.PENDENTE;
+  if (value === StatusRecebimento.CONFORME) return StatusRecebimento.CONFORME;
+  if (value === StatusRecebimento.NAO_CONFORME) return StatusRecebimento.NAO_CONFORME;
+  return null;
 }
 
 function parsePendingStatusFilter(value: string): StatusNotaRecebimento | null {
@@ -147,6 +166,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const filtroNotaFiscal = firstParam(params.filtroNotaFiscal).trim();
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroStatus = parsePendingStatusFilter(firstParam(params.filtroStatus).trim());
+  const buscaItemRecebido = firstParam(params.buscaItemRecebido).trim();
+  const filtroItemProduto = firstParam(params.filtroItemProduto).trim();
+  const filtroItemLote = firstParam(params.filtroItemLote).trim();
+  const filtroValidadeInicial = firstParam(params.filtroValidadeInicial).trim();
+  const filtroValidadeFinal = firstParam(params.filtroValidadeFinal).trim();
+  const filtroItemStatus = parseItemStatusFilter(firstParam(params.filtroItemStatus).trim());
 
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
@@ -226,6 +251,78 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     })
   ]);
 
+  const itemSearchDate = parseDateInput(buscaItemRecebido);
+  const validadeInicialFiltro = parseDateInput(filtroValidadeInicial);
+  const validadeFinalFiltro = parseDateInput(filtroValidadeFinal);
+  const deveBuscarItens = Boolean(
+    buscaItemRecebido ||
+      filtroItemProduto ||
+      filtroItemLote ||
+      filtroValidadeInicial ||
+      filtroValidadeFinal ||
+      filtroFornecedor ||
+      filtroNotaFiscal ||
+      filtroItemStatus
+  );
+  const whereItensRecebidos: Prisma.RastreabilidadeRecebimentoRegistroWhereInput = {};
+  const itemAndFilters: Prisma.RastreabilidadeRecebimentoRegistroWhereInput[] = [];
+
+  if (buscaItemRecebido) {
+    itemAndFilters.push({
+      OR: [
+        { produto: { contains: buscaItemRecebido, mode: "insensitive" } },
+        { lote: { contains: buscaItemRecebido, mode: "insensitive" } },
+        { notaFiscal: { contains: buscaItemRecebido, mode: "insensitive" } },
+        { fornecedor: { contains: buscaItemRecebido, mode: "insensitive" } },
+        ...(itemSearchDate ? [{ dataValidade: itemSearchDate }] : [])
+      ]
+    });
+  }
+  if (filtroItemProduto) {
+    itemAndFilters.push({ produto: { contains: filtroItemProduto, mode: "insensitive" } });
+  }
+  if (filtroItemLote) {
+    itemAndFilters.push({ lote: { contains: filtroItemLote, mode: "insensitive" } });
+  }
+  if (filtroFornecedor) {
+    itemAndFilters.push({ fornecedor: { contains: filtroFornecedor, mode: "insensitive" } });
+  }
+  if (filtroNotaFiscal) {
+    itemAndFilters.push({ notaFiscal: { contains: filtroNotaFiscal, mode: "insensitive" } });
+  }
+  if (validadeInicialFiltro && validadeFinalFiltro) {
+    itemAndFilters.push({ dataValidade: { gte: validadeInicialFiltro, lte: validadeFinalFiltro } });
+  } else if (validadeInicialFiltro) {
+    itemAndFilters.push({ dataValidade: { gte: validadeInicialFiltro } });
+  } else if (validadeFinalFiltro) {
+    itemAndFilters.push({ dataValidade: { lte: validadeFinalFiltro } });
+  }
+  if (filtroItemStatus) {
+    itemAndFilters.push({ statusGeral: filtroItemStatus });
+  }
+  if (itemAndFilters.length > 0) {
+    whereItensRecebidos.AND = itemAndFilters;
+  }
+
+  const itensRecebidosEncontrados = deveBuscarItens
+    ? await prisma.rastreabilidadeRecebimentoRegistro.findMany({
+        where: whereItensRecebidos,
+        include: {
+          nota: {
+            select: {
+              id: true,
+              statusNota: true,
+              fornecedor: true,
+              notaFiscal: true,
+              data: true
+            }
+          }
+        },
+        orderBy: [{ data: "desc" }, { produto: "asc" }],
+        take: 50
+      })
+    : [];
+
   const fechamentoAssinado =
     fechamentoAtual?.status === StatusFechamentoRastreabilidadeRecebimento.ASSINADO;
 
@@ -236,6 +333,12 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   if (filtroNotaFiscal) paramsRetorno.set("filtroNotaFiscal", filtroNotaFiscal);
   if (filtroResponsavel) paramsRetorno.set("filtroResponsavel", filtroResponsavel);
   if (filtroStatus) paramsRetorno.set("filtroStatus", filtroStatus);
+  if (buscaItemRecebido) paramsRetorno.set("buscaItemRecebido", buscaItemRecebido);
+  if (filtroItemProduto) paramsRetorno.set("filtroItemProduto", filtroItemProduto);
+  if (filtroItemLote) paramsRetorno.set("filtroItemLote", filtroItemLote);
+  if (filtroValidadeInicial) paramsRetorno.set("filtroValidadeInicial", filtroValidadeInicial);
+  if (filtroValidadeFinal) paramsRetorno.set("filtroValidadeFinal", filtroValidadeFinal);
+  if (filtroItemStatus) paramsRetorno.set("filtroItemStatus", filtroItemStatus);
   paramsRetorno.set("fechamentoMes", String(fechamentoMes));
   paramsRetorno.set("fechamentoAno", String(fechamentoAno));
 
@@ -261,6 +364,8 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
         modulo={ModuloDocumento.RASTREABILIDADE_RECEBIMENTO}
         modulePath={MODULE_PATH}
         searchParams={params}
+        managementHref={podeGerenciarOpcoes ? "/rastreabilidade-recebimento/opcoes" : undefined}
+        maintenanceHref="/chamados-manutencao?origem=RECEBIMENTO"
         actions={
           <>
             {podeVerGestao ? (
@@ -268,15 +373,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                 Histórico Completo
               </Link>
             ) : null}
-            {podeGerenciarOpcoes ? (
-              <Link href="/rastreabilidade-recebimento/opcoes" className="btn-secondary">
-                Gerenciar Categorias
-              </Link>
-            ) : null}
-            <Link href="/chamados-manutencao?origem=RECEBIMENTO" className="btn-secondary">
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
           </>
         }
       />
@@ -518,6 +614,128 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className={CARD_CLASS}>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Buscar item recebido
+        </h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Pesquise por produto, lote, validade, fornecedor ou número da nota.
+        </p>
+
+        <form method="get" className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-7 dark:bg-slate-800">
+          <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
+          <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
+
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+            Busca única
+            <input
+              type="text"
+              name="buscaItemRecebido"
+              defaultValue={buscaItemRecebido}
+              placeholder="Produto, lote, validade, nota ou fornecedor"
+              className={INPUT_CLASS}
+            />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Produto / item
+            <input type="text" name="filtroItemProduto" defaultValue={filtroItemProduto} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Lote
+            <input type="text" name="filtroItemLote" defaultValue={filtroItemLote} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Validade inicial
+            <input type="date" name="filtroValidadeInicial" defaultValue={filtroValidadeInicial} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Validade final
+            <input type="date" name="filtroValidadeFinal" defaultValue={filtroValidadeFinal} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Status
+            <select name="filtroItemStatus" defaultValue={filtroItemStatus ?? ""} className={INPUT_CLASS}>
+              <option value="">Todos</option>
+              <option value={StatusRecebimento.PENDENTE}>Pendente</option>
+              <option value={StatusRecebimento.CONFORME}>Conferido</option>
+              <option value={StatusRecebimento.NAO_CONFORME}>Não Conforme</option>
+            </select>
+          </label>
+
+          <div className="btn-group md:col-span-7">
+            <button type="submit" className="btn-primary">
+              Buscar
+            </button>
+            <Link href={limparFiltrosHref} className="btn-secondary">
+              Limpar
+            </Link>
+          </div>
+        </form>
+
+        {!deveBuscarItens ? (
+          <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Informe ao menos um termo ou filtro para buscar itens dentro das notas.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <tr>
+                  <th className="px-3 py-2">Produto</th>
+                  <th className="px-3 py-2">Fornecedor</th>
+                  <th className="px-3 py-2">Nota</th>
+                  <th className="px-3 py-2">Lote</th>
+                  <th className="px-3 py-2">Validade</th>
+                  <th className="px-3 py-2">Recebimento</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {itensRecebidosEncontrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                      Nenhum item encontrado para os filtros informados.
+                    </td>
+                  </tr>
+                ) : (
+                  itensRecebidosEncontrados.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-3 py-2">{item.produto}</td>
+                      <td className="px-3 py-2">{item.nota?.fornecedor ?? item.fornecedor}</td>
+                      <td className="px-3 py-2">{item.nota?.notaFiscal ?? item.notaFiscal}</td>
+                      <td className="px-3 py-2">{item.lote || "-"}</td>
+                      <td className="px-3 py-2">
+                        {item.validadeNaoAplicavel
+                          ? "Sem validade"
+                          : item.dataValidade
+                            ? formatDateDisplay(item.dataValidade)
+                            : "-"}
+                      </td>
+                      <td className="px-3 py-2">{formatDateDisplay(item.nota?.data ?? item.data)}</td>
+                      <td className="px-3 py-2">{getItemStatusLabel(item.statusGeral)}</td>
+                      <td className="px-3 py-2">
+                        <Link
+                          href={item.notaId ? `/rastreabilidade-recebimento/nota/${item.notaId}` : MODULE_PATH}
+                          className="btn-action"
+                        >
+                          Abrir nota
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {itensRecebidosEncontrados.length >= 50 ? (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Exibindo os 50 resultados mais recentes. Refine os filtros para auditorias maiores.
+              </p>
+            ) : null}
+          </div>
+        )}
       </section>
 
       {podeVerGestao ? (

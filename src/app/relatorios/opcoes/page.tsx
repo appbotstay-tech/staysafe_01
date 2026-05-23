@@ -6,8 +6,6 @@ import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-
 import { getCurrentUser } from "@/lib/auth-session";
 import { canManageModuleOptions } from "@/lib/rbac";
 
-import { ThemeToggleButton } from "../../higienizacao-hortifruti/theme-toggle-button";
-
 const PAGE_PATH = "/relatorios/opcoes";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -43,9 +41,8 @@ export default async function RelatoriosOpcoesPage({ searchParams }: PageProps) 
           </div>
           <div className="btn-group">
             <Link href="/relatorios" className="btn-secondary">
-              Voltar para Relatórios
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

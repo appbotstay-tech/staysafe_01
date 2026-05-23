@@ -25,7 +25,6 @@ import {
   parseDateInput,
   parsePositiveInt
 } from "../../utils";
-import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 import { ServiceItemsForm, type ServiceItemFormRow } from "./service-items-form";
 
 const MODULE_PATH = "/controle-buffet-amostras";
@@ -180,8 +179,12 @@ export default async function ExecucaoServicoBuffetPage({
       const item = vinculo.item;
       const registro = registrosByItemId.get(item.id) ?? null;
       const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
+      const temperaturaAmbiente =
+        registro?.temperaturaAmbiente ?? item.classificacao === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
       const avaliacao =
-        registro?.primeiraTc !== null && registro?.primeiraTc !== undefined
+        !temperaturaAmbiente &&
+        registro?.primeiraTc !== null &&
+        registro?.primeiraTc !== undefined
           ? avaliarTemperaturaBuffet(item.classificacao, registro.primeiraTc)
           : null;
 
@@ -196,6 +199,7 @@ export default async function ExecucaoServicoBuffetPage({
         avaliacaoOrientacao: avaliacao?.orientacao ?? null,
         tcEquipamento: formatTemperatureInput(registro?.tcEquipamento ?? null),
         primeiraTc: formatTemperatureInput(registro?.primeiraTc ?? null),
+        temperaturaAmbiente,
         acaoCorretiva: registro?.acaoCorretiva?.trim() ?? "",
         observacao: registro?.observacao ?? "",
         responsavelNome: registro?.responsavelNome ?? null,
@@ -213,8 +217,13 @@ export default async function ExecucaoServicoBuffetPage({
       };
     }),
     ...registrosExtras.map((registro) => {
+      const temperaturaAmbiente =
+        registro.temperaturaAmbiente ||
+        registro.classificacao === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
       const avaliacao =
-        registro.primeiraTc !== null && registro.primeiraTc !== undefined
+        !temperaturaAmbiente &&
+        registro.primeiraTc !== null &&
+        registro.primeiraTc !== undefined
           ? avaliarTemperaturaBuffet(registro.classificacao, registro.primeiraTc)
           : null;
 
@@ -229,6 +238,7 @@ export default async function ExecucaoServicoBuffetPage({
         avaliacaoOrientacao: avaliacao?.orientacao ?? null,
         tcEquipamento: formatTemperatureInput(registro.tcEquipamento),
         primeiraTc: formatTemperatureInput(registro.primeiraTc),
+        temperaturaAmbiente,
         acaoCorretiva: registro.acaoCorretiva?.trim() ?? "",
         observacao: registro.observacao ?? "",
         responsavelNome: registro.responsavelNome,
@@ -268,14 +278,13 @@ export default async function ExecucaoServicoBuffetPage({
           </div>
           <div className="btn-group">
             <Link href={MODULE_PATH} className="btn-secondary">
-              Voltar
+              ← Voltar ao Módulo
             </Link>
             {podeVerGestao ? (
               <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
                 Histórico Completo
               </Link>
             ) : null}
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

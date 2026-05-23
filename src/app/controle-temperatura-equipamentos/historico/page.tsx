@@ -8,7 +8,6 @@ import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 
 import { TemperatureStatusBadge } from "../temperature-status-badge";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import {
   formatDateDisplay,
   formatTemperatureDisplay,
@@ -125,9 +124,8 @@ export default async function ControleTemperaturaHistoricoPage({
           </div>
           <div className="btn-group">
             <Link href="/controle-temperatura-equipamentos" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

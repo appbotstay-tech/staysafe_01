@@ -27,7 +27,6 @@ import {
 } from "./actions";
 import { ReopenMonthModal } from "./reopen-month-modal";
 import { SearchableOptionField } from "./searchable-option-field";
-import { ThemeToggleButton } from "./theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -196,6 +195,7 @@ export default async function HigienizacaoHortifrutiPage({
   const registroEmEdicaoBloqueado = periodoEdicao
     ? assinadosSet.has(periodKey(periodoEdicao.mes, periodoEdicao.ano))
     : false;
+  const registroEmEdicaoBloqueadoPorPerfil = Boolean(registroEmEdicao && isColaborador);
   const periodoExclusao = registroParaExcluir ? getMonthYear(registroParaExcluir.data) : null;
   const registroParaExcluirBloqueado = periodoExclusao
     ? assinadosSet.has(periodKey(periodoExclusao.mes, periodoExclusao.ano))
@@ -255,19 +255,8 @@ export default async function HigienizacaoHortifrutiPage({
         modulo={ModuloDocumento.HIGIENIZACAO_HORTIFRUTI}
         modulePath={MODULE_PATH}
         searchParams={params}
-        actions={
-          <>
-            {podeGerenciarOpcoes ? (
-              <Link href="/higienizacao-hortifruti/opcoes" className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <Link href="/chamados-manutencao?origem=HORTIFRUTI" className="btn-secondary">
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
-          </>
-        }
+        managementHref={podeGerenciarOpcoes ? "/higienizacao-hortifruti/opcoes" : undefined}
+        maintenanceHref="/chamados-manutencao?origem=HORTIFRUTI"
       />
 
       {feedback ? (
@@ -321,6 +310,10 @@ export default async function HigienizacaoHortifrutiPage({
           ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
               Este registro pertence a um mês fechado e não pode ser alterado.
+            </p>
+          ) : registroEmEdicao && registroEmEdicaoBloqueadoPorPerfil ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Você não possui permissão para editar este registro.
             </p>
           ) : (
             <form action={registroEmEdicao ? updateRegistroAction : createRegistroAction} className="grid gap-4 md:grid-cols-2">
@@ -444,9 +437,11 @@ export default async function HigienizacaoHortifrutiPage({
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
-                          <Link href={hrefEditar} className="btn-action">
-                            Editar
-                          </Link>
+                          {!isColaborador ? (
+                            <Link href={hrefEditar} className="btn-action">
+                              Editar
+                            </Link>
+                          ) : null}
                           {podeExcluirRegistros ? (
                             bloqueado ? (
                               <button type="button" disabled className="btn-danger">

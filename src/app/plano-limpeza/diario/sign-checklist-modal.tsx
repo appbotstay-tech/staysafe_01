@@ -18,6 +18,10 @@ type DailySignChecklistModalProps = {
     data: Date;
     turno: TurnoPlanoLimpeza;
     area: string;
+    itemDescricao: string | null;
+    produtoUtilizado: string | null;
+    setorResponsavel: string | null;
+    funcionarioResponsavel: string | null;
     status: StatusPlanoLimpeza;
     assinaturaResponsavel: string;
     assinaturaSupervisor: string;
@@ -58,6 +62,21 @@ export function DailySignChecklistModal({
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Área</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">{record.area}</p>
           </div>
+          {record.itemDescricao ? (
+            <div className="md:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Item/local</p>
+              <p className="font-medium text-slate-800 dark:text-slate-100">
+                {record.itemDescricao}
+              </p>
+            </div>
+          ) : null}
+          {record.produtoUtilizado || record.setorResponsavel || record.funcionarioResponsavel ? (
+            <div className="md:col-span-2 grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-3">
+              <p>Produto: <strong>{record.produtoUtilizado || "-"}</strong></p>
+              <p>Setor: <strong>{record.setorResponsavel || "-"}</strong></p>
+              <p>Funcionário: <strong>{record.funcionarioResponsavel || "-"}</strong></p>
+            </div>
+          ) : null}
           {detalhamentoLimpeza ? (
             <div className="md:col-span-2">
               <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">

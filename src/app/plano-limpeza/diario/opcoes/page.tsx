@@ -7,11 +7,14 @@ import { prisma } from "@/lib/prisma";
 
 import {
   createDailyAreaConfigAction,
+  createDailyItemConfigAction,
   deleteDailyAreaConfigAction,
+  deleteDailyItemConfigAction,
   toggleDailyAreaConfigStatusAction,
-  updateDailyAreaConfigAction
+  toggleDailyItemConfigStatusAction,
+  updateDailyAreaConfigAction,
+  updateDailyItemConfigAction
 } from "../../actions";
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import { parsePositiveInt } from "../../utils";
 
 const PAGE_PATH = "/plano-limpeza/diario/opcoes";
@@ -91,15 +94,35 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const editAreaId = parsePositiveInt(firstParam(params.editAreaId));
   const deleteAreaId = parsePositiveInt(firstParam(params.deleteAreaId));
+  const editDailyItemId = parsePositiveInt(firstParam(params.editDailyItemId));
+  const deleteDailyItemId = parsePositiveInt(firstParam(params.deleteDailyItemId));
 
   const areas = await prisma.planoLimpezaDiarioArea.findMany({
+    include: {
+      itens: {
+        where: { excluidoEm: null },
+        orderBy: [{ ordem: "asc" }, { descricao: "asc" }]
+      }
+    },
     orderBy: [{ ordem: "asc" }, { nome: "asc" }]
   });
+  const itens = areas.flatMap((area) =>
+    area.itens.map((item) => ({
+      ...item,
+      areaNome: area.nome
+    }))
+  );
   const areaEmEdicao = editAreaId
     ? areas.find((area) => area.id === editAreaId) ?? null
     : null;
   const areaParaExcluir = deleteAreaId
     ? areas.find((area) => area.id === deleteAreaId) ?? null
+    : null;
+  const itemEmEdicao = editDailyItemId
+    ? itens.find((item) => item.id === editDailyItemId) ?? null
+    : null;
+  const itemParaExcluir = deleteDailyItemId
+    ? itens.find((item) => item.id === deleteDailyItemId) ?? null
     : null;
 
   return (
@@ -116,12 +139,11 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/diario" className="btn-secondary">
-              Voltar para Diário
+              ← Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/diario/historico" className="btn-secondary">
               Histórico Completo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>
@@ -185,6 +207,64 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
       </section>
 
       <section className={CARD_CLASS}>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          Novo Item/Local Diário
+        </h2>
+        <form action={createDailyItemConfigAction} className="mt-3 grid gap-3 md:grid-cols-2">
+          <input type="hidden" name="returnTo" value={PAGE_PATH} />
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Área *
+            <select name="areaId" required className={INPUT_CLASS}>
+              <option value="">Selecione</option>
+              {areas.map((area) => (
+                <option key={area.id} value={String(area.id)}>
+                  {area.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Ordem *
+            <input type="number" min={1} name="ordem" defaultValue={itens.length + 1} required className={INPUT_CLASS} />
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+            Item/local a limpar *
+            <input
+              type="text"
+              name="descricao"
+              required
+              className={INPUT_CLASS}
+              placeholder="Ex.: Prateleiras, piso, portas, rodapés"
+            />
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Produto utilizado
+            <input type="text" name="produtoUtilizado" className={INPUT_CLASS} />
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Setor responsável
+            <input type="text" name="setorResponsavel" className={INPUT_CLASS} />
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+            Funcionário responsável
+            <input type="text" name="funcionarioResponsavel" className={INPUT_CLASS} />
+          </label>
+
+          <div className="md:col-span-2">
+            <button type="submit" className="btn-primary">
+              Adicionar Item/Local
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className={CARD_CLASS}>
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-slate-100">
           Áreas Configuradas
         </h2>
@@ -199,6 +279,10 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                     </p>
                     <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
                       <strong>Turnos:</strong> {getTurnosLabel(area)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                      <strong>Itens/locais ativos:</strong>{" "}
+                      {area.itens.filter((item) => item.ativo && !item.excluidoEm).length}
                     </p>
                     {area.detalhamentoLimpeza ? (
                       <p className="mt-2 max-w-3xl whitespace-pre-line break-words text-sm text-slate-700 dark:text-slate-200">
@@ -231,6 +315,57 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
               </li>
           ))}
         </ul>
+      </section>
+
+      <section className={CARD_CLASS}>
+        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-slate-100">
+          Itens/Locais Configurados
+        </h2>
+
+        {itens.length === 0 ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Nenhum item/local diário cadastrado.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {itens.map((item) => (
+              <li key={item.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {item.areaNome} • {item.descricao}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Ordem {item.ordem} • {item.ativo ? "Ativo" : "Inativo"}
+                    </p>
+                    <div className="mt-2 grid gap-1 text-sm text-slate-700 dark:text-slate-200 md:grid-cols-3">
+                      <p>Produto: <strong>{item.produtoUtilizado || "-"}</strong></p>
+                      <p>Setor: <strong>{item.setorResponsavel || "-"}</strong></p>
+                      <p>Funcionário: <strong>{item.funcionarioResponsavel || "-"}</strong></p>
+                    </div>
+                  </div>
+
+                  <div className="btn-group">
+                    <Link href={`${PAGE_PATH}?editDailyItemId=${item.id}`} className="btn-action" scroll={false}>
+                      Editar
+                    </Link>
+                    <Link href={`${PAGE_PATH}?deleteDailyItemId=${item.id}`} className="btn-danger" scroll={false}>
+                      Excluir
+                    </Link>
+                    <form action={toggleDailyItemConfigStatusAction}>
+                      <input type="hidden" name="returnTo" value={PAGE_PATH} />
+                      <input type="hidden" name="dailyItemId" value={String(item.id)} />
+                      <input type="hidden" name="ativo" value={item.ativo ? "false" : "true"} />
+                      <button type="submit" className="btn-secondary">
+                        {item.ativo ? "Inativar" : "Ativar"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {areaEmEdicao ? (
@@ -332,6 +467,126 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
         </div>
       ) : null}
 
+      {itemEmEdicao ? (
+        <div className="bpma-modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar item do plano diário">
+          <section className="bpma-modal-panel max-w-3xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Editar Item/Local do Plano Diário
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Ajuste a área vinculada e os dados exibidos na execução diária.
+                </p>
+              </div>
+              <Link href={PAGE_PATH} className="btn-secondary shrink-0" scroll={false}>
+                Fechar
+              </Link>
+            </div>
+            {feedback && feedbackType === "error" ? (
+              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                {feedback}
+              </p>
+            ) : null}
+
+            <form action={updateDailyItemConfigAction} className="grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="returnTo" value={`${PAGE_PATH}?editDailyItemId=${itemEmEdicao.id}`} />
+              <input type="hidden" name="dailyItemId" value={String(itemEmEdicao.id)} />
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Área *
+                <select
+                  name="areaId"
+                  required
+                  defaultValue={getDraftValue(params, "areaId", String(itemEmEdicao.areaId))}
+                  className={INPUT_CLASS}
+                >
+                  {areas.map((area) => (
+                    <option key={area.id} value={String(area.id)}>
+                      {area.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Ordem *
+                <input
+                  type="number"
+                  min={1}
+                  name="ordem"
+                  required
+                  defaultValue={getDraftValue(params, "ordem", String(itemEmEdicao.ordem))}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                Item/local a limpar *
+                <input
+                  type="text"
+                  name="descricao"
+                  required
+                  defaultValue={getDraftValue(params, "descricao", itemEmEdicao.descricao)}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Produto utilizado
+                <input
+                  type="text"
+                  name="produtoUtilizado"
+                  defaultValue={getDraftValue(params, "produtoUtilizado", itemEmEdicao.produtoUtilizado ?? "")}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Setor responsável
+                <input
+                  type="text"
+                  name="setorResponsavel"
+                  defaultValue={getDraftValue(params, "setorResponsavel", itemEmEdicao.setorResponsavel ?? "")}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Funcionário responsável
+                <input
+                  type="text"
+                  name="funcionarioResponsavel"
+                  defaultValue={getDraftValue(params, "funcionarioResponsavel", itemEmEdicao.funcionarioResponsavel ?? "")}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Status
+                <select
+                  name="ativo"
+                  defaultValue={getDraftBoolean(params, "ativo", itemEmEdicao.ativo) ? "true" : "false"}
+                  className={INPUT_CLASS}
+                >
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </label>
+
+              <div className="btn-group md:col-span-2">
+                <button type="submit" className="btn-primary">
+                  Salvar
+                </button>
+                <Link href={PAGE_PATH} className="btn-secondary" scroll={false}>
+                  Cancelar
+                </Link>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
       {areaParaExcluir ? (
         <ActionModal
           title="Excluir área do plano diário"
@@ -346,6 +601,29 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
           <form action={deleteDailyAreaConfigAction}>
             <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteAreaId=${areaParaExcluir.id}`} />
             <input type="hidden" name="areaId" value={String(areaParaExcluir.id)} />
+            <ModalActions>
+              <button type="submit" className="btn-danger">
+                Excluir
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
+
+      {itemParaExcluir ? (
+        <ActionModal
+          title="Excluir item/local do plano diário"
+          description={
+            <p>
+              Deseja realmente excluir <strong>{itemParaExcluir.descricao}</strong> da área{" "}
+              <strong>{itemParaExcluir.areaNome}</strong>?
+            </p>
+          }
+          cancelHref={PAGE_PATH}
+        >
+          <form action={deleteDailyItemConfigAction}>
+            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteDailyItemId=${itemParaExcluir.id}`} />
+            <input type="hidden" name="dailyItemId" value={String(itemParaExcluir.id)} />
             <ModalActions>
               <button type="submit" className="btn-danger">
                 Excluir

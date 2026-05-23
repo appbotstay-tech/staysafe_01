@@ -8,7 +8,6 @@ import { getRoleLabel } from "@/lib/rbac";
 
 import { bulkSignDailyByDateAction } from "@/app/plano-limpeza/actions";
 import { StatusBadge } from "@/app/plano-limpeza/status-badge";
-import { ThemeToggleButton } from "@/app/plano-limpeza/theme-toggle-button";
 import {
   consolidateDailyRecordsByDay,
   getDailyConsolidatedStatusClass
@@ -126,9 +125,8 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/diario/historico" className="btn-secondary">
-              Voltar para Histórico
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>
@@ -253,6 +251,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
               <tr>
                 <th className="px-3 py-2">Turno</th>
                 <th className="px-3 py-2">Área</th>
+                <th className="px-3 py-2">Item/local</th>
                 <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Supervisor</th>
                 <th className="px-3 py-2">Status</th>
@@ -263,7 +262,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum registro para este dia.
                   </td>
                 </tr>
@@ -284,6 +283,7 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
                         </p>
                       ) : null}
                     </td>
+                    <td className="px-3 py-2">{registro.itemDescricao || registro.area}</td>
                     <td className="px-3 py-2">{registro.assinaturaResponsavel || "-"}</td>
                     <td className="px-3 py-2">{registro.assinaturaSupervisor || "-"}</td>
                     <td className="px-3 py-2">

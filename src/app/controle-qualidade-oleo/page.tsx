@@ -29,7 +29,6 @@ import { OilRegisterFields } from "./oil-register-fields";
 import { OilStatusBadge } from "./oil-status-badge";
 import { OIL_OPERATION_GUIDELINES } from "./options";
 import { ReopenMonthModal } from "./reopen-month-modal";
-import { ThemeToggleButton } from "./theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -337,6 +336,8 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
         modulo={ModuloDocumento.CONTROLE_QUALIDADE_OLEO}
         modulePath={MODULE_PATH}
         searchParams={params}
+        managementHref={podeGerenciarOpcoes ? "/controle-qualidade-oleo/opcoes" : undefined}
+        maintenanceHref="/chamados-manutencao?origem=OLEO"
         actions={
           <>
             {podeVerGestao ? (
@@ -344,15 +345,6 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
                 Histórico Completo
               </Link>
             ) : null}
-            {podeGerenciarOpcoes ? (
-              <Link href="/controle-qualidade-oleo/opcoes" className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <Link href="/chamados-manutencao?origem=OLEO" className="btn-secondary">
-              Abrir Chamado de Manutenção
-            </Link>
-            <ThemeToggleButton />
           </>
         }
       />

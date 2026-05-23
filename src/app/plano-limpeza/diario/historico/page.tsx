@@ -8,7 +8,6 @@ import {
   consolidateDailyRecordsByDay,
   getDailyConsolidatedStatusClass
 } from "../../service";
-import { ThemeToggleButton } from "../../theme-toggle-button";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -105,12 +104,11 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/diario" className="btn-secondary">
-              Voltar para Diário
+              ← Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/diario/opcoes" className="btn-secondary">
               Gerenciar Plano Diário
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

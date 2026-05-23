@@ -8,7 +8,6 @@ import {
   createCatalogOptionAction,
   deleteCatalogOptionAction
 } from "../actions";
-import { ThemeToggleButton } from "../theme-toggle-button";
 
 const PAGE_PATH = "/higienizacao-hortifruti/opcoes";
 const CARD_CLASS =
@@ -57,9 +56,8 @@ export default async function HigienizacaoHortifrutiOpcoesPage({
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/higienizacao-hortifruti" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

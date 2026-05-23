@@ -9,7 +9,6 @@ import {
   toggleFitaOptionStatusAction,
   updateFitaOptionAction
 } from "../actions";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import { getStatusLabel, parsePositiveInt } from "../utils";
 
 const PAGE_PATH = "/controle-qualidade-oleo/opcoes";
@@ -51,9 +50,8 @@ export default async function ControleQualidadeOleoOpcoesPage({ searchParams }: 
           </div>
           <div className="btn-group">
             <Link href="/controle-qualidade-oleo" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

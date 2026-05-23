@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import { ThemeToggleButton } from "./theme-toggle-button";
-
 const CARD_CLASS =
   "bpma-card";
 
@@ -18,7 +16,6 @@ export default function PlanoLimpezaPage() {
               Controle das rotinas de limpeza diária e semanal.
             </p>
           </div>
-          <ThemeToggleButton />
         </div>
       </section>
 

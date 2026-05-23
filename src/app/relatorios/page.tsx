@@ -8,7 +8,6 @@ import { formatAppDateTime } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports, canManageModuleOptions } from "@/lib/rbac";
 
-import { ThemeToggleButton } from "../higienizacao-hortifruti/theme-toggle-button";
 import { ReportActions } from "./components/report-actions";
 import { ReportControls } from "./components/report-controls";
 import { getReportDefinition, getReportModule } from "./report-definitions";
@@ -185,16 +184,21 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
               </div>
             ) : null}
           </div>
-          <div className="btn-group">
-            {podeGerenciarOpcoes ? (
-              <Link href="/relatorios/opcoes" className="btn-secondary">
-                Gerenciar Opções
-              </Link>
-            ) : null}
-            <ThemeToggleButton />
-          </div>
         </div>
       </section>
+
+      {podeGerenciarOpcoes ? (
+        <section className="bpma-card-compact print:hidden">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Ações do módulo
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/relatorios/opcoes" className="btn-secondary">
+              Gerenciar
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <ReportControls
         selectedModuleId={selectedModule.id}

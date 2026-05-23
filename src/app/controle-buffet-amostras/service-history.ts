@@ -27,6 +27,7 @@ type BuffetServiceRecord = {
   tcEquipamento: number | null;
   primeiraTc: number | null;
   segundaTc: number | null;
+  temperaturaAmbiente: boolean;
   statusTemperatura: StatusTemperaturaBuffetAmostra | null;
   acaoCorretiva: string | null;
   observacao: string | null;
@@ -165,8 +166,12 @@ export function buildBuffetServiceHistoryGroups(
       nome: record.itemNome,
       itemExtra: record.itemExtra,
       classificacaoLabel: getClassificacaoLabel(record.classificacao),
-      tcEquipamentoLabel: formatTemperatureDisplay(record.tcEquipamento),
-      temperaturaInicialLabel: formatTemperatureDisplay(record.primeiraTc),
+      tcEquipamentoLabel: record.temperaturaAmbiente
+        ? "Ambiente"
+        : formatTemperatureDisplay(record.tcEquipamento),
+      temperaturaInicialLabel: record.temperaturaAmbiente
+        ? "Ambiente"
+        : formatTemperatureDisplay(record.primeiraTc),
       temperaturaFinalLabel:
         record.segundaTc !== null ? formatTemperatureDisplay(record.segundaTc) : null,
       statusTemperatura: record.statusTemperatura,

@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 
 import { deleteNoteAction } from "../actions";
 import { DeleteNoteModal } from "../delete-note-modal";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import {
   formatDateDisplay,
   getMonthDateRange,
@@ -161,9 +160,8 @@ export default async function RastreabilidadeRecebimentoHistoricoPage({
           </div>
           <div className="btn-group">
             <Link href="/rastreabilidade-recebimento" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

@@ -4,7 +4,6 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ThemeToggleButton } from "@/app/higienizacao-hortifruti/theme-toggle-button";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDateTime } from "@/lib/date-time";
 import { getImageDataUrl } from "@/lib/image-upload";
@@ -122,9 +121,8 @@ export default async function ChamadoManutencaoDetalhePage({
           </div>
           <div className="btn-group">
             <Link href={PAGE_PATH} className="btn-secondary">
-              Voltar para Chamados
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

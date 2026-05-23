@@ -18,7 +18,6 @@ import {
   updateCatalogOptionAction,
   updateCategoryRuleAction
 } from "../actions";
-import { ThemeToggleButton } from "../theme-toggle-button";
 import {
   formatTemperatureRange,
   getCategoriaLabel,
@@ -95,9 +94,8 @@ export default async function ControleTemperaturaOpcoesPage({
           </div>
           <div className="btn-group">
             <Link href="/controle-temperatura-equipamentos" className="btn-secondary">
-              Voltar para Módulo
+              ← Voltar ao Módulo
             </Link>
-            <ThemeToggleButton />
           </div>
         </div>
       </section>

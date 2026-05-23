@@ -20,6 +20,10 @@ function dailyKey(area: string, turno: TurnoPlanoLimpeza): string {
   return `${area}|${turno}`;
 }
 
+function dailyItemKey(turno: TurnoPlanoLimpeza, itemId: number): string {
+  return `${turno}|${itemId}`;
+}
+
 function weeklyAreaKey(area: string, weekStart: Date): string {
   return `${area}|${formatDateInput(weekStart)}`;
 }
@@ -80,28 +84,74 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
   return prisma.$transaction(async (tx) => {
     const areaConfigs = await tx.planoLimpezaDiarioArea.findMany({
       where: { ativo: true },
+      include: {
+        itens: {
+          where: {
+            ativo: true,
+            excluidoEm: null
+          },
+          orderBy: [{ ordem: "asc" }, { descricao: "asc" }]
+        }
+      },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     });
 
     const existing = await tx.planoLimpezaDiarioRegistro.findMany({
       where: { data: date },
-      select: { id: true, area: true, turno: true, status: true }
+      select: {
+        id: true,
+        area: true,
+        turno: true,
+        itemId: true,
+        status: true,
+        assinaturaResponsavel: true,
+        assinaturaSupervisor: true
+      }
     });
 
-    const validCombinationSet = new Set<string>();
+    const desiredCombinations = new Map<
+      string,
+      {
+        turno: TurnoPlanoLimpeza;
+        area: string;
+        itemId: number;
+        itemDescricao: string;
+        produtoUtilizado: string | null;
+        setorResponsavel: string | null;
+        funcionarioResponsavel: string | null;
+      }
+    >();
     for (const areaConfig of areaConfigs) {
       const turnos = getTurnosFromConfig(areaConfig);
+      const activeItems = areaConfig.itens.filter((item) => item.ativo && !item.excluidoEm);
 
       for (const turno of turnos) {
-        validCombinationSet.add(dailyKey(areaConfig.nome, turno));
+        for (const item of activeItems) {
+          desiredCombinations.set(dailyItemKey(turno, item.id), {
+            turno,
+            area: areaConfig.nome,
+            itemId: item.id,
+            itemDescricao: item.descricao,
+            produtoUtilizado: item.produtoUtilizado,
+            setorResponsavel: item.setorResponsavel,
+            funcionarioResponsavel: item.funcionarioResponsavel
+          });
+        }
       }
     }
+
+    const isPendingWithoutSignatures = (record: (typeof existing)[number]): boolean =>
+      record.status === StatusPlanoLimpeza.PENDENTE &&
+      record.assinaturaResponsavel.trim().length === 0 &&
+      record.assinaturaSupervisor.trim().length === 0;
+    const recordKey = (record: (typeof existing)[number]): string =>
+      record.itemId ? dailyItemKey(record.turno, record.itemId) : dailyKey(record.area, record.turno);
 
     const pendingInvalidRecordIds = existing
       .filter(
         (item) =>
-          item.status === StatusPlanoLimpeza.PENDENTE &&
-          !validCombinationSet.has(dailyKey(item.area, item.turno))
+          isPendingWithoutSignatures(item) &&
+          (item.itemId === null || !desiredCombinations.has(recordKey(item)))
       )
       .map((item) => item.id);
 
@@ -114,18 +164,21 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
     const preservedCombinationSet = new Set(
       existing
         .filter((item) => !pendingInvalidRecordIds.includes(item.id))
-        .map((item) => dailyKey(item.area, item.turno))
+        .map(recordKey)
     );
 
-    const dataToCreate = Array.from(validCombinationSet)
-      .filter((key) => !preservedCombinationSet.has(key))
-      .map((key) => {
-        const [area, turno] = key.split("|") as [string, TurnoPlanoLimpeza];
-
+    const dataToCreate = Array.from(desiredCombinations.entries())
+      .filter(([key]) => !preservedCombinationSet.has(key))
+      .map(([, desired]) => {
         return {
           data: date,
-          turno,
-          area,
+          turno: desired.turno,
+          area: desired.area,
+          itemId: desired.itemId,
+          itemDescricao: desired.itemDescricao,
+          produtoUtilizado: desired.produtoUtilizado,
+          setorResponsavel: desired.setorResponsavel,
+          funcionarioResponsavel: desired.funcionarioResponsavel,
           assinaturaResponsavel: "",
           assinaturaSupervisor: "",
           status: StatusPlanoLimpeza.PENDENTE
@@ -135,6 +188,28 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
     if (dataToCreate.length > 0) {
       await tx.planoLimpezaDiarioRegistro.createMany({
         data: dataToCreate
+      });
+    }
+
+    for (const record of existing) {
+      if (!record.itemId || pendingInvalidRecordIds.includes(record.id)) {
+        continue;
+      }
+
+      const desired = desiredCombinations.get(recordKey(record));
+      if (!desired || !isPendingWithoutSignatures(record)) {
+        continue;
+      }
+
+      await tx.planoLimpezaDiarioRegistro.update({
+        where: { id: record.id },
+        data: {
+          area: desired.area,
+          itemDescricao: desired.itemDescricao,
+          produtoUtilizado: desired.produtoUtilizado,
+          setorResponsavel: desired.setorResponsavel,
+          funcionarioResponsavel: desired.funcionarioResponsavel
+        }
       });
     }
 
