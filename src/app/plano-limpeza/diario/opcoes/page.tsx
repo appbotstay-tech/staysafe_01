@@ -124,6 +124,37 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
   const itemParaExcluir = deleteDailyItemId
     ? itens.find((item) => item.id === deleteDailyItemId) ?? null
     : null;
+  const areaParaExcluirItemIds = areaParaExcluir?.itens.map((item) => item.id) ?? [];
+  const areaParaExcluirHistoricoReal = areaParaExcluir
+    ? await prisma.planoLimpezaDiarioRegistro.count({
+        where: {
+          AND: [
+            {
+              OR: [
+                { area: areaParaExcluir.nome },
+                areaParaExcluirItemIds.length > 0
+                  ? { itemId: { in: areaParaExcluirItemIds } }
+                  : { id: -1 }
+              ]
+            },
+            {
+              OR: [
+                { status: { not: "PENDENTE" } },
+                { assinaturaResponsavel: { not: "" } },
+                { assinaturaResponsavelUsuarioId: { not: null } },
+                { assinaturaResponsavelDataHora: { not: null } },
+                { assinaturaSupervisor: { not: "" } },
+                { assinaturaSupervisorUsuarioId: { not: null } },
+                { assinaturaSupervisorDataHora: { not: null } },
+                { observacao: { not: null } },
+                { observacaoResponsavel: { not: null } },
+                { observacaoSupervisor: { not: null } }
+              ]
+            }
+          ]
+        }
+      })
+    : 0;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -591,19 +622,40 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
         <ActionModal
           title="Excluir área do plano diário"
           description={
-            <p>
-              Deseja realmente excluir a área{" "}
-              <strong>{areaParaExcluir.nome}</strong> do plano diário?
-            </p>
+            <div className="space-y-2">
+              <p>
+                Área selecionada: <strong>{areaParaExcluir.nome}</strong>
+              </p>
+              {areaParaExcluirHistoricoReal > 0 ? (
+                <p>
+                  Esta área possui histórico de execução. Para preservar a auditoria, ela será
+                  removida das rotinas futuras, mas o histórico antigo será preservado.
+                </p>
+              ) : areaParaExcluirItemIds.length > 0 ? (
+                <p>
+                  Esta área possui itens cadastrados vinculados. Deseja excluir a área e todos os
+                  itens vinculados?
+                </p>
+              ) : (
+                <p>Deseja realmente excluir esta área do plano diário?</p>
+              )}
+            </div>
           }
           cancelHref={PAGE_PATH}
         >
           <form action={deleteDailyAreaConfigAction}>
-            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?deleteAreaId=${areaParaExcluir.id}`} />
+            <input type="hidden" name="returnTo" value={PAGE_PATH} />
             <input type="hidden" name="areaId" value={String(areaParaExcluir.id)} />
             <ModalActions>
+              <Link href={PAGE_PATH} className="btn-secondary" scroll={false}>
+                Cancelar
+              </Link>
               <button type="submit" className="btn-danger">
-                Excluir
+                {areaParaExcluirHistoricoReal > 0
+                  ? "Remover das rotinas futuras"
+                  : areaParaExcluirItemIds.length > 0
+                    ? "Excluir área e itens"
+                    : "Excluir área"}
               </button>
             </ModalActions>
           </form>

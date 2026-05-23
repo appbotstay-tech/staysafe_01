@@ -486,6 +486,81 @@ export async function toggleDailyAreaConfigStatusAction(formData: FormData) {
   }
 }
 
+async function normalizeDailyAreaOrder(tx: Prisma.TransactionClient) {
+  const areas = await tx.planoLimpezaDiarioArea.findMany({
+    orderBy: [{ ativo: "desc" }, { ordem: "asc" }, { nome: "asc" }, { id: "asc" }],
+    select: { id: true, ordem: true }
+  });
+
+  for (const [index, area] of areas.entries()) {
+    const expectedOrder = index + 1;
+    if (area.ordem === expectedOrder) {
+      continue;
+    }
+
+    await tx.planoLimpezaDiarioArea.update({
+      where: { id: area.id },
+      data: { ordem: expectedOrder }
+    });
+  }
+}
+
+function dailyAreaExecutionScope(
+  area: string,
+  itemIds: number[]
+): Prisma.PlanoLimpezaDiarioRegistroWhereInput {
+  return {
+    OR: [
+      { area },
+      itemIds.length > 0 ? { itemId: { in: itemIds } } : { id: -1 }
+    ]
+  };
+}
+
+function disposableDailyExecutionWhere(
+  scope: Prisma.PlanoLimpezaDiarioRegistroWhereInput
+): Prisma.PlanoLimpezaDiarioRegistroWhereInput {
+  return {
+    AND: [
+      scope,
+      { status: StatusPlanoLimpeza.PENDENTE },
+      { assinaturaResponsavel: "" },
+      { assinaturaResponsavelUsuarioId: null },
+      { assinaturaResponsavelDataHora: null },
+      { assinaturaSupervisor: "" },
+      { assinaturaSupervisorUsuarioId: null },
+      { assinaturaSupervisorDataHora: null },
+      { observacao: null },
+      { observacaoResponsavel: null },
+      { observacaoSupervisor: null }
+    ]
+  };
+}
+
+function realDailyHistoryWhere(
+  scope: Prisma.PlanoLimpezaDiarioRegistroWhereInput
+): Prisma.PlanoLimpezaDiarioRegistroWhereInput {
+  return {
+    AND: [
+      scope,
+      {
+        OR: [
+          { status: { not: StatusPlanoLimpeza.PENDENTE } },
+          { assinaturaResponsavel: { not: "" } },
+          { assinaturaResponsavelUsuarioId: { not: null } },
+          { assinaturaResponsavelDataHora: { not: null } },
+          { assinaturaSupervisor: { not: "" } },
+          { assinaturaSupervisorUsuarioId: { not: null } },
+          { assinaturaSupervisorDataHora: { not: null } },
+          { observacao: { not: null } },
+          { observacaoResponsavel: { not: null } },
+          { observacaoSupervisor: { not: null } }
+        ]
+      }
+    ]
+  };
+}
+
 export async function deleteDailyAreaConfigAction(formData: FormData) {
   const returnTo = getReturnToPath(formData, DIARIO_OPCOES_PATH);
 
@@ -499,29 +574,70 @@ export async function deleteDailyAreaConfigAction(formData: FormData) {
     }
 
     const existing = await prisma.planoLimpezaDiarioArea.findUnique({
-      where: { id: areaId }
+      where: { id: areaId },
+      include: {
+        itens: {
+          select: { id: true }
+        }
+      }
     });
 
     if (!existing) {
       throw new Error("Área do plano diário não encontrada.");
     }
 
-    const linkedRecords = await prisma.planoLimpezaDiarioRegistro.count({
-      where: { area: existing.nome }
+    const linkedItemIds = existing.itens.map((item) => item.id);
+    const executionScope = dailyAreaExecutionScope(existing.nome, linkedItemIds);
+    const linkedRealHistory = await prisma.planoLimpezaDiarioRegistro.count({
+      where: realDailyHistoryWhere(executionScope)
     });
 
-    if (linkedRecords > 0) {
-      throw new Error(
-        "Esta área já possui registros vinculados e não pode ser excluída definitivamente. Para preservar o histórico, utilize a opção Inativar."
+    if (linkedRealHistory === 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.planoLimpezaDiarioRegistro.deleteMany({
+          where: disposableDailyExecutionWhere(executionScope)
+        });
+        await tx.planoLimpezaDiarioItem.deleteMany({
+          where: linkedItemIds.length > 0 ? { id: { in: linkedItemIds } } : { id: -1 }
+        });
+        await tx.planoLimpezaDiarioArea.delete({
+          where: { id: areaId }
+        });
+        await normalizeDailyAreaOrder(tx);
+      });
+
+      revalidateModulePaths();
+      redirectWithFeedback(
+        returnTo,
+        "success",
+        linkedItemIds.length > 0
+          ? "Área e itens vinculados excluídos com sucesso."
+          : "Área do Plano Diário Excluída com Sucesso."
       );
     }
 
-    await prisma.planoLimpezaDiarioArea.delete({
-      where: { id: areaId }
+    const now = getCurrentSystemDateTime();
+    await prisma.$transaction(async (tx) => {
+      await tx.planoLimpezaDiarioRegistro.deleteMany({
+        where: disposableDailyExecutionWhere(executionScope)
+      });
+      await tx.planoLimpezaDiarioItem.updateMany({
+        where: linkedItemIds.length > 0 ? { id: { in: linkedItemIds } } : { id: -1 },
+        data: { ativo: false, excluidoEm: now }
+      });
+      await tx.planoLimpezaDiarioArea.update({
+        where: { id: areaId },
+        data: { ativo: false }
+      });
+      await normalizeDailyAreaOrder(tx);
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Área do Plano Diário Excluída com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Esta área possui histórico de execução. Para preservar a auditoria, ela foi removida das rotinas futuras, mas o histórico antigo será preservado."
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
