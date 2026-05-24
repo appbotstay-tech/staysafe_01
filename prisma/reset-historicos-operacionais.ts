@@ -31,6 +31,10 @@ function printCount(label: string, count: number) {
   console.log(`- ${label}: ${count}`);
 }
 
+function printItem(label: string) {
+  console.log(`- ${label}`);
+}
+
 async function main() {
   if (process.env[CONFIRMATION_ENV] !== CONFIRMATION_VALUE) {
     console.error(
@@ -107,19 +111,42 @@ async function main() {
       deleted.hortifrutiFechamentos;
 
     console.log("Limpeza de históricos operacionais concluída.");
-    printCount("Registros de temperatura removidos", deleted.temperaturaRegistros);
-    printCount("Execuções de hortifruti removidas", deleted.hortifrutiRegistros);
-    printCount("Registros de qualidade do óleo removidos", deleted.oleoRegistros);
-    printCount("Itens de rastreabilidade removidos", deleted.rastreabilidadeRegistros);
-    printCount("Notas de rastreabilidade removidas", deleted.rastreabilidadeNotas);
-    printCount("Registros de amostras removidos", deleted.buffetRegistros);
-    printCount("Execuções de plano diário removidas", deleted.planoDiarioExecucoes);
-    printCount("Execuções de plano semanal removidas", deleted.planoSemanalExecucoes);
-    printCount("Chamados removidos", deleted.chamados);
-    printCount("Fechamentos removidos", fechamentos);
-    printCount("Assinaturas removidas", deleted.assinaturas);
-    printCount("Registros iniciais legados removidos", deleted.registrosIniciaisLegados);
-    console.log("Cadastros base preservados.");
+    console.log("");
+    console.log("Históricos removidos:");
+    printCount("Notas importadas", deleted.rastreabilidadeNotas);
+    printCount("Itens/registros de recebimento", deleted.rastreabilidadeRegistros);
+    printCount("Registros/coletas de buffet e amostras", deleted.buffetRegistros);
+    printCount("Aferições de temperatura", deleted.temperaturaRegistros);
+    printCount("Registros de hortifruti", deleted.hortifrutiRegistros);
+    printCount("Registros de qualidade do óleo", deleted.oleoRegistros);
+    printCount("Execuções do Plano Diário", deleted.planoDiarioExecucoes);
+    printCount("Execuções do Plano Semanal", deleted.planoSemanalExecucoes);
+    printCount("Chamados de manutenção", deleted.chamados);
+    printCount("Fechamentos mensais", fechamentos);
+    printCount("Assinaturas/logs operacionais", deleted.assinaturas);
+    printCount("Registros iniciais legados", deleted.registrosIniciaisLegados);
+
+    console.log("");
+    console.log("Fechamentos removidos por módulo:");
+    printCount("Buffet / Amostras", deleted.buffetFechamentos);
+    printCount("Plano de Limpeza", deleted.planoLimpezaFechamentos);
+    printCount("Rastreabilidade", deleted.rastreabilidadeFechamentos);
+    printCount("Óleo", deleted.oleoFechamentos);
+    printCount("Temperatura", deleted.temperaturaFechamentos);
+    printCount("Hortifruti", deleted.hortifrutiFechamentos);
+
+    console.log("");
+    console.log("Cadastros preservados:");
+    printItem("Usuários, perfis, sessões e permissões");
+    printItem("Documentos técnicos/anexos e textos livres dos módulos");
+    printItem("Equipamentos, categorias e regras de temperatura");
+    printItem("Produtos/hortifrutis e opções de higienização");
+    printItem("Configurações e opções do controle de óleo");
+    printItem("Categorias de recebimento/rastreabilidade");
+    printItem("Itens, ações corretivas e serviços de buffet/amostras");
+    printItem("Áreas e itens/locais do Plano de Limpeza Diário");
+    printItem("Áreas e itens/locais do Plano de Limpeza Semanal");
+    printItem("Configurações base de chamados e módulos");
   } finally {
     await prisma.$disconnect();
   }
