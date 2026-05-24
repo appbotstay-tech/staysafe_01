@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
+import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   DOCUMENTO_MODULO_OPTIONS,
@@ -258,7 +259,7 @@ export default async function DocumentosTecnicosPage({ searchParams }: PageProps
               Anexos e Documentos
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Gestão de PDFs técnicos, legais e operacionais vinculados aos módulos do BPMA.
+              Gestão de PDFs técnicos, legais e operacionais vinculados aos módulos do {APP_NAME}.
             </p>
           </div>
         </div>

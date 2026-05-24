@@ -105,7 +105,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   return (
     <div className="space-y-5">
       <DocumentosModuleHeader
-        title="Resumo BPMA"
+        title="Resumo Operacional"
         modulo={ModuloDocumento.DASHBOARD_RESUMO_BPMA}
         modulePath="/"
         searchParams={params}

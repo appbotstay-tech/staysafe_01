@@ -565,7 +565,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "COLABORADOR") {
     return {
       role: user.perfil,
-      title: "Resumo BPMA",
+      title: "Resumo Operacional",
       subtitle: "",
       showManagement: false
     };
@@ -574,7 +574,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "NUTRICIONISTA") {
     return {
       role: user.perfil,
-      title: "Resumo BPMA",
+      title: "Resumo Operacional",
       subtitle: "",
       showManagement: true
     };
@@ -583,7 +583,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
   if (user.perfil === "GERENTE") {
     return {
       role: user.perfil,
-      title: "Resumo BPMA",
+      title: "Resumo Operacional",
       subtitle: "",
       showManagement: true
     };
@@ -591,7 +591,7 @@ function getProfileView(user: AuthenticatedUser): DashboardProfileView {
 
   return {
     role: user.perfil,
-    title: "Resumo BPMA",
+    title: "Resumo Operacional",
     subtitle: "",
     showManagement: true
   };

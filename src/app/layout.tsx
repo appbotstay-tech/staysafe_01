@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { logoutAction } from "@/app/auth-actions";
 import { Sidebar } from "@/components/layout/sidebar";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getModulesForRole } from "@/lib/modules";
 import { canManageUsers, canViewResetRequests, getRoleLabel } from "@/lib/rbac";
@@ -9,8 +10,9 @@ import { canManageUsers, canViewResetRequests, getRoleLabel } from "@/lib/rbac";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BPMA App",
-  description: "Sistema para controle de boas práticas em manipulação de alimentos"
+  title: APP_NAME,
+  applicationName: APP_NAME,
+  description: APP_DESCRIPTION
 };
 
 type RootLayoutProps = {

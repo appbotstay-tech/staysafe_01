@@ -1,6 +1,6 @@
-# BPMA App
+# StaySafe
 
-Estrutura inicial de sistema web para controle de Boas Praticas em Manipulacao de Alimentos.
+Sistema web para boas práticas, segurança alimentar e controle operacional em um só lugar.
 
 ## Stack
 

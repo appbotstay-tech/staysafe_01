@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PasswordInput } from "@/components/auth/password-input";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/app-branding";
 
 import { loginAction } from "./actions";
 
@@ -29,8 +30,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="w-full max-w-md bpma-card">
         <div className="mb-6 flex items-start justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">BPMA App</h1>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Acesso ao sistema</p>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{APP_NAME}</h1>
+            <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-300">
+              {APP_DESCRIPTION}
+            </p>
           </div>
           <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
             Ambiente de Testes

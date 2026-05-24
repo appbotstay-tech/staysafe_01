@@ -21,7 +21,7 @@ export const DOCUMENTO_MODULO_OPTIONS: Array<{
 }> = [
   {
     value: ModuloDocumento.DASHBOARD_RESUMO_BPMA,
-    label: "Dashboard / Resumo BPMA",
+    label: "Dashboard / Resumo Operacional",
     href: "/"
   },
   {

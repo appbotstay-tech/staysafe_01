@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/app-branding";
 import type { AppModule } from "@/lib/modules";
 import { ThemeToggleButton } from "./theme-toggle-button";
 
@@ -95,7 +96,7 @@ export function Sidebar({
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <Link href="/" className="block truncate text-base font-bold text-slate-900 dark:text-slate-100">
-              BPMA App
+              {APP_NAME}
             </Link>
             <p className="truncate text-xs text-slate-500 dark:text-slate-300">
               {userName} • {userRoleLabel}
@@ -127,10 +128,10 @@ export function Sidebar({
           >
             <div className="p-4">
               <Link href="/" className="block text-lg font-bold text-slate-900 dark:text-slate-100">
-                BPMA App
+                {APP_NAME}
               </Link>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
-                Boas práticas em manipulação de alimentos
+              <p className="mt-1 text-xs leading-4 text-slate-500 dark:text-slate-300">
+                {APP_DESCRIPTION}
               </p>
               <div className="bpma-sidebar-user mt-3 rounded-lg px-3 py-2 text-xs">
                 <p className="font-semibold text-slate-800 dark:text-slate-100">{userName}</p>
@@ -160,10 +161,10 @@ export function Sidebar({
       <aside className="bpma-sidebar hidden w-80 shrink-0 border-r md:min-h-screen md:block">
         <div className="p-6">
           <Link href="/" className="block text-xl font-bold text-slate-900 dark:text-slate-100">
-            BPMA App
+            {APP_NAME}
           </Link>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-            Boas práticas em manipulação de alimentos
+          <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-300">
+            {APP_DESCRIPTION}
           </p>
           <div className="bpma-sidebar-user mt-4 rounded-lg px-3 py-2 text-xs">
             <p className="font-semibold text-slate-800 dark:text-slate-100">{userName}</p>

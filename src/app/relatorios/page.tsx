@@ -3,6 +3,7 @@
 import { ModuloDocumento } from "@prisma/client";
 import Link from "next/link";
 
+import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDateTime } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
@@ -44,7 +45,7 @@ function ReportResult({ report }: { report: GeneratedReport }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            BPMA App
+            {APP_NAME}
           </p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
             {report.reportLabel}
@@ -57,7 +58,7 @@ function ReportResult({ report }: { report: GeneratedReport }) {
       </div>
 
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800 md:grid-cols-2 xl:grid-cols-4">
-        <p><strong>Sistema:</strong> BPMA App</p>
+        <p><strong>Sistema:</strong> {APP_NAME}</p>
         <p><strong>Relatório:</strong> {report.reportLabel}</p>
         <p><strong>Usuário que emitiu:</strong> {report.generatedBy}</p>
         <p><strong>Perfil:</strong> {report.generatedByRole}</p>
@@ -129,7 +130,7 @@ function ReportResult({ report }: { report: GeneratedReport }) {
       </div>
 
       <footer className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        Relatório gerado automaticamente pelo BPMA App. Alterações manuais descaracterizam o documento.
+        Relatório gerado automaticamente pelo {APP_NAME}. Alterações manuais descaracterizam o documento.
       </footer>
     </section>
   );
