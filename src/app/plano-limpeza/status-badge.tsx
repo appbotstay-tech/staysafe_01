@@ -5,6 +5,7 @@ export type PlanoLimpezaDisplayStatus =
   | "Pendente"
   | "Aguardando Supervisor"
   | "Concluído"
+  | "Concluída"
   | "Parcial";
 
 function getStatusClass(status: PlanoLimpezaDisplayStatus): string {
@@ -12,7 +13,11 @@ function getStatusClass(status: PlanoLimpezaDisplayStatus): string {
     return "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200";
   }
 
-  if (status === StatusPlanoLimpeza.CONCLUIDO || status === "Concluído") {
+  if (
+    status === StatusPlanoLimpeza.CONCLUIDO ||
+    status === "Concluído" ||
+    status === "Concluída"
+  ) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
   }
 
@@ -29,6 +34,10 @@ function getStatusClass(status: PlanoLimpezaDisplayStatus): string {
 function getStatusLabel(status: PlanoLimpezaDisplayStatus): string {
   if (status === "Parcial") {
     return "Parcial";
+  }
+
+  if (status === "Concluída") {
+    return "Concluída";
   }
 
   if (status === StatusPlanoLimpeza.CONCLUIDO || status === "Concluído") {

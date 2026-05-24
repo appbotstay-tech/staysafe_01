@@ -71,7 +71,21 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
 
   const [registros, fechamento, areaConfigs] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
-      where: { data: dateDb },
+      where: {
+        data: dateDb,
+        OR: [
+          { status: { not: StatusPlanoLimpeza.PENDENTE } },
+          { assinaturaResponsavel: { not: "" } },
+          { assinaturaResponsavelUsuarioId: { not: null } },
+          { assinaturaResponsavelDataHora: { not: null } },
+          { assinaturaSupervisor: { not: "" } },
+          { assinaturaSupervisorUsuarioId: { not: null } },
+          { assinaturaSupervisorDataHora: { not: null } },
+          { observacao: { not: null } },
+          { observacaoResponsavel: { not: null } },
+          { observacaoSupervisor: { not: null } }
+        ]
+      },
       orderBy: [{ turno: "asc" }, { area: "asc" }]
     }),
     prisma.planoLimpezaFechamento.findUnique({

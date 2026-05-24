@@ -28,7 +28,7 @@ export default function PlanoLimpezaPage() {
             Plano de Limpeza Diário
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Check diário por área, turno, assinaturas e status de execução.
+            Check diário por área, itens/locais, assinaturas e status de execução.
           </p>
         </Link>
 

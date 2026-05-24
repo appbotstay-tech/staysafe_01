@@ -23,9 +23,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 import {
-  buildDailyTurnoFlags,
   consolidateWeeklyExecutionsByAreaWeek,
-  ensureDailyTurnoSelection,
   ensureWeeklyChecklistForDateRange,
   getDailySignStage,
   getWeeklySignStage
@@ -102,9 +100,6 @@ function redirectWithFeedback(
       "detalhamentoLimpeza",
       "ordem",
       "ativo",
-      "turnoManha",
-      "turnoTarde",
-      "turnoNoite",
       "areaId",
       "descricao",
       "produtoUtilizado",
@@ -131,10 +126,6 @@ function buildDailyAreaConfigErrorReturnTo(returnTo: string, formData: FormData)
 
   for (const key of ["nome", "detalhamentoLimpeza", "ordem", "ativo"]) {
     url.searchParams.set(key, getInputValue(formData, key));
-  }
-
-  for (const key of ["turnoManha", "turnoTarde", "turnoNoite"]) {
-    url.searchParams.set(key, formData.get(key) === "on" ? "true" : "false");
   }
 
   return `${url.pathname}?${url.searchParams.toString()}`;
@@ -368,19 +359,17 @@ export async function createDailyAreaConfigAction(formData: FormData) {
     const nome = getInputValue(formData, "nome");
     const detalhamentoLimpeza = getInputValue(formData, "detalhamentoLimpeza");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
-    const turnos = buildDailyTurnoFlags(formData);
 
     ensureNonEmpty(nome, "Área");
-    ensureDailyTurnoSelection(turnos);
 
     await prisma.planoLimpezaDiarioArea.create({
       data: {
         nome,
         detalhamentoLimpeza: detalhamentoLimpeza || null,
         ordem,
-        turnoManha: turnos.turnoManha,
-        turnoTarde: turnos.turnoTarde,
-        turnoNoite: turnos.turnoNoite,
+        turnoManha: true,
+        turnoTarde: false,
+        turnoNoite: false,
         ativo: true
       }
     });
@@ -417,10 +406,8 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
     const detalhamentoLimpeza = getInputValue(formData, "detalhamentoLimpeza");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
-    const turnos = buildDailyTurnoFlags(formData);
 
     ensureNonEmpty(nome, "Área");
-    ensureDailyTurnoSelection(turnos);
 
     await prisma.planoLimpezaDiarioArea.update({
       where: { id: areaId },
@@ -428,10 +415,7 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
         nome,
         detalhamentoLimpeza: detalhamentoLimpeza || null,
         ordem,
-        ativo,
-        turnoManha: turnos.turnoManha,
-        turnoTarde: turnos.turnoTarde,
-        turnoNoite: turnos.turnoNoite
+        ativo
       }
     });
 

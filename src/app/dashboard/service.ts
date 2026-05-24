@@ -12,8 +12,7 @@ import {
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento,
   TipoPlanoLimpeza,
-  TurnoTemperaturaEquipamento,
-  type TurnoPlanoLimpeza
+  TurnoTemperaturaEquipamento
 } from "@prisma/client";
 
 import {
@@ -26,7 +25,6 @@ import {
   getMonthDateRange,
   getMonthYear,
   getTodaySystemDate,
-  getTurnoLabel,
   getWeekStartDateForDate
 } from "@/app/plano-limpeza/utils";
 import { isServicoDisponivelNaData } from "@/app/controle-buffet-amostras/utils";
@@ -777,9 +775,6 @@ async function buildDailyCleaningStats(
       where: { ativo: true },
       select: {
         nome: true,
-        turnoManha: true,
-        turnoTarde: true,
-        turnoNoite: true,
         itens: {
           where: {
             ativo: true,
@@ -812,106 +807,75 @@ async function buildDailyCleaningStats(
     })
   ]);
 
-  const turnosForArea = (area: (typeof areaConfigs)[number]): TurnoPlanoLimpeza[] => {
-    const turnos: TurnoPlanoLimpeza[] = [];
-    if (area.turnoManha) turnos.push("MANHA");
-    if (area.turnoTarde) turnos.push("TARDE");
-    if (area.turnoNoite) turnos.push("NOITE");
-    return turnos;
-  };
-
-  const keyFor = (date: Date, turno: TurnoPlanoLimpeza, itemId: number) =>
-    `${dateOnlyKey(date)}|${turno}|${itemId}`;
+  const keyFor = (date: Date, itemId: number) => `${dateOnlyKey(date)}|${itemId}`;
   const recordsByKey = new Map<string, (typeof registros)[number]>();
 
   for (const record of registros) {
     if (!record.itemId) {
       continue;
     }
-    const key = keyFor(record.data, record.turno, record.itemId);
-    if (!recordsByKey.has(key)) {
+    const key = keyFor(record.data, record.itemId);
+    const current = recordsByKey.get(key);
+    const currentSigned = Boolean(current?.assinaturaResponsavel.trim());
+    const candidateSigned = Boolean(record.assinaturaResponsavel.trim());
+
+    if (
+      !current ||
+      (candidateSigned && !currentSigned) ||
+      (candidateSigned === currentSigned &&
+        record.updatedAt.getTime() > current.updatedAt.getTime())
+    ) {
       recordsByKey.set(key, record);
     }
   }
 
-  const expectedKeys = new Set<string>();
-
   for (const date of dates) {
     for (const area of areaConfigs) {
-      for (const turno of turnosForArea(area)) {
-        for (const item of area.itens) {
-          const key = keyFor(date, turno, item.id);
-          expectedKeys.add(key);
-          const record = recordsByKey.get(key);
-          const href = `${moduleInfo.href}?filtroData=${formatDateInput(date)}&filtroArea=${encodeURIComponent(area.nome)}&filtroTurno=${turno}&openData=${formatDateInput(date)}&openArea=${encodeURIComponent(area.nome)}&openTurno=${turno}`;
+      for (const item of area.itens) {
+        const key = keyFor(date, item.id);
+        const record = recordsByKey.get(key);
+        const href = `${moduleInfo.href}?filtroData=${formatDateInput(date)}&filtroArea=${encodeURIComponent(area.nome)}&openData=${formatDateInput(date)}&openArea=${encodeURIComponent(area.nome)}`;
 
-          if (!record) {
-            addPending(
-              stats,
-              {
-                id: `${moduleInfo.id}:${key}:missing`,
-                moduleId: moduleInfo.id,
-                moduleName: moduleInfo.name,
-                title: `${area.nome} | ${item.descricao}`,
-                description: `${getTurnoLabel(turno)} sem assinatura em ${formatDateDisplay(date)}.`,
-                status: "Aguardando responsável",
-                dateTime: formatDateDisplay(date),
-                href
-              },
-              "Aguardando responsável"
-            );
-            continue;
-          }
+        if (!record) {
+          addPending(
+            stats,
+            {
+              id: `${moduleInfo.id}:${key}:missing`,
+              moduleId: moduleInfo.id,
+              moduleName: moduleInfo.name,
+              title: `${area.nome} | ${item.descricao}`,
+              description: `Sem assinatura em ${formatDateDisplay(date)}.`,
+              status: "Aguardando responsável",
+              dateTime: formatDateDisplay(date),
+              href
+            },
+            "Aguardando responsável"
+          );
+          continue;
+        }
 
-          const status = cleaningStatusLabel(record.status);
-          const detail = {
-            id: `${moduleInfo.id}:${record.id}`,
-            moduleId: moduleInfo.id,
-            moduleName: moduleInfo.name,
-            title: `${record.area} | ${record.itemDescricao ?? item.descricao}`,
-            description:
-              record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
-                ? `${getTurnoLabel(record.turno)} aguardando assinatura do supervisor.`
-                : `${getTurnoLabel(record.turno)} registrado.`,
-            status,
-            responsible: record.assinaturaSupervisor || record.assinaturaResponsavel || undefined,
-            dateTime: formatDateDisplay(record.data),
-            href
-          };
+        const status = cleaningStatusLabel(record.status);
+        const detail = {
+          id: `${moduleInfo.id}:${record.id}`,
+          moduleId: moduleInfo.id,
+          moduleName: moduleInfo.name,
+          title: `${record.area} | ${record.itemDescricao ?? item.descricao}`,
+          description:
+            record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+              ? "Aguardando assinatura do supervisor."
+              : "Item/local registrado.",
+          status,
+          responsible: record.assinaturaSupervisor || record.assinaturaResponsavel || undefined,
+          dateTime: formatDateDisplay(record.data),
+          href
+        };
 
-          if (record.assinaturaResponsavel.trim().length > 0) {
-            addCompleted(stats, detail);
-          } else {
-            addPending(stats, detail, status);
-          }
+        if (record.assinaturaResponsavel.trim().length > 0) {
+          addCompleted(stats, detail);
+        } else {
+          addPending(stats, detail, status);
         }
       }
-    }
-  }
-
-  for (const record of registros) {
-    const key = record.itemId ? keyFor(record.data, record.turno, record.itemId) : null;
-    if (key && expectedKeys.has(key)) {
-      continue;
-    }
-
-    const status = cleaningStatusLabel(record.status);
-    const detail = {
-      id: `${moduleInfo.id}:${record.id}`,
-      moduleId: moduleInfo.id,
-      moduleName: moduleInfo.name,
-      title: `${record.area} | ${getTurnoLabel(record.turno)}`,
-      description: "Registro existente fora da configuração ativa atual.",
-      status,
-      responsible: record.assinaturaSupervisor || record.assinaturaResponsavel || undefined,
-      dateTime: formatDateDisplay(record.data),
-      href: `${moduleInfo.href}?filtroData=${formatDateInput(record.data)}`
-    };
-
-    if (record.status === StatusPlanoLimpeza.CONCLUIDO) {
-      addCompleted(stats, detail);
-    } else {
-      addPending(stats, detail, status);
     }
   }
 
@@ -2185,13 +2149,21 @@ async function buildNonConformitySummary(params: {
     prisma.planoLimpezaDiarioRegistro.findMany({
       where: {
         data: { gte: params.ranges.openPendencies.start, lte: params.ranges.daily.end },
-        status: { not: StatusPlanoLimpeza.CONCLUIDO }
+        status: { not: StatusPlanoLimpeza.CONCLUIDO },
+        itemId: { not: null },
+        item: {
+          is: {
+            ativo: true,
+            excluidoEm: null,
+            area: { ativo: true }
+          }
+        }
       },
       select: {
         id: true,
         data: true,
         area: true,
-        turno: true,
+        itemDescricao: true,
         status: true,
         assinaturaResponsavel: true,
         updatedAt: true
@@ -2380,7 +2352,7 @@ async function buildNonConformitySummary(params: {
       id: `nc-limpeza-diaria:${record.id}`,
       moduleId: MODULES.limpezaDiaria.id,
       moduleName: MODULES.limpezaDiaria.name,
-      title: `${record.area} | ${getTurnoLabel(record.turno)}`,
+      title: `${record.area} | ${record.itemDescricao ?? "Item/local diário"}`,
       description:
         record.status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
           ? "Limpeza aguardando supervisão."

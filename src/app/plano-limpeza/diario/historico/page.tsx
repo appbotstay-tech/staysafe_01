@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
@@ -69,9 +69,27 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
     where.assinaturaResponsavel = { contains: filtroResponsavel, mode: "insensitive" };
   }
 
+  const realExecutionWhere: Prisma.PlanoLimpezaDiarioRegistroWhereInput = {
+    OR: [
+      { status: { not: StatusPlanoLimpeza.PENDENTE } },
+      { assinaturaResponsavel: { not: "" } },
+      { assinaturaResponsavelUsuarioId: { not: null } },
+      { assinaturaResponsavelDataHora: { not: null } },
+      { assinaturaSupervisor: { not: "" } },
+      { assinaturaSupervisorUsuarioId: { not: null } },
+      { assinaturaSupervisorDataHora: { not: null } },
+      { observacao: { not: null } },
+      { observacaoResponsavel: { not: null } },
+      { observacaoSupervisor: { not: null } }
+    ]
+  };
+  const registrosWhere: Prisma.PlanoLimpezaDiarioRegistroWhereInput = {
+    AND: [where, realExecutionWhere]
+  };
+
   const [registros, areaConfigs, areasHistoricas] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
-      where,
+      where: registrosWhere,
       orderBy: [{ data: "desc" }, { turno: "asc" }, { area: "asc" }]
     }),
     prisma.planoLimpezaDiarioArea.findMany({

@@ -20,7 +20,7 @@ import {
 } from "@/lib/rbac";
 
 import { closeDailyMonthAction, reopenDailyMonthAction } from "../actions";
-import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS, TURNO_OPTIONS } from "../constants";
+import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS } from "../constants";
 import { ReopenMonthModal } from "../reopen-month-modal";
 import {
   consolidateDailyRecordsByDay,
@@ -36,12 +36,10 @@ import {
   getMonthDateRange,
   getMonthYear,
   getTodaySystemDate,
-  getTurnoLabel,
   getYearDateRange,
   parseDailyStatus,
   parseDateInput,
   parsePositiveInt,
-  parseTurno,
   periodKey
 } from "../utils";
 import { DailyChecklistSync } from "./daily-checklist-sync";
@@ -67,7 +65,7 @@ function buildPathWithParams(params: URLSearchParams): string {
   return query ? `${PAGE_PATH}?${query}` : PAGE_PATH;
 }
 
-type DailyAreaStatus = "Pendente" | "Parcial" | "Concluído";
+type DailyAreaStatus = "Pendente" | "Parcial" | "Concluída";
 
 function getDailyItemDescription(record: {
   itemDescricao: string | null;
@@ -78,7 +76,7 @@ function getDailyItemDescription(record: {
 
 function getDailyAreaStatus(totalItems: number, signedItems: number): DailyAreaStatus {
   if (totalItems > 0 && signedItems === totalItems) {
-    return "Concluído";
+    return "Concluída";
   }
 
   if (signedItems > 0) {
@@ -111,11 +109,9 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const filtroMesRaw = firstParam(params.filtroMes).trim();
   const filtroAnoRaw = firstParam(params.filtroAno).trim();
   const filtroArea = firstParam(params.filtroArea).trim();
-  const filtroTurnoRaw = firstParam(params.filtroTurno).trim();
   const filtroStatusRaw = firstParam(params.filtroStatus).trim();
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const openArea = firstParam(params.openArea).trim();
-  const openTurno = parseTurno(firstParam(params.openTurno).trim());
   const openData = parseDateInput(firstParam(params.openData).trim());
 
   const hasManualFilters =
@@ -125,7 +121,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         filtroMesRaw ||
         filtroAnoRaw ||
         filtroArea ||
-        filtroTurnoRaw ||
         filtroStatusRaw ||
         filtroResponsavel
     );
@@ -133,7 +128,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const filtroData = hasManualFilters ? filtroDataRaw : todayInput;
   const filtroMes = parsePositiveInt(filtroMesRaw);
   const filtroAno = parsePositiveInt(filtroAnoRaw);
-  const filtroTurno = parseTurno(filtroTurnoRaw);
   const filtroStatus = parseDailyStatus(filtroStatusRaw);
 
   const where: Prisma.PlanoLimpezaDiarioRegistroWhereInput = {};
@@ -152,9 +146,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   if (filtroArea) {
     where.area = filtroArea;
   }
-  if (filtroTurno) {
-    where.turno = filtroTurno;
-  }
   if (filtroStatus) {
     where.status = filtroStatus;
   }
@@ -165,7 +156,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const [registros, areaConfigs, areasHistoricas] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
       where,
-      orderBy: [{ data: "desc" }, { turno: "asc" }, { area: "asc" }]
+      orderBy: [{ data: "desc" }, { area: "asc" }, { updatedAt: "desc" }]
     }),
     prisma.planoLimpezaDiarioArea.findMany({
       include: {
@@ -254,102 +245,191 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   if (filtroMes) paramsRetorno.set("filtroMes", String(filtroMes));
   if (filtroAno) paramsRetorno.set("filtroAno", String(filtroAno));
   if (filtroArea) paramsRetorno.set("filtroArea", filtroArea);
-  if (filtroTurno) paramsRetorno.set("filtroTurno", filtroTurno);
   if (filtroStatus) paramsRetorno.set("filtroStatus", filtroStatus);
   if (filtroResponsavel) paramsRetorno.set("filtroResponsavel", filtroResponsavel);
   paramsRetorno.set("fechamentoMes", String(fechamentoMes));
   paramsRetorno.set("fechamentoAno", String(fechamentoAno));
 
   type DailyRecord = (typeof registros)[number];
+  type DailyAreaConfig = (typeof areaConfigs)[number];
+  type DailyAreaItem = DailyAreaConfig["itens"][number];
   type DailyAreaSummary = {
     key: string;
     data: Date;
-    turno: DailyRecord["turno"];
     area: string;
     signedItems: number;
     totalItems: number;
     status: DailyAreaStatus | "Sem itens cadastrados";
     records: DailyRecord[];
+    items: DailyAreaItem[];
   };
 
-  const summaryKey = (date: Date, turno: DailyRecord["turno"], area: string): string =>
-    `${formatDateInput(date)}|${turno}|${area}`;
+  const isDailyRecordSigned = (record: DailyRecord): boolean =>
+    record.assinaturaResponsavel.trim().length > 0 ||
+    Boolean(record.assinaturaResponsavelDataHora);
+  const summaryKey = (date: Date, area: string): string => `${formatDateInput(date)}|${area}`;
+  const pickDailyRecord = (
+    current: DailyRecord | undefined,
+    candidate: DailyRecord
+  ): DailyRecord => {
+    if (!current) {
+      return candidate;
+    }
+
+    const currentSigned = isDailyRecordSigned(current);
+    const candidateSigned = isDailyRecordSigned(candidate);
+
+    if (candidateSigned && !currentSigned) {
+      return candidate;
+    }
+
+    if (
+      candidateSigned === currentSigned &&
+      candidate.updatedAt.getTime() > current.updatedAt.getTime()
+    ) {
+      return candidate;
+    }
+
+    return current;
+  };
+
   const areaSummariesByKey = new Map<string, DailyAreaSummary>();
+  const activeDailyAreas = areaConfigs.filter((area) => area.ativo);
+  const areaConfigByName = new Map(areaConfigs.map((area) => [area.nome, area]));
+  const recordsByDateAreaItem = new Map<string, DailyRecord>();
 
   for (const registro of registros) {
-    const key = summaryKey(registro.data, registro.turno, registro.area);
-    const current =
-      areaSummariesByKey.get(key) ??
-      ({
-        key,
-        data: registro.data,
-        turno: registro.turno,
-        area: registro.area,
-        signedItems: 0,
-        totalItems: 0,
-        status: "Pendente",
-        records: []
-      } satisfies DailyAreaSummary);
-
-    current.records.push(registro);
-    current.totalItems += 1;
-    if (registro.assinaturaResponsavel.trim().length > 0) {
-      current.signedItems += 1;
+    if (!registro.itemId) {
+      continue;
     }
-    current.status = getDailyAreaStatus(current.totalItems, current.signedItems);
-    areaSummariesByKey.set(key, current);
+
+    const key = `${formatDateInput(registro.data)}|${registro.area}|${registro.itemId}`;
+    recordsByDateAreaItem.set(key, pickDailyRecord(recordsByDateAreaItem.get(key), registro));
   }
 
   if (dataFiltro) {
-    for (const area of areaConfigs.filter((item) => item.ativo)) {
-      const activeItems = area.itens.filter((item) => item.ativo && !item.excluidoEm);
-      if (activeItems.length > 0) {
+    for (const area of activeDailyAreas) {
+      if (filtroArea && area.nome !== filtroArea) {
         continue;
       }
 
-      const turnos = [
-        area.turnoManha ? "MANHA" : null,
-        area.turnoTarde ? "TARDE" : null,
-        area.turnoNoite ? "NOITE" : null
-      ].filter((turno): turno is DailyRecord["turno"] => Boolean(turno));
+      const activeItems = area.itens.filter((item) => item.ativo && !item.excluidoEm);
+      const recordsForArea: DailyRecord[] = [];
+      let signedItems = 0;
 
-      for (const turno of turnos) {
-        if (filtroTurno && turno !== filtroTurno) {
-          continue;
+      for (const item of activeItems) {
+        const record = recordsByDateAreaItem.get(
+          `${formatDateInput(dataFiltro)}|${area.nome}|${item.id}`
+        );
+        if (record) {
+          recordsForArea.push(record);
         }
-        if (filtroArea && area.nome !== filtroArea) {
-          continue;
-        }
-        const key = summaryKey(dataFiltro, turno, area.nome);
-        if (!areaSummariesByKey.has(key)) {
-          areaSummariesByKey.set(key, {
-            key,
-            data: dataFiltro,
-            turno,
-            area: area.nome,
-            signedItems: 0,
-            totalItems: 0,
-            status: "Sem itens cadastrados",
-            records: []
-          });
+        if (record && isDailyRecordSigned(record)) {
+          signedItems += 1;
         }
       }
+
+      const status =
+        activeItems.length === 0
+          ? "Sem itens cadastrados"
+          : getDailyAreaStatus(activeItems.length, signedItems);
+
+      if (
+        filtroStatus &&
+        recordsForArea.length > 0 &&
+        !recordsForArea.some((record) => record.status === filtroStatus)
+      ) {
+        continue;
+      }
+
+      const key = summaryKey(dataFiltro, area.nome);
+      areaSummariesByKey.set(key, {
+        key,
+        data: dataFiltro,
+        area: area.nome,
+        signedItems,
+        totalItems: activeItems.length,
+        status,
+        records: recordsForArea,
+        items: activeItems
+      });
+    }
+
+    for (const registro of registros) {
+      if (areaConfigByName.get(registro.area)?.ativo) {
+        continue;
+      }
+
+      const key = summaryKey(registro.data, registro.area);
+      const current =
+        areaSummariesByKey.get(key) ??
+        ({
+          key,
+          data: registro.data,
+          area: registro.area,
+          signedItems: 0,
+          totalItems: 0,
+          status: "Pendente",
+          records: [],
+          items: []
+        } satisfies DailyAreaSummary);
+
+      current.records.push(registro);
+      current.totalItems += 1;
+      if (isDailyRecordSigned(registro)) {
+        current.signedItems += 1;
+      }
+      current.status = getDailyAreaStatus(current.totalItems, current.signedItems);
+      areaSummariesByKey.set(key, current);
+    }
+  } else {
+    for (const registro of registros) {
+      const key = summaryKey(registro.data, registro.area);
+      const areaConfig = areaConfigByName.get(registro.area);
+      const activeItems =
+        areaConfig?.itens.filter((item) => item.ativo && !item.excluidoEm) ?? [];
+      const current =
+        areaSummariesByKey.get(key) ??
+        ({
+          key,
+          data: registro.data,
+          area: registro.area,
+          signedItems: 0,
+          totalItems: 0,
+          status: "Pendente",
+          records: [],
+          items: activeItems
+        } satisfies DailyAreaSummary);
+
+      current.records.push(registro);
+      current.totalItems =
+        current.items.length > 0
+          ? current.items.length
+          : new Set(current.records.map((record) => record.itemId ?? `legacy-${record.id}`))
+              .size;
+      current.signedItems = current.records.filter(isDailyRecordSigned).length;
+      current.status =
+        current.totalItems === 0
+          ? "Sem itens cadastrados"
+          : getDailyAreaStatus(current.totalItems, Math.min(current.signedItems, current.totalItems));
+      areaSummariesByKey.set(key, current);
     }
   }
 
   const areaSummaries = Array.from(areaSummariesByKey.values()).sort((a, b) => {
     const dateDiff = b.data.getTime() - a.data.getTime();
     if (dateDiff !== 0) return dateDiff;
-    if (a.area !== b.area) return a.area.localeCompare(b.area, "pt-BR");
-    return a.turno.localeCompare(b.turno);
+    return a.area.localeCompare(b.area, "pt-BR");
   });
+  const visibleDetailedRecords = dataFiltro
+    ? areaSummaries.flatMap((summary) => summary.records)
+    : registros;
   const openedSummary =
-    openData && openArea && openTurno
+    openData && openArea
       ? areaSummaries.find(
           (summary) =>
             formatDateInput(summary.data) === formatDateInput(openData) &&
-            summary.area === openArea &&
-            summary.turno === openTurno
+            summary.area === openArea
         ) ?? null
       : null;
 
@@ -359,7 +439,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         const query = new URLSearchParams(paramsRetorno);
         query.set("openData", formatDateInput(openedSummary.data));
         query.set("openArea", openedSummary.area);
-        query.set("openTurno", openedSummary.turno);
         return buildPathWithParams(query);
       })()
     : returnTo;
@@ -369,7 +448,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         if (openedSummary) {
           query.set("openData", formatDateInput(openedSummary.data));
           query.set("openArea", openedSummary.area);
-          query.set("openTurno", openedSummary.turno);
         }
         query.set("signId", String(registroParaAssinatura.id));
         return buildPathWithParams(query);
@@ -382,7 +460,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const [registrosFechamento, fechamentoAtual] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
       where: { data: { gte: rangeFechamento.start, lte: rangeFechamento.end } },
-      orderBy: [{ data: "desc" }, { area: "asc" }, { turno: "asc" }]
+      orderBy: [{ data: "desc" }, { area: "asc" }, { updatedAt: "desc" }]
     }),
     prisma.planoLimpezaFechamento.findUnique({
       where: {
@@ -398,6 +476,26 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const resumoFechamento = resumoFechamentoCompleto.slice(0, 10);
   const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoPlanoLimpeza.ASSINADO;
   const reaberturaFormId = `reabertura-form-diario-${fechamentoMes}-${fechamentoAno}`;
+  const modalDailyRows = openedSummary
+    ? openedSummary.items.length > 0
+      ? openedSummary.items.map((item) => ({
+          key: `item-${item.id}`,
+          title: item.descricao,
+          produtoUtilizado: item.produtoUtilizado,
+          setorResponsavel: item.setorResponsavel,
+          funcionarioResponsavel: item.funcionarioResponsavel,
+          registro:
+            openedSummary.records.find((record) => record.itemId === item.id) ?? null
+        }))
+      : openedSummary.records.map((registro) => ({
+          key: `registro-${registro.id}`,
+          title: getDailyItemDescription(registro),
+          produtoUtilizado: registro.produtoUtilizado,
+          setorResponsavel: registro.setorResponsavel,
+          funcionarioResponsavel: registro.funcionarioResponsavel,
+          registro
+        }))
+    : [];
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -405,7 +503,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
 
       <DocumentosModuleHeader
         title="Plano de Limpeza Diário"
-        description="Checklist diário automático por área e turno configurados."
+        description="Checklist diário automático por área e itens/locais assináveis."
         modulo={ModuloDocumento.PLANO_LIMPEZA_DIARIO}
         modulePath={PAGE_PATH}
         searchParams={params}
@@ -453,7 +551,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             <>
               Nenhuma área do plano diário foi configurada ainda. Use{" "}
               <strong>Gerenciar Plano Diário</strong>{" "}
-              para cadastrar áreas e turnos antes de operar o checklist.
+              para cadastrar áreas e itens/locais antes de operar o checklist.
             </>
           ) : (
             "Nenhuma área do plano diário foi configurada ainda. Solicite à gestão a configuração do plano."
@@ -471,7 +569,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             Exibindo apenas tarefas e pendências do dia.
           </p>
         ) : (
-          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
+          <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-5 dark:bg-slate-800">
             <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
             <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
 
@@ -513,17 +611,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
               </select>
             </label>
             <label className="text-sm text-slate-700 dark:text-slate-200">
-              Turno
-              <select name="filtroTurno" defaultValue={filtroTurno ?? ""} className={INPUT_CLASS}>
-                <option value="">Todos</option>
-                {TURNO_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
               Status
               <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
                 <option value="">Todos</option>
@@ -545,7 +632,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
               />
             </label>
 
-            <div className="btn-group md:col-span-6">
+            <div className="btn-group md:col-span-5">
               <button type="submit" className="btn-primary">
                 Aplicar Filtros
               </button>
@@ -569,7 +656,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">Turno</th>
                 <th className="px-3 py-2">Área</th>
                 <th className="px-3 py-2">Itens assinados</th>
                 <th className="px-3 py-2">Status da área</th>
@@ -579,7 +665,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {areaSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhuma área diária encontrada.
                   </td>
                 </tr>
@@ -588,12 +674,10 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                   const q = new URLSearchParams(paramsRetorno);
                   q.set("openData", formatDateInput(summary.data));
                   q.set("openArea", summary.area);
-                  q.set("openTurno", summary.turno);
 
                   return (
                     <tr key={summary.key}>
                       <td className="px-3 py-2">{formatDateDisplay(summary.data)}</td>
-                      <td className="px-3 py-2">{getTurnoLabel(summary.turno)}</td>
                       <td className="px-3 py-2">{summary.area}</td>
                       <td className="px-3 py-2">
                         {summary.totalItems > 0
@@ -631,7 +715,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">Turno</th>
                 <th className="px-3 py-2">Área</th>
                 <th className="px-3 py-2">Item/local</th>
                 <th className="px-3 py-2">Responsável pela Limpeza</th>
@@ -641,14 +724,14 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {registros.length === 0 ? (
+              {visibleDetailedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
-                registros.map((registro) => {
+                visibleDetailedRecords.map((registro) => {
                   const periodo = getMonthYear(registro.data);
                   const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
                   const etapa = getDailySignStage(registro);
@@ -668,7 +751,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                   return (
                     <tr key={registro.id}>
                       <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">{getTurnoLabel(registro.turno)}</td>
                       <td className="px-3 py-2">
                         <p className="font-medium text-slate-900 dark:text-slate-100">
                           {registro.area}
@@ -720,7 +802,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
           <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
           <input type="hidden" name="filtroArea" value={filtroArea} />
-          <input type="hidden" name="filtroTurno" value={filtroTurno ?? ""} />
           <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
           <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
 
@@ -811,7 +892,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                             <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-700">
                               <thead className="bg-slate-50 dark:bg-slate-800">
                                 <tr>
-                                  <th className="px-2 py-1 text-left">Turno</th>
                                   <th className="px-2 py-1 text-left">Área</th>
                                   <th className="px-2 py-1 text-left">Responsável</th>
                                   <th className="px-2 py-1 text-left">Supervisor</th>
@@ -824,7 +904,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
 
                                   return (
                                   <tr key={detalhe.id}>
-                                    <td className="px-2 py-1">{getTurnoLabel(detalhe.turno)}</td>
                                     <td className="px-2 py-1">
                                       <p>{detalhe.area}</p>
                                       {detalhamentoLimpeza ? (
@@ -910,7 +989,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
 
       {openedSummary ? (
         <ActionModal
-          title={`${openedSummary.area} • ${getTurnoLabel(openedSummary.turno)}`}
+          title={openedSummary.area}
           cancelHref={returnTo}
           maxWidthClassName="max-w-5xl"
           description={
@@ -957,65 +1036,68 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             </div>
           ) : null}
 
-          {openedSummary.records.length === 0 ? (
+          {modalDailyRows.length === 0 ? (
             <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               Esta área ainda não possui itens/locais cadastrados.
             </p>
           ) : (
             <div className="grid gap-3">
-              {openedSummary.records.map((registro) => {
-                const periodo = getMonthYear(registro.data);
-                const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
-                const etapa = getDailySignStage(registro);
+              {modalDailyRows.map((row) => {
+                const registro = row.registro;
+                const periodo = registro ? getMonthYear(registro.data) : null;
+                const bloqueado = periodo ? fechadosSet.has(periodKey(periodo.mes, periodo.ano)) : false;
+                const etapa = registro ? getDailySignStage(registro) : null;
                 const supervisorMesmoExecutor =
+                  registro !== null &&
                   etapa === "supervisor" &&
                   ((usuarioLogadoId !== null &&
                     registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
                     (!registro.assinaturaResponsavelUsuarioId &&
                       registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
-                const hrefAssinar = (() => {
-                  const query = new URLSearchParams(paramsRetorno);
-                  query.set("openData", formatDateInput(openedSummary.data));
-                  query.set("openArea", openedSummary.area);
-                  query.set("openTurno", openedSummary.turno);
-                  query.set("signId", String(registro.id));
-                  return buildPathWithParams(query);
-                })();
+                const hrefAssinar = registro
+                  ? (() => {
+                      const query = new URLSearchParams(paramsRetorno);
+                      query.set("openData", formatDateInput(openedSummary.data));
+                      query.set("openArea", openedSummary.area);
+                      query.set("signId", String(registro.id));
+                      return buildPathWithParams(query);
+                    })()
+                  : "";
 
                 return (
                   <article
-                    key={registro.id}
+                    key={row.key}
                     className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <p className="break-words font-medium text-slate-900 dark:text-slate-100">
-                          {getDailyItemDescription(registro)}
+                          {row.title}
                         </p>
                         <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-3">
-                          <p>Produto: <strong>{registro.produtoUtilizado || "-"}</strong></p>
-                          <p>Setor: <strong>{registro.setorResponsavel || "-"}</strong></p>
-                          <p>Funcionário: <strong>{registro.funcionarioResponsavel || "-"}</strong></p>
+                          <p>Produto: <strong>{row.produtoUtilizado || "-"}</strong></p>
+                          <p>Setor: <strong>{row.setorResponsavel || "-"}</strong></p>
+                          <p>Funcionário: <strong>{row.funcionarioResponsavel || "-"}</strong></p>
                         </div>
                         <div className="mt-3 grid gap-1 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2">
                           <p>
-                            Responsável: <strong>{registro.assinaturaResponsavel || "-"}</strong>
+                            Responsável: <strong>{registro?.assinaturaResponsavel || "-"}</strong>
                           </p>
                           <p>
-                            Assinado em:{" "}
+                            Quando:{" "}
                             <strong>
-                              {registro.assinaturaResponsavelDataHora
+                              {registro?.assinaturaResponsavelDataHora
                                 ? formatDateTimeDisplay(registro.assinaturaResponsavelDataHora)
-                                : "-"}
+                                : "Ainda não assinado"}
                             </strong>
                           </p>
                           <p>
-                            Supervisor: <strong>{registro.assinaturaSupervisor || "-"}</strong>
+                            Supervisor: <strong>{registro?.assinaturaSupervisor || "-"}</strong>
                           </p>
                           <p>
                             Visto em:{" "}
                             <strong>
-                              {registro.assinaturaSupervisorDataHora
+                              {registro?.assinaturaSupervisorDataHora
                                 ? formatDateTimeDisplay(registro.assinaturaSupervisorDataHora)
                                 : "-"}
                             </strong>
@@ -1023,17 +1105,21 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <StatusBadge status={registro.status} />
+                        <StatusBadge status={registro?.status ?? "Pendente"} />
                         {bloqueado ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
                         ) : supervisorMesmoExecutor ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             Outro supervisor
                           </span>
-                        ) : etapa ? (
+                        ) : registro && etapa ? (
                           <Link href={hrefAssinar} scroll={false} className="btn-action">
                             Assinar
                           </Link>
+                        ) : !registro ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Registro em preparação
+                          </span>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             Sem Ação

@@ -32,42 +32,6 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function TurnoCheckboxes(props: {
-  turnoManhaDefault: boolean;
-  turnoTardeDefault: boolean;
-  turnoNoiteDefault: boolean;
-}) {
-  return (
-    <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
-      <p className="font-medium">Turnos da Área *</p>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="turnoManha" defaultChecked={props.turnoManhaDefault} />
-        Manhã
-      </label>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="turnoTarde" defaultChecked={props.turnoTardeDefault} />
-        Tarde
-      </label>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="turnoNoite" defaultChecked={props.turnoNoiteDefault} />
-        Noite
-      </label>
-    </div>
-  );
-}
-
-function getTurnosLabel(area: {
-  turnoManha: boolean;
-  turnoTarde: boolean;
-  turnoNoite: boolean;
-}): string {
-  const labels: string[] = [];
-  if (area.turnoManha) labels.push("Manhã");
-  if (area.turnoTarde) labels.push("Tarde");
-  if (area.turnoNoite) labels.push("Noite");
-  return labels.length > 0 ? labels.join(", ") : "Sem Turnos";
-}
-
 function getDraftValue(
   params: SearchParams,
   key: string,
@@ -165,7 +129,7 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
               Gerenciar Plano Diário
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Configure áreas e turnos que geram checklist automático diário.
+              Configure áreas e itens/locais que serão assinados individualmente na rotina diária.
             </p>
           </div>
           <div className="btn-group">
@@ -220,14 +184,6 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
               placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
             />
           </label>
-
-          <div className="md:col-span-2">
-            <TurnoCheckboxes
-              turnoManhaDefault
-              turnoTardeDefault
-              turnoNoiteDefault
-            />
-          </div>
 
           <div className="md:col-span-2">
             <button type="submit" className="btn-primary">
@@ -307,9 +263,6 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   <div>
                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                       {area.nome} • Ordem {area.ordem}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                      <strong>Turnos:</strong> {getTurnosLabel(area)}
                     </p>
                     <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
                       <strong>Itens/locais ativos:</strong>{" "}
@@ -408,7 +361,7 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   Editar Área do Plano Diário
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Ajuste a área, os turnos e o detalhamento da limpeza.
+                  Ajuste a área e a orientação geral da limpeza.
                 </p>
               </div>
               <Link href={PAGE_PATH} className="btn-secondary shrink-0" scroll={false}>
@@ -476,14 +429,6 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
                   placeholder="Ex.: Limpar prateleiras, paredes, piso, lixeiras, pallets, porta e rodapés."
                 />
               </label>
-
-              <div className="md:col-span-2">
-                <TurnoCheckboxes
-                  turnoManhaDefault={getDraftBoolean(params, "turnoManha", areaEmEdicao.turnoManha)}
-                  turnoTardeDefault={getDraftBoolean(params, "turnoTarde", areaEmEdicao.turnoTarde)}
-                  turnoNoiteDefault={getDraftBoolean(params, "turnoNoite", areaEmEdicao.turnoNoite)}
-                />
-              </div>
 
               <div className="btn-group md:col-span-2">
                 <button type="submit" className="btn-primary">

@@ -1,8 +1,8 @@
-import { StatusPlanoLimpeza, TurnoPlanoLimpeza } from "@prisma/client";
+import { StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
 import { updateDailyRecordAction } from "../actions";
-import { getStatusLabel, getTurnoLabel, formatDateDisplay } from "../utils";
+import { getStatusLabel, formatDateDisplay } from "../utils";
 
 const INPUT_CLASS =
   "bpma-input";
@@ -18,7 +18,6 @@ type DailySignChecklistModalProps = {
   record: {
     id: number;
     data: Date;
-    turno: TurnoPlanoLimpeza;
     area: string;
     itemDescricao: string | null;
     produtoUtilizado: string | null;
@@ -63,12 +62,6 @@ export function DailySignChecklistModal({
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Turno</p>
-            <p className="font-medium text-slate-800 dark:text-slate-100">
-              {getTurnoLabel(record.turno)}
-            </p>
-          </div>
-          <div className="md:col-span-2">
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Área</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">{record.area}</p>
           </div>

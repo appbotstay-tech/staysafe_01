@@ -16,12 +16,14 @@ import {
   periodKey
 } from "./utils";
 
-function dailyKey(area: string, turno: TurnoPlanoLimpeza): string {
-  return `${area}|${turno}`;
+const LEGACY_DAILY_TURNO = TurnoPlanoLimpeza.MANHA;
+
+function dailyItemKey(itemId: number): string {
+  return String(itemId);
 }
 
-function dailyItemKey(turno: TurnoPlanoLimpeza, itemId: number): string {
-  return `${turno}|${itemId}`;
+function legacyDailyKey(area: string, turno: TurnoPlanoLimpeza): string {
+  return `${area}|${turno}`;
 }
 
 function weeklyAreaKey(area: string, weekStart: Date): string {
@@ -42,26 +44,6 @@ function enumerateDateRange(start: Date, end: Date): Date[] {
   }
 
   return dates;
-}
-
-function getTurnosFromConfig(config: {
-  turnoManha: boolean;
-  turnoTarde: boolean;
-  turnoNoite: boolean;
-}): TurnoPlanoLimpeza[] {
-  const turnos: TurnoPlanoLimpeza[] = [];
-
-  if (config.turnoManha) {
-    turnos.push(TurnoPlanoLimpeza.MANHA);
-  }
-  if (config.turnoTarde) {
-    turnos.push(TurnoPlanoLimpeza.TARDE);
-  }
-  if (config.turnoNoite) {
-    turnos.push(TurnoPlanoLimpeza.NOITE);
-  }
-
-  return turnos;
 }
 
 export async function isDailyMonthSigned(date: Date): Promise<boolean> {
@@ -112,7 +94,6 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
     const desiredCombinations = new Map<
       string,
       {
-        turno: TurnoPlanoLimpeza;
         area: string;
         itemId: number;
         itemDescricao: string;
@@ -122,21 +103,17 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
       }
     >();
     for (const areaConfig of areaConfigs) {
-      const turnos = getTurnosFromConfig(areaConfig);
       const activeItems = areaConfig.itens.filter((item) => item.ativo && !item.excluidoEm);
 
-      for (const turno of turnos) {
-        for (const item of activeItems) {
-          desiredCombinations.set(dailyItemKey(turno, item.id), {
-            turno,
-            area: areaConfig.nome,
-            itemId: item.id,
-            itemDescricao: item.descricao,
-            produtoUtilizado: item.produtoUtilizado,
-            setorResponsavel: item.setorResponsavel,
-            funcionarioResponsavel: item.funcionarioResponsavel
-          });
-        }
+      for (const item of activeItems) {
+        desiredCombinations.set(dailyItemKey(item.id), {
+          area: areaConfig.nome,
+          itemId: item.id,
+          itemDescricao: item.descricao,
+          produtoUtilizado: item.produtoUtilizado,
+          setorResponsavel: item.setorResponsavel,
+          funcionarioResponsavel: item.funcionarioResponsavel
+        });
       }
     }
 
@@ -145,7 +122,7 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
       record.assinaturaResponsavel.trim().length === 0 &&
       record.assinaturaSupervisor.trim().length === 0;
     const recordKey = (record: (typeof existing)[number]): string =>
-      record.itemId ? dailyItemKey(record.turno, record.itemId) : dailyKey(record.area, record.turno);
+      record.itemId ? dailyItemKey(record.itemId) : legacyDailyKey(record.area, record.turno);
 
     const pendingInvalidRecordIds = existing
       .filter(
@@ -172,7 +149,7 @@ export async function ensureDailyChecklistForDate(date: Date): Promise<{
       .map(([, desired]) => {
         return {
           data: date,
-          turno: desired.turno,
+          turno: LEGACY_DAILY_TURNO,
           area: desired.area,
           itemId: desired.itemId,
           itemDescricao: desired.itemDescricao,
@@ -668,28 +645,6 @@ export function consolidateWeeklyExecutionsByAreaWeek(
   });
 }
 
-export function ensureDailyTurnoSelection(params: {
-  turnoManha: boolean;
-  turnoTarde: boolean;
-  turnoNoite: boolean;
-}) {
-  if (!params.turnoManha && !params.turnoTarde && !params.turnoNoite) {
-    throw new Error("Selecione pelo menos um turno para a área.");
-  }
-}
-
-export function buildDailyTurnoFlags(formData: FormData): {
-  turnoManha: boolean;
-  turnoTarde: boolean;
-  turnoNoite: boolean;
-} {
-  return {
-    turnoManha: formData.get("turnoManha") === "on",
-    turnoTarde: formData.get("turnoTarde") === "on",
-    turnoNoite: formData.get("turnoNoite") === "on"
-  };
-}
-
 export function getDailyStatusFromSignatures(
   assinaturaResponsavel: string,
   assinaturaSupervisor: string
@@ -751,9 +706,12 @@ export type DailyRecordForSummary = {
   data: Date;
   turno: TurnoPlanoLimpeza;
   area: string;
+  itemId?: number | null;
   assinaturaResponsavel: string;
+  assinaturaResponsavelDataHora?: Date | null;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
+  updatedAt?: Date;
 };
 
 export type DailyRecordSummary = {
@@ -779,8 +737,31 @@ export function consolidateDailyRecordsByDay(
   formatDateKey: (date: Date) => string
 ): DailyRecordSummary[] {
   const map = new Map<string, DailyRecordSummary>();
+  const recordsByOperationalItem = new Map<string, DailyRecordForSummary>();
 
   for (const registro of registros) {
+    const key = registro.itemId
+      ? `${formatDateKey(registro.data)}|item:${registro.itemId}`
+      : `${formatDateKey(registro.data)}|legacy:${registro.id}`;
+    const current = recordsByOperationalItem.get(key);
+    const currentSigned = Boolean(
+      current?.assinaturaResponsavel.trim() || current?.assinaturaResponsavelDataHora
+    );
+    const candidateSigned = Boolean(
+      registro.assinaturaResponsavel.trim() || registro.assinaturaResponsavelDataHora
+    );
+
+    if (
+      !current ||
+      (candidateSigned && !currentSigned) ||
+      (candidateSigned === currentSigned &&
+        (registro.updatedAt?.getTime() ?? 0) > (current.updatedAt?.getTime() ?? 0))
+    ) {
+      recordsByOperationalItem.set(key, registro);
+    }
+  }
+
+  for (const registro of recordsByOperationalItem.values()) {
     const key = formatDateKey(registro.data);
 
     if (!map.has(key)) {
