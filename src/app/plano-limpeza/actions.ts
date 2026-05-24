@@ -81,20 +81,29 @@ function getErrorMessage(error: unknown): string {
 function redirectWithFeedback(
   returnTo: string,
   feedbackType: FeedbackType,
-  feedback: string
+  feedback: string,
+  preserveSuccessParams: string[] = []
 ): never {
   const url = new URL(returnTo, "http://localhost");
   if (feedbackType === "success") {
+    const preservedParams = new Set(preserveSuccessParams);
     url.searchParams.delete("new");
-    url.searchParams.delete("editId");
-    url.searchParams.delete("editAreaId");
-    url.searchParams.delete("editDailyItemId");
-    url.searchParams.delete("editItemId");
-    url.searchParams.delete("editWeeklyAreaId");
-    url.searchParams.delete("deleteAreaId");
-    url.searchParams.delete("deleteDailyItemId");
-    url.searchParams.delete("deleteItemId");
-    url.searchParams.delete("deleteWeeklyAreaId");
+    [
+      "newDailyItem",
+      "editId",
+      "editAreaId",
+      "editDailyItemId",
+      "editItemId",
+      "editWeeklyAreaId",
+      "deleteAreaId",
+      "deleteDailyItemId",
+      "deleteItemId",
+      "deleteWeeklyAreaId"
+    ].forEach((key) => {
+      if (!preservedParams.has(key)) {
+        url.searchParams.delete(key);
+      }
+    });
     [
       "nome",
       "detalhamentoLimpeza",
@@ -133,9 +142,17 @@ function buildDailyAreaConfigErrorReturnTo(returnTo: string, formData: FormData)
 
 function buildDailyItemConfigErrorReturnTo(returnTo: string, formData: FormData): string {
   const url = new URL(returnTo, "http://localhost");
+  const editAreaId = getInputValue(formData, "editAreaId") || getInputValue(formData, "areaId");
+  if (editAreaId) {
+    url.searchParams.set("editAreaId", editAreaId);
+  }
+
   const itemId = getInputValue(formData, "dailyItemId");
   if (itemId) {
     url.searchParams.set("editDailyItemId", itemId);
+  }
+  if (!itemId && getInputValue(formData, "newDailyItem") === "true") {
+    url.searchParams.set("newDailyItem", "true");
   }
 
   for (const key of [
@@ -420,7 +437,12 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Área do Plano Diário Atualizada com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Área do Plano Diário Atualizada com Sucesso.",
+      ["editAreaId"]
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(
@@ -674,6 +696,8 @@ export async function createDailyItemConfigAction(formData: FormData) {
     const setorResponsavel = getInputValue(formData, "setorResponsavel");
     const funcionarioResponsavel = getInputValue(formData, "funcionarioResponsavel");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
+    const ativoRaw = getInputValue(formData, "ativo");
+    const ativo = ativoRaw ? ativoRaw === "true" : true;
 
     if (!areaId) {
       throw new Error("Selecione a área do item/local diário.");
@@ -689,12 +713,17 @@ export async function createDailyItemConfigAction(formData: FormData) {
         setorResponsavel: setorResponsavel || null,
         funcionarioResponsavel: funcionarioResponsavel || null,
         ordem,
-        ativo: true
+        ativo
       }
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Item do Plano Diário Criado com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Item do Plano Diário Criado com Sucesso.",
+      ["editAreaId"]
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(
@@ -762,7 +791,12 @@ export async function updateDailyItemConfigAction(formData: FormData) {
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Item do Plano Diário Atualizado com Sucesso.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Item do Plano Diário Atualizado com Sucesso.",
+      ["editAreaId"]
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(
@@ -802,7 +836,8 @@ export async function toggleDailyItemConfigStatusAction(formData: FormData) {
     redirectWithFeedback(
       returnTo,
       "success",
-      ativo ? "Item Ativado com Sucesso." : "Item Inativado com Sucesso."
+      ativo ? "Item Ativado com Sucesso." : "Item Inativado com Sucesso.",
+      ["editAreaId"]
     );
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -842,7 +877,12 @@ export async function deleteDailyItemConfigAction(formData: FormData) {
       });
 
       revalidateModulePaths();
-      redirectWithFeedback(returnTo, "success", "Item do Plano Diário Excluído com Sucesso.");
+      redirectWithFeedback(
+        returnTo,
+        "success",
+        "Item do Plano Diário Excluído com Sucesso.",
+        ["editAreaId"]
+      );
     }
 
     await prisma.$transaction(async (tx) => {
@@ -859,7 +899,8 @@ export async function deleteDailyItemConfigAction(formData: FormData) {
     redirectWithFeedback(
       returnTo,
       "success",
-      "Este item possui histórico. Para preservar a auditoria, ele foi removido das rotinas futuras, mas os registros antigos permanecerão no histórico."
+      "Este item possui histórico. Para preservar a auditoria, ele foi removido das rotinas futuras, mas os registros antigos permanecerão no histórico.",
+      ["editAreaId"]
     );
   } catch (error) {
     rethrowIfRedirectError(error);

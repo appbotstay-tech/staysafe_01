@@ -421,9 +421,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
     if (dateDiff !== 0) return dateDiff;
     return a.area.localeCompare(b.area, "pt-BR");
   });
-  const visibleDetailedRecords = dataFiltro
-    ? areaSummaries.flatMap((summary) => summary.records)
-    : registros;
   const openedSummary =
     openData && openArea
       ? areaSummaries.find(
@@ -561,7 +558,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Registros Automáticos do Dia
+          Áreas do Dia
         </h2>
 
         {isColaborador ? (
@@ -651,40 +648,38 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           </form>
         )}
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <tr>
-                <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">Área</th>
-                <th className="px-3 py-2">Itens assinados</th>
-                <th className="px-3 py-2">Status da área</th>
-                <th className="px-3 py-2">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {areaSummaries.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhuma área diária encontrada.
-                  </td>
-                </tr>
-              ) : (
-                areaSummaries.map((summary) => {
-                  const q = new URLSearchParams(paramsRetorno);
-                  q.set("openData", formatDateInput(summary.data));
-                  q.set("openArea", summary.area);
+        {areaSummaries.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            Nenhuma área diária encontrada.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-3 md:hidden">
+              {areaSummaries.map((summary) => {
+                const q = new URLSearchParams(paramsRetorno);
+                q.set("openData", formatDateInput(summary.data));
+                q.set("openArea", summary.area);
 
-                  return (
-                    <tr key={summary.key}>
-                      <td className="px-3 py-2">{formatDateDisplay(summary.data)}</td>
-                      <td className="px-3 py-2">{summary.area}</td>
-                      <td className="px-3 py-2">
-                        {summary.totalItems > 0
-                          ? `${summary.signedItems} de ${summary.totalItems}`
-                          : "Sem itens cadastrados"}
-                      </td>
-                      <td className="px-3 py-2">
+                return (
+                  <article
+                    key={summary.key}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          {formatDateDisplay(summary.data)}
+                        </p>
+                        <p className="mt-1 break-words text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {summary.area}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <span>
+                          {summary.totalItems > 0
+                            ? `${summary.signedItems} de ${summary.totalItems} assinados`
+                            : "Sem itens cadastrados"}
+                        </span>
                         {summary.status === "Sem itens cadastrados" ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             Sem itens cadastrados
@@ -692,105 +687,64 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                         ) : (
                           <StatusBadge status={summary.status} />
                         )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Link href={buildPathWithParams(q)} scroll={false} className="btn-action">
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                      </div>
+                      <Link href={buildPathWithParams(q)} scroll={false} className="btn-action">
+                        Abrir
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
 
-        <h3 className="mt-6 text-base font-semibold text-slate-900 dark:text-slate-100">
-          Registros detalhados
-        </h3>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <tr>
-                <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">Área</th>
-                <th className="px-3 py-2">Item/local</th>
-                <th className="px-3 py-2">Responsável pela Limpeza</th>
-                <th className="px-3 py-2">Supervisor</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {visibleDetailedRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
-              ) : (
-                visibleDetailedRecords.map((registro) => {
-                  const periodo = getMonthYear(registro.data);
-                  const bloqueado = fechadosSet.has(periodKey(periodo.mes, periodo.ano));
-                  const etapa = getDailySignStage(registro);
-                  const supervisorMesmoExecutor =
-                    etapa === "supervisor" &&
-                    ((usuarioLogadoId !== null &&
-                      registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
-                      (!registro.assinaturaResponsavelUsuarioId &&
-                        registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
-                  const detalhamentoLimpeza = detalhamentoPorArea.get(registro.area);
-                  const hrefAssinar = (() => {
+            <div className="mt-4 hidden overflow-x-auto md:block">
+              <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2">Data</th>
+                    <th className="px-3 py-2">Área</th>
+                    <th className="px-3 py-2">Itens assinados</th>
+                    <th className="px-3 py-2">Status da área</th>
+                    <th className="px-3 py-2">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {areaSummaries.map((summary) => {
                     const q = new URLSearchParams(paramsRetorno);
-                    q.set("signId", String(registro.id));
-                    return buildPathWithParams(q);
-                  })();
+                    q.set("openData", formatDateInput(summary.data));
+                    q.set("openArea", summary.area);
 
-                  return (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">
-                        <p className="font-medium text-slate-900 dark:text-slate-100">
-                          {registro.area}
-                        </p>
-                        {detalhamentoLimpeza ? (
-                          <p className="mt-1 max-w-md whitespace-pre-line break-words text-xs text-slate-600 dark:text-slate-300">
-                            <strong>O que deve ser limpo:</strong> {detalhamentoLimpeza}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2">{getDailyItemDescription(registro)}</td>
-                      <td className="px-3 py-2">{registro.assinaturaResponsavel || "-"}</td>
-                      <td className="px-3 py-2">{registro.assinaturaSupervisor || "-"}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={registro.status} />
-                      </td>
-                      <td className="px-3 py-2">
-                        {bloqueado ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
-                        ) : supervisorMesmoExecutor ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Outro supervisor
-                          </span>
-                        ) : etapa ? (
-                          <Link href={hrefAssinar} scroll={false} className="btn-action">
-                            Assinar
+                    return (
+                      <tr key={summary.key}>
+                        <td className="px-3 py-2">{formatDateDisplay(summary.data)}</td>
+                        <td className="px-3 py-2">{summary.area}</td>
+                        <td className="px-3 py-2">
+                          {summary.totalItems > 0
+                            ? `${summary.signedItems} de ${summary.totalItems}`
+                            : "Sem itens cadastrados"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {summary.status === "Sem itens cadastrados" ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Sem itens cadastrados
+                            </span>
+                          ) : (
+                            <StatusBadge status={summary.status} />
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Link href={buildPathWithParams(q)} scroll={false} className="btn-action">
+                            Abrir
                           </Link>
-                        ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Sem Ação
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
       {podeVerGestao ? (
