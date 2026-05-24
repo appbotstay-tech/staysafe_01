@@ -179,8 +179,7 @@ export default async function ExecucaoServicoBuffetPage({
       const item = vinculo.item;
       const registro = registrosByItemId.get(item.id) ?? null;
       const bloqueado = fechamentoAssinado || registro?.status === "ASSINADO";
-      const temperaturaAmbiente =
-        registro?.temperaturaAmbiente ?? item.classificacao === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
+      const temperaturaAmbiente = registro?.temperaturaAmbiente ?? false;
       const avaliacao =
         !temperaturaAmbiente &&
         registro?.primeiraTc !== null &&
@@ -217,9 +216,7 @@ export default async function ExecucaoServicoBuffetPage({
       };
     }),
     ...registrosExtras.map((registro) => {
-      const temperaturaAmbiente =
-        registro.temperaturaAmbiente ||
-        registro.classificacao === ClassificacaoItemBuffetAmostra.TEMPERATURA_AMBIENTE;
+      const temperaturaAmbiente = registro.temperaturaAmbiente;
       const avaliacao =
         !temperaturaAmbiente &&
         registro.primeiraTc !== null &&

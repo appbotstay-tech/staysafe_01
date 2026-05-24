@@ -383,7 +383,8 @@ function getRegistroItemIssue(
     input.tcEquipamentoInput,
     input.primeiraTcInput,
     input.acaoCorretivaInput,
-    input.observacao
+    input.observacao,
+    temperaturaAmbiente ? "Ambiente" : ""
   ];
   const hasAnyValue = values.some((value) => value.trim().length > 0);
 

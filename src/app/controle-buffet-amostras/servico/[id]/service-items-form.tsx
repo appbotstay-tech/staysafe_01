@@ -100,6 +100,18 @@ function parseTemperatureInput(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getTemperatureTypeDefault(row: ServiceItemFormRow): "" | "NUMERICA" | "AMBIENTE" {
+  if (row.temperaturaAmbiente) {
+    return "AMBIENTE";
+  }
+
+  if (row.tcEquipamento || row.primeiraTc) {
+    return "NUMERICA";
+  }
+
+  return "";
+}
+
 function AddExtraItemModal({
   servicoId,
   dataInput,
@@ -477,7 +489,7 @@ export function ServiceItemsForm({
                     Temperatura do item
                     <select
                       name={`${row.rowKey}-temperaturaTipo`}
-                      defaultValue={row.temperaturaAmbiente ? "AMBIENTE" : "NUMERICA"}
+                      defaultValue={getTemperatureTypeDefault(row)}
                       className={inputClassName}
                       disabled={row.bloqueado}
                       onChange={(event) =>
@@ -487,6 +499,7 @@ export function ServiceItemsForm({
                         }))
                       }
                     >
+                      <option value="">Selecione</option>
                       <option value="NUMERICA">Numérica</option>
                       <option value="AMBIENTE">Ambiente</option>
                     </select>

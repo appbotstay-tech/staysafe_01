@@ -9,7 +9,7 @@ import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
-import { ActionModal, ModalActions } from "@/components/ui/action-modal";
+import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -23,12 +23,12 @@ import {
 import {
   closeMonthAction,
   deleteNoteAction,
-  importXmlAction,
   reopenMonthAction
 } from "./actions";
 import { DeleteNoteModal } from "./delete-note-modal";
 import { RECEBIMENTO_ORIENTACOES } from "./options";
 import { ReopenMonthModal } from "./reopen-month-modal";
+import { XmlImportForm } from "./xml-import-form";
 import {
   formatDateDisplay,
   formatDateTimeDisplay,
@@ -501,27 +501,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
               {modalError}
             </p>
           ) : null}
-          <form action={importXmlAction} className="mt-4 grid gap-4">
-            <input type="hidden" name="returnTo" value={importXmlHref} />
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              XML da Nota Fiscal (ADM)
-              <input
-                type="file"
-                name="xmlFile"
-                accept=".xml,text/xml,application/xml"
-                required
-                className={`${INPUT_CLASS} file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 dark:file:bg-slate-700 dark:file:text-slate-100`}
-              />
-            </label>
-            <ModalActions>
-              <Link href={returnTo} className="btn-secondary text-center">
-                Cancelar
-              </Link>
-              <button type="submit" className="btn-primary">
-                Importar XML
-              </button>
-            </ModalActions>
-          </form>
+          <XmlImportForm returnTo={importXmlHref} cancelHref={returnTo} />
         </ActionModal>
       ) : null}
 
