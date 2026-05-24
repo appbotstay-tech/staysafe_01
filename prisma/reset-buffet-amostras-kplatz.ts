@@ -1,3 +1,6 @@
+// ATENÇÃO: script destrutivo específico da carga K-Platz para buffet/amostras.
+// Pode apagar e recriar cadastros base desse módulo. Execute manualmente apenas
+// com BPMA_CONFIRM_RESET_BUFFET=SIM; não vincule a build, deploy, seed ou start.
 require("dotenv/config");
 
 const { ClassificacaoItemBuffetAmostra, PrismaClient } = require("@prisma/client");

@@ -1,3 +1,6 @@
+// Script seguro para limpeza operacional geral.
+// Remove somente históricos/registros executados e preserva cadastros base,
+// usuários, documentos, opções e configurações dos módulos.
 import "dotenv/config";
 
 import { Prisma, PrismaClient } from "@prisma/client";

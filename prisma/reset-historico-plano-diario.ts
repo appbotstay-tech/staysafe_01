@@ -1,3 +1,6 @@
+// Script destrutivo restrito ao histórico do Plano Diário.
+// Remove execuções, fechamentos e logs operacionais, preservando áreas e
+// itens/locais cadastrados para rotinas futuras.
 import "dotenv/config";
 
 import { PrismaClient, TipoPlanoLimpeza } from "@prisma/client";

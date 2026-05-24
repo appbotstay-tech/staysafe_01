@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+.npm-cache/
 
 # next.js
 /.next
@@ -7,6 +8,11 @@
 
 # production
 /build
+.vercel/
+.turbo/
+.cache/
+coverage/
+*.tsbuildinfo
 
 # logs
 npm-debug.log*

@@ -1,3 +1,6 @@
+// ATENÇÃO: script destrutivo de início de operação K-Platz.
+// Limpa dados de teste e recria cadastros oficiais do cliente, incluindo bases.
+// Execute manualmente apenas com BPMA_CONFIRM_RESET_KPLATZ=SIM.
 import "dotenv/config";
 
 import { ClassificacaoItemBuffetAmostra, PrismaClient } from "@prisma/client";
