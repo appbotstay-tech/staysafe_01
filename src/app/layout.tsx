@@ -48,7 +48,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
             {children}
           </main>
         ) : (
-          <div className="min-h-screen md:flex">
+          <div className="min-h-screen 2xl:flex">
             <Sidebar
               modules={modules}
               userName={user.nomeCompleto}

@@ -53,6 +53,7 @@ export function Sidebar({
         <Link
           href={module.href}
           className={`bpma-sidebar-link ${isActive ? "bpma-sidebar-link-active" : ""}`}
+          onClick={() => setMobileMenuOpen(false)}
         >
           {module.name}
         </Link>
@@ -69,6 +70,7 @@ export function Sidebar({
             ? "bpma-sidebar-link-active"
             : ""
         }`}
+        onClick={() => setMobileMenuOpen(false)}
       >
         Gestão de Usuários
       </Link>
@@ -84,6 +86,7 @@ export function Sidebar({
             ? "bpma-sidebar-link-active"
             : ""
         }`}
+        onClick={() => setMobileMenuOpen(false)}
       >
         Solicitações de Senha
       </Link>
@@ -92,7 +95,7 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="bpma-sidebar w-full shrink-0 border-b md:hidden">
+      <aside className="bpma-sidebar w-full shrink-0 border-b 2xl:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <Link href="/" className="block truncate text-base font-bold text-slate-900 dark:text-slate-100">
@@ -106,16 +109,33 @@ export function Sidebar({
             type="button"
             onClick={() => setMobileMenuOpen((current) => !current)}
             className="btn-secondary min-h-11 min-w-11 px-3"
+            aria-label={mobileMenuOpen ? "Fechar menu lateral" : "Abrir menu lateral"}
             aria-expanded={mobileMenuOpen}
             aria-controls="bpma-mobile-sidebar-drawer"
           >
-            {mobileMenuOpen ? "Fechar" : "Menu"}
+            <span className="relative block h-4 w-5" aria-hidden="true">
+              <span
+                className={`absolute left-0 top-0 h-0.5 w-5 rounded-full bg-current transition-transform ${
+                  mobileMenuOpen ? "translate-y-[7px] rotate-45" : ""
+                }`}
+              />
+              <span
+                className={`absolute left-0 top-[7px] h-0.5 w-5 rounded-full bg-current transition-opacity ${
+                  mobileMenuOpen ? "opacity-0" : ""
+                }`}
+              />
+              <span
+                className={`absolute bottom-0 left-0 h-0.5 w-5 rounded-full bg-current transition-transform ${
+                  mobileMenuOpen ? "-translate-y-[7px] -rotate-45" : ""
+                }`}
+              />
+            </span>
           </button>
         </div>
       </aside>
 
       {mobileMenuOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-[70] 2xl:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/50"
@@ -127,12 +147,31 @@ export function Sidebar({
             className="bpma-sidebar absolute inset-y-0 left-0 w-[86%] max-w-xs overflow-y-auto border-r shadow-xl"
           >
             <div className="p-4">
-              <Link href="/" className="block text-lg font-bold text-slate-900 dark:text-slate-100">
-                {APP_NAME}
-              </Link>
-              <p className="mt-1 text-xs leading-4 text-slate-500 dark:text-slate-300">
-                {APP_DESCRIPTION}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link
+                    href="/"
+                    className="block text-lg font-bold text-slate-900 dark:text-slate-100"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {APP_NAME}
+                  </Link>
+                  <p className="mt-1 text-xs leading-4 text-slate-500 dark:text-slate-300">
+                    {APP_DESCRIPTION}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary min-h-11 min-w-11 shrink-0 px-3"
+                  aria-label="Fechar menu lateral"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <span className="relative block h-4 w-4" aria-hidden="true">
+                    <span className="absolute left-0 top-1/2 h-0.5 w-4 -translate-y-1/2 rotate-45 rounded-full bg-current" />
+                    <span className="absolute left-0 top-1/2 h-0.5 w-4 -translate-y-1/2 -rotate-45 rounded-full bg-current" />
+                  </span>
+                </button>
+              </div>
               <div className="bpma-sidebar-user mt-3 rounded-lg px-3 py-2 text-xs">
                 <p className="font-semibold text-slate-800 dark:text-slate-100">{userName}</p>
                 <p className="text-slate-600 dark:text-slate-300">{userRoleLabel}</p>
@@ -158,7 +197,7 @@ export function Sidebar({
         </div>
       ) : null}
 
-      <aside className="bpma-sidebar hidden w-80 shrink-0 border-r md:min-h-screen md:block">
+      <aside className="bpma-sidebar hidden w-80 shrink-0 border-r 2xl:block 2xl:min-h-screen">
         <div className="p-6">
           <Link href="/" className="block text-xl font-bold text-slate-900 dark:text-slate-100">
             {APP_NAME}
