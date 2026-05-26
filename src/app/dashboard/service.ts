@@ -795,7 +795,6 @@ async function buildDailyCleaningStats(
         id: true,
         data: true,
         area: true,
-        turno: true,
         itemId: true,
         itemDescricao: true,
         assinaturaResponsavel: true,
@@ -2149,7 +2148,6 @@ async function buildNonConformitySummary(params: {
     prisma.planoLimpezaDiarioRegistro.findMany({
       where: {
         data: { gte: params.ranges.openPendencies.start, lte: params.ranges.daily.end },
-        status: { not: StatusPlanoLimpeza.CONCLUIDO },
         itemId: { not: null },
         item: {
           is: {
@@ -2163,6 +2161,7 @@ async function buildNonConformitySummary(params: {
         id: true,
         data: true,
         area: true,
+        itemId: true,
         itemDescricao: true,
         status: true,
         assinaturaResponsavel: true,
@@ -2227,6 +2226,34 @@ async function buildNonConformitySummary(params: {
   const limpezasSemanaisAtivas = limpezasSemanais.filter((record) =>
     activeWeeklyAreaNames.has(record.area)
   );
+  const limpezasDiariasPorItem = new Map<string, (typeof limpezasDiarias)[number]>();
+
+  for (const record of limpezasDiarias) {
+    if (!record.itemId) {
+      continue;
+    }
+
+    const key = `${dateOnlyKey(record.data)}|${record.itemId}`;
+    const current = limpezasDiariasPorItem.get(key);
+    const currentSigned = Boolean(current?.assinaturaResponsavel.trim());
+    const candidateSigned = Boolean(record.assinaturaResponsavel.trim());
+
+    if (
+      !current ||
+      (candidateSigned && !currentSigned) ||
+      (candidateSigned === currentSigned &&
+        record.updatedAt.getTime() > current.updatedAt.getTime())
+    ) {
+      limpezasDiariasPorItem.set(key, record);
+    }
+  }
+
+  const limpezasDiariasPendentes = Array.from(limpezasDiariasPorItem.values())
+    .filter((record) => record.status !== StatusPlanoLimpeza.CONCLUIDO)
+    .sort((a, b) => {
+      const dateDiff = a.data.getTime() - b.data.getTime();
+      return dateDiff !== 0 ? dateDiff : b.updatedAt.getTime() - a.updatedAt.getTime();
+    });
 
   for (const record of temperaturasNaoConformes) {
     const hasEvidence = Boolean(record.fotoBase64 && record.fotoMimeType);
@@ -2347,7 +2374,7 @@ async function buildNonConformitySummary(params: {
     });
   }
 
-  for (const record of limpezasDiarias) {
+  for (const record of limpezasDiariasPendentes) {
     addInsightItem(summary, {
       id: `nc-limpeza-diaria:${record.id}`,
       moduleId: MODULES.limpezaDiaria.id,
