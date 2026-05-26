@@ -5,6 +5,7 @@ import {
   StatusChamadoManutencao,
   StatusItemBuffetAmostra,
   StatusNotaRecebimento,
+  StatusOperacionalEquipamento,
   StatusPlanoLimpeza,
   StatusQualidadeOleo,
   StatusRecebimento,
@@ -605,6 +606,26 @@ function temperatureStatusLabel(status: StatusTemperaturaEquipamento): Dashboard
   return status === StatusTemperaturaEquipamento.CONFORME ? "Concluído" : "Não conformidade";
 }
 
+function temperatureOperationalStatusLabel(
+  status: StatusOperacionalEquipamento
+): string {
+  if (status === StatusOperacionalEquipamento.MANUTENCAO) {
+    return "Manutenção";
+  }
+
+  if (status === StatusOperacionalEquipamento.INATIVO) {
+    return "Inativo";
+  }
+
+  return "Em Operação";
+}
+
+function isOperationalTemperatureRecord(record: {
+  statusOperacionalEquipamento: StatusOperacionalEquipamento;
+}): boolean {
+  return record.statusOperacionalEquipamento === StatusOperacionalEquipamento.EM_OPERACAO;
+}
+
 function oilStatusLabel(status: StatusQualidadeOleo): DashboardNormalizedStatus {
   if (
     status === StatusQualidadeOleo.DESCARTAR ||
@@ -903,6 +924,7 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
         data: true,
         equipamento: true,
         turno: true,
+        statusOperacionalEquipamento: true,
         status: true,
         responsavel: true,
         createdAt: true
@@ -951,16 +973,18 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
           continue;
         }
 
+        const recordOperational = isOperationalTemperatureRecord(record);
         addCompleted(stats, {
           id: `${moduleInfo.id}:${record.id}`,
           moduleId: moduleInfo.id,
           moduleName: moduleInfo.name,
           title: `${record.equipamento} | ${temperatureShiftLabel(record.turno)}`,
-          description:
-            record.status === StatusTemperaturaEquipamento.CONFORME
+          description: recordOperational
+            ? record.status === StatusTemperaturaEquipamento.CONFORME
               ? "Temperatura registrada dentro da faixa."
-              : "Temperatura registrada com ação corretiva.",
-          status: temperatureStatusLabel(record.status),
+              : "Temperatura registrada com ação corretiva."
+            : `Registro justificado: ${temperatureOperationalStatusLabel(record.statusOperacionalEquipamento)}.`,
+          status: recordOperational ? temperatureStatusLabel(record.status) : "Concluído",
           responsible: record.responsavel,
           dateTime: formatDateTimeDisplay(record.createdAt),
           href
@@ -975,13 +999,16 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
       continue;
     }
 
+    const recordOperational = isOperationalTemperatureRecord(record);
     addCompleted(stats, {
       id: `${moduleInfo.id}:${record.id}`,
       moduleId: moduleInfo.id,
       moduleName: moduleInfo.name,
       title: `${record.equipamento} | ${temperatureShiftLabel(record.turno)}`,
-      description: "Registro existente fora do catálogo ativo atual.",
-      status: temperatureStatusLabel(record.status),
+      description: recordOperational
+        ? "Registro existente fora do catálogo ativo atual."
+        : `Registro justificado fora do catálogo ativo atual: ${temperatureOperationalStatusLabel(record.statusOperacionalEquipamento)}.`,
+      status: recordOperational ? temperatureStatusLabel(record.status) : "Concluído",
       responsible: record.responsavel,
       dateTime: formatDateTimeDisplay(record.createdAt),
       href: `${moduleInfo.href}?filtroData=${formatDateInput(record.data)}`
@@ -2041,6 +2068,7 @@ async function buildNonConformitySummary(params: {
         data: true,
         equipamento: true,
         turno: true,
+        statusOperacionalEquipamento: true,
         status: true,
         acaoCorretiva: true,
         fotoBase64: true,
@@ -2218,7 +2246,9 @@ async function buildNonConformitySummary(params: {
     })
   ]);
   const temperaturasNaoConformes = dedupeTemperatureMeasurements(temperaturas).filter(
-    (record) => record.status !== StatusTemperaturaEquipamento.CONFORME
+    (record) =>
+      isOperationalTemperatureRecord(record) &&
+      record.status !== StatusTemperaturaEquipamento.CONFORME
   );
   const activeWeeklyAreaNames = new Set(
     weeklyAreasForDashboard.map((area) => area.nome)
@@ -2450,6 +2480,7 @@ async function buildCorrectiveActionsSummary(params: {
         data: true,
         equipamento: true,
         turno: true,
+        statusOperacionalEquipamento: true,
         status: true,
         acaoCorretiva: true,
         fotoBase64: true,
@@ -2508,6 +2539,7 @@ async function buildCorrectiveActionsSummary(params: {
 
   const temperaturasComAcao = dedupeTemperatureMeasurements(temperaturas).filter(
     (record) =>
+      isOperationalTemperatureRecord(record) &&
       record.status !== StatusTemperaturaEquipamento.CONFORME &&
       hasUsefulText(record.acaoCorretiva)
   );

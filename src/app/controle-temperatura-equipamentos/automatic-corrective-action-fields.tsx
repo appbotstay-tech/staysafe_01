@@ -7,9 +7,12 @@ import { normalizeOption } from "./options";
 import {
   CategoriaTemperatura,
   findMatchingTemperatureRule,
+  getOperationalStatusLabel,
   getStatusLabel,
+  isOperationalTemperatureStatus,
   parseTemperatureInput,
-  RegraTemperaturaCategoria
+  RegraTemperaturaCategoria,
+  StatusOperacionalTemperatura
 } from "./utils";
 
 type EquipamentoCategoria = {
@@ -35,8 +38,18 @@ type AutomaticCorrectiveActionFieldsProps = {
   defaultEquipamento?: string;
   defaultTemperatura?: string;
   defaultAcaoCorretiva?: string | null;
+  defaultStatusOperacional?: StatusOperacionalTemperatura;
   inputClassName: string;
 };
+
+const STATUS_OPERACIONAL_OPTIONS: Array<{
+  value: StatusOperacionalTemperatura;
+  label: string;
+}> = [
+  { value: "EM_OPERACAO", label: "Em Operação" },
+  { value: "MANUTENCAO", label: "Manutenção" },
+  { value: "INATIVO", label: "Inativo" }
+];
 
 export function AutomaticCorrectiveActionFields({
   equipamentoOptions,
@@ -46,11 +59,15 @@ export function AutomaticCorrectiveActionFields({
   defaultEquipamento = "",
   defaultTemperatura = "",
   defaultAcaoCorretiva = null,
+  defaultStatusOperacional = "EM_OPERACAO",
   inputClassName
 }: AutomaticCorrectiveActionFieldsProps) {
   const statusInputRef = useRef<HTMLInputElement | null>(null);
   const [equipamentoSelecionado, setEquipamentoSelecionado] = useState(defaultEquipamento);
   const [temperaturaInput, setTemperaturaInput] = useState(defaultTemperatura);
+  const [statusOperacional, setStatusOperacional] =
+    useState<StatusOperacionalTemperatura>(defaultStatusOperacional);
+  const equipamentoEmOperacao = isOperationalTemperatureStatus(statusOperacional);
 
   const categoriaPorEquipamento = useMemo(() => {
     const map = new Map<string, CategoriaTemperatura>();
@@ -75,6 +92,14 @@ export function AutomaticCorrectiveActionFields({
   }, [regrasCategoria]);
 
   const avaliacao = useMemo(() => {
+    if (!equipamentoEmOperacao) {
+      return {
+        statusValue: "",
+        statusLabel: "",
+        acaoCorretiva: ""
+      };
+    }
+
     const categoria = categoriaPorEquipamento.get(equipamentoSelecionado);
     const temperatura = parseTemperatureInput(temperaturaInput);
 
@@ -105,6 +130,7 @@ export function AutomaticCorrectiveActionFields({
   }, [
     categoriaPorEquipamento,
     defaultAcaoCorretiva,
+    equipamentoEmOperacao,
     equipamentoSelecionado,
     regrasPorCategoria,
     temperaturaInput
@@ -207,20 +233,55 @@ export function AutomaticCorrectiveActionFields({
       </label>
 
       <label className="text-sm text-slate-700 dark:text-slate-200">
-        Temperatura Aferida (°C) *
-        <input
-          type="text"
-          name="temperaturaAferida"
+        Status do equipamento *
+        <select
+          name="statusOperacionalEquipamento"
+          value={statusOperacional}
           required
-          inputMode="text"
-          placeholder="Ex.: 4,0"
-          defaultValue={defaultTemperatura}
           className={inputClassName}
           onChange={(event) => {
-            setTemperaturaInput(event.target.value);
+            const nextStatus = event.target.value as StatusOperacionalTemperatura;
+            setStatusOperacional(nextStatus);
+
+            if (!isOperationalTemperatureStatus(nextStatus)) {
+              setTemperaturaInput("");
+            }
           }}
-        />
+        >
+          {STATUS_OPERACIONAL_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </label>
+
+      {equipamentoEmOperacao ? (
+        <label className="text-sm text-slate-700 dark:text-slate-200">
+          Temperatura Aferida (°C) *
+          <input
+            type="text"
+            name="temperaturaAferida"
+            required
+            inputMode="text"
+            placeholder="Ex.: 4,0"
+            value={temperaturaInput}
+            className={inputClassName}
+            onChange={(event) => {
+              setTemperaturaInput(event.target.value);
+            }}
+          />
+        </label>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <p className="font-medium text-slate-800 dark:text-slate-100">
+            Temperatura: Não aplicável
+          </p>
+          <p className="mt-1 text-xs">
+            Quando o equipamento está em manutenção ou inativo, a aferição de temperatura não é necessária para este registro.
+          </p>
+        </div>
+      )}
 
       <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
         Ação Corretiva (Automática)
@@ -234,13 +295,15 @@ export function AutomaticCorrectiveActionFields({
         <input type="hidden" name="acaoCorretiva" value={avaliacao.acaoCorretiva} readOnly />
         <input
           type="text"
-          value={avaliacao.acaoCorretiva}
+          value={equipamentoEmOperacao ? avaliacao.acaoCorretiva : "Não aplicável"}
           readOnly
           className={`${inputClassName} cursor-not-allowed bg-slate-100 dark:bg-slate-700`}
           placeholder="Será preenchida automaticamente"
         />
         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-          {avaliacao.statusLabel
+          {!equipamentoEmOperacao
+            ? `Status operacional: ${getOperationalStatusLabel(statusOperacional)}. O equipamento não será considerado pendente neste registro.`
+            : avaliacao.statusLabel
             ? `Status calculado automaticamente: ${avaliacao.statusLabel}.`
             : "Preencha equipamento e temperatura para calcular automaticamente."}
         </span>

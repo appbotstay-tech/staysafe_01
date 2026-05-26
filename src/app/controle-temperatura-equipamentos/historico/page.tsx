@@ -1,5 +1,6 @@
 import {
   Prisma,
+  StatusOperacionalEquipamento,
   StatusTemperaturaEquipamento
 } from "@prisma/client";
 import Link from "next/link";
@@ -12,8 +13,10 @@ import {
   formatDateDisplay,
   formatTemperatureDisplay,
   getMonthDateRange,
+  getOperationalStatusLabel,
   getShiftLabel,
   getYearDateRange,
+  isOperationalTemperatureStatus,
   parseDateInput,
   parsePositiveInt
 } from "../utils";
@@ -97,6 +100,7 @@ export default async function ControleTemperaturaHistoricoPage({
 
   if (filtroStatus) {
     where.status = filtroStatus;
+    where.statusOperacionalEquipamento = StatusOperacionalEquipamento.EM_OPERACAO;
   }
 
   if (filtroResponsavel) {
@@ -227,6 +231,7 @@ export default async function ControleTemperaturaHistoricoPage({
                 <th className="px-3 py-2">Data</th>
                 <th className="px-3 py-2">Equipamento</th>
                 <th className="px-3 py-2">Turno</th>
+                <th className="px-3 py-2">Status operacional</th>
                 <th className="px-3 py-2">Temperatura</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 min-w-52">Ação Corretiva</th>
@@ -238,36 +243,55 @@ export default async function ControleTemperaturaHistoricoPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={9}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={10}>
                     Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
-                registros.map((registro) => (
-                  <tr key={registro.id}>
-                    <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                    <td className="px-3 py-2">{registro.equipamento}</td>
-                    <td className="px-3 py-2">{getShiftLabel(registro.turno)}</td>
-                    <td className="px-3 py-2">{formatTemperatureDisplay(registro.temperaturaAferida)}</td>
-                    <td className="px-3 py-2">
-                      <TemperatureStatusBadge status={registro.status} />
-                    </td>
-                    <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                      {registro.acaoCorretiva ?? "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {getImageDataUrl(registro.fotoMimeType, registro.fotoBase64) ? (
-                        <span className="text-xs text-slate-600 dark:text-slate-300">
-                          Foto Anexada
-                        </span>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{registro.responsavel}</td>
-                    <td className="px-3 py-2">{registro.observacoes ?? "-"}</td>
-                  </tr>
-                ))
+                registros.map((registro) => {
+                  const registroEmOperacao = isOperationalTemperatureStatus(
+                    registro.statusOperacionalEquipamento
+                  );
+                  const observacaoRegistro = registroEmOperacao
+                    ? registro.observacoes
+                    : registro.observacaoStatusOperacional;
+
+                  return (
+                    <tr key={registro.id}>
+                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
+                      <td className="px-3 py-2">{registro.equipamento}</td>
+                      <td className="px-3 py-2">{getShiftLabel(registro.turno)}</td>
+                      <td className="px-3 py-2">
+                        {getOperationalStatusLabel(registro.statusOperacionalEquipamento)}
+                      </td>
+                      <td className="px-3 py-2">{formatTemperatureDisplay(registro.temperaturaAferida)}</td>
+                      <td className="px-3 py-2">
+                        {registroEmOperacao ? (
+                          <TemperatureStatusBadge status={registro.status} />
+                        ) : (
+                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            Não aplicável
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
+                        {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {registroEmOperacao &&
+                        getImageDataUrl(registro.fotoMimeType, registro.fotoBase64) ? (
+                          <span className="text-xs text-slate-600 dark:text-slate-300">
+                            Foto Anexada
+                          </span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{registro.responsavel}</td>
+                      <td className="px-3 py-2">{observacaoRegistro?.trim() || "-"}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

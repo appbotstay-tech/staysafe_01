@@ -2,6 +2,7 @@ import {
   ModuloDocumento,
   Prisma,
   StatusFechamentoTemperaturaEquipamento,
+  StatusOperacionalEquipamento,
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento,
   TurnoTemperaturaEquipamento,
@@ -42,9 +43,11 @@ import {
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
+  getOperationalStatusLabel,
   getShiftLabel,
   getTodaySystemDate,
   getYearDateRange,
+  isOperationalTemperatureStatus,
   parseDateInput,
   parsePositiveInt,
   periodKey
@@ -81,6 +84,7 @@ type DailyClosingSummary = {
   normais: number;
   alertas: number;
   criticas: number;
+  justificados: number;
   acoesCorretivas: number;
   fotosAnexadas: number;
   responsaveis: string[];
@@ -136,6 +140,10 @@ function summarizeResponsaveis(values: string[]): string {
   }
 
   return `${uniqueValues.slice(0, 2).join(", ")} +${uniqueValues.length - 2}`;
+}
+
+function isOperationalRecord(registro: ControleTemperaturaEquipamento): boolean {
+  return isOperationalTemperatureStatus(registro.statusOperacionalEquipamento);
 }
 
 function getDailyClosingStatus(summary: {
@@ -205,19 +213,21 @@ function buildDailyClosingSummaries(
 
   return Array.from(grouped.entries()).map(([key, dayRecords]) => {
     const total = dayRecords.length;
-    const normais = dayRecords.filter(
+    const operationalRecords = dayRecords.filter(isOperationalRecord);
+    const justificados = total - operationalRecords.length;
+    const normais = operationalRecords.filter(
       (registro) => registro.status === StatusTemperaturaEquipamento.CONFORME
     ).length;
-    const alertas = dayRecords.filter(
+    const alertas = operationalRecords.filter(
       (registro) => registro.status === StatusTemperaturaEquipamento.ALERTA
     ).length;
-    const criticas = dayRecords.filter(
+    const criticas = operationalRecords.filter(
       (registro) => registro.status === StatusTemperaturaEquipamento.CRITICO
     ).length;
-    const acoesCorretivas = dayRecords.filter((registro) =>
+    const acoesCorretivas = operationalRecords.filter((registro) =>
       hasUsefulText(registro.acaoCorretiva)
     ).length;
-    const fotosAnexadas = dayRecords.filter(
+    const fotosAnexadas = operationalRecords.filter(
       (registro) => registro.fotoMimeType && registro.fotoBase64
     ).length;
     const responsaveis = dayRecords.map((registro) => registro.responsavel);
@@ -231,6 +241,7 @@ function buildDailyClosingSummaries(
       normais,
       alertas,
       criticas,
+      justificados,
       acoesCorretivas,
       fotosAnexadas,
       responsaveis,
@@ -298,6 +309,7 @@ export default async function ControleTemperaturaEquipamentosPage({
 
   if (filtroStatus) {
     where.status = filtroStatus;
+    where.statusOperacionalEquipamento = StatusOperacionalEquipamento.EM_OPERACAO;
   }
 
   if (filtroResponsavel) {
@@ -511,6 +523,7 @@ export default async function ControleTemperaturaEquipamentosPage({
       normais: summary.normais + dia.normais,
       alertas: summary.alertas + dia.alertas,
       criticas: summary.criticas + dia.criticas,
+      justificados: summary.justificados + dia.justificados,
       acoesCorretivas: summary.acoesCorretivas + dia.acoesCorretivas,
       fotosAnexadas: summary.fotosAnexadas + dia.fotosAnexadas
     }),
@@ -519,6 +532,7 @@ export default async function ControleTemperaturaEquipamentosPage({
       normais: 0,
       alertas: 0,
       criticas: 0,
+      justificados: 0,
       acoesCorretivas: 0,
       fotosAnexadas: 0
     }
@@ -645,11 +659,16 @@ export default async function ControleTemperaturaEquipamentosPage({
               registrosDuplicidade={registrosDuplicidadeForm}
               defaultEquipamento={registroEmEdicao?.equipamento ?? ""}
               defaultTemperatura={
-                registroEmEdicao
+                registroEmEdicao?.temperaturaAferida !== null &&
+                registroEmEdicao?.temperaturaAferida !== undefined
                   ? String(registroEmEdicao.temperaturaAferida).replace(".", ",")
                   : ""
               }
               defaultAcaoCorretiva={registroEmEdicao?.acaoCorretiva ?? ""}
+              defaultStatusOperacional={
+                registroEmEdicao?.statusOperacionalEquipamento ??
+                StatusOperacionalEquipamento.EM_OPERACAO
+              }
               inputClassName={INPUT_CLASS}
             />
 
@@ -674,15 +693,25 @@ export default async function ControleTemperaturaEquipamentosPage({
               requiredStatusFieldName="statusCalculado"
               requiredStatusValues={["ALERTA", "CRITICO"]}
               requiredMessage="Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+              disabledStatusFieldName="statusOperacionalEquipamento"
+              disabledStatusValues={[
+                StatusOperacionalEquipamento.MANUTENCAO,
+                StatusOperacionalEquipamento.INATIVO
+              ]}
+              disabledMessage="Foto não é necessária quando o equipamento está em manutenção ou inativo."
               inputClassName={INPUT_CLASS}
             />
 
             <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
-              Observações (Opcional)
+              Observação, se necessário
               <textarea
-                name="observacoes"
+                name="observacaoStatusOperacional"
                 rows={3}
-                defaultValue={registroEmEdicao?.observacoes ?? ""}
+                defaultValue={
+                  registroEmEdicao?.observacaoStatusOperacional ??
+                  registroEmEdicao?.observacoes ??
+                  ""
+                }
                 className={INPUT_CLASS}
               />
             </label>
@@ -812,10 +841,12 @@ export default async function ControleTemperaturaEquipamentosPage({
                 <th className="px-3 py-2">Data</th>
                 <th className="px-3 py-2">Equipamento</th>
                 <th className="px-3 py-2">Turno</th>
+                <th className="px-3 py-2">Status operacional</th>
                 <th className="px-3 py-2">Temperatura</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 min-w-52">Ação Corretiva</th>
                 <th className="px-3 py-2">Foto</th>
+                <th className="px-3 py-2 min-w-44">Observação</th>
                 <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
@@ -823,7 +854,7 @@ export default async function ControleTemperaturaEquipamentosPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={9}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={11}>
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -840,20 +871,33 @@ export default async function ControleTemperaturaEquipamentosPage({
                     registro.fotoMimeType,
                     registro.fotoBase64
                   );
+                  const registroEmOperacao = isOperationalRecord(registro);
+                  const observacaoRegistro = registroEmOperacao
+                    ? registro.observacoes
+                    : registro.observacaoStatusOperacional;
                   return (
                     <tr key={registro.id}>
                       <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
                       <td className="px-3 py-2">{registro.equipamento}</td>
                       <td className="px-3 py-2">{getShiftLabel(registro.turno)}</td>
+                      <td className="px-3 py-2">
+                        {getOperationalStatusLabel(registro.statusOperacionalEquipamento)}
+                      </td>
                       <td className="px-3 py-2">{formatTemperatureDisplay(registro.temperaturaAferida)}</td>
                       <td className="px-3 py-2">
-                        <TemperatureStatusBadge status={registro.status} />
+                        {registroEmOperacao ? (
+                          <TemperatureStatusBadge status={registro.status} />
+                        ) : (
+                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            Não aplicável
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                        {registro.acaoCorretiva ?? "-"}
+                        {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {fotoDataUrl ? (
+                        {registroEmOperacao && fotoDataUrl ? (
                           <details>
                             <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200">
                               Ver Foto
@@ -868,6 +912,9 @@ export default async function ControleTemperaturaEquipamentosPage({
                         ) : (
                           "-"
                         )}
+                      </td>
+                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
+                        {observacaoRegistro?.trim() || "-"}
                       </td>
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2">
@@ -963,11 +1010,17 @@ export default async function ControleTemperaturaEquipamentosPage({
           }
           maxWidthClassName="max-w-6xl"
         >
-          <dl className="grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-6">
+          <dl className="grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-7">
             <div>
               <dt className="text-xs text-slate-500 dark:text-slate-400">Total</dt>
               <dd className="font-semibold text-slate-900 dark:text-slate-100">
                 {diaFechamentoSelecionado.total}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Justificados</dt>
+              <dd className="font-semibold text-slate-900 dark:text-slate-100">
+                {diaFechamentoSelecionado.justificados}
               </dd>
             </div>
             <div>
@@ -1008,10 +1061,12 @@ export default async function ControleTemperaturaEquipamentosPage({
                 <tr>
                   <th className="px-3 py-2">Equipamento</th>
                   <th className="px-3 py-2">Turno</th>
+                  <th className="px-3 py-2">Status operacional</th>
                   <th className="px-3 py-2">Temperatura</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2 min-w-52">Ação corretiva</th>
                   <th className="px-3 py-2">Foto/evidência</th>
+                  <th className="px-3 py-2 min-w-44">Observação</th>
                   <th className="px-3 py-2">Responsável</th>
                   <th className="px-3 py-2">Aferição</th>
                 </tr>
@@ -1022,22 +1077,35 @@ export default async function ControleTemperaturaEquipamentosPage({
                     registro.fotoMimeType,
                     registro.fotoBase64
                   );
+                  const registroEmOperacao = isOperationalRecord(registro);
+                  const observacaoRegistro = registroEmOperacao
+                    ? registro.observacoes
+                    : registro.observacaoStatusOperacional;
 
                   return (
                     <tr key={registro.id}>
                       <td className="px-3 py-2">{registro.equipamento}</td>
                       <td className="px-3 py-2">{getShiftLabel(registro.turno)}</td>
                       <td className="px-3 py-2">
+                        {getOperationalStatusLabel(registro.statusOperacionalEquipamento)}
+                      </td>
+                      <td className="px-3 py-2">
                         {formatTemperatureDisplay(registro.temperaturaAferida)}
                       </td>
                       <td className="px-3 py-2">
-                        <TemperatureStatusBadge status={registro.status} />
+                        {registroEmOperacao ? (
+                          <TemperatureStatusBadge status={registro.status} />
+                        ) : (
+                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            Não aplicável
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                        {registro.acaoCorretiva ?? "-"}
+                        {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {fotoDataUrl ? (
+                        {registroEmOperacao && fotoDataUrl ? (
                           <a
                             href={fotoDataUrl}
                             target="_blank"
@@ -1049,6 +1117,9 @@ export default async function ControleTemperaturaEquipamentosPage({
                         ) : (
                           "-"
                         )}
+                      </td>
+                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
+                        {observacaoRegistro?.trim() || "-"}
                       </td>
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2">{formatDateTimeDisplay(registro.createdAt)}</td>
@@ -1107,7 +1178,7 @@ export default async function ControleTemperaturaEquipamentosPage({
             Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} - {fechamentoAssinado ? "Assinado" : "Aberto"}
           </p>
 
-          <dl className="mb-4 grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-6">
+          <dl className="mb-4 grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-7">
             <div>
               <dt className="text-xs text-slate-500 dark:text-slate-400">Dias com aferição</dt>
               <dd className="font-semibold text-slate-900 dark:text-slate-100">
@@ -1118,6 +1189,12 @@ export default async function ControleTemperaturaEquipamentosPage({
               <dt className="text-xs text-slate-500 dark:text-slate-400">Total de aferições</dt>
               <dd className="font-semibold text-slate-900 dark:text-slate-100">
                 {resumoConsolidadoFechamento.total}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Justificados</dt>
+              <dd className="font-semibold text-slate-900 dark:text-slate-100">
+                {resumoConsolidadoFechamento.justificados}
               </dd>
             </div>
             <div>
@@ -1152,6 +1229,7 @@ export default async function ControleTemperaturaEquipamentosPage({
                 <tr>
                   <th className="px-3 py-2">Data</th>
                   <th className="px-3 py-2">Total</th>
+                  <th className="px-3 py-2">Justificados</th>
                   <th className="px-3 py-2">Normais</th>
                   <th className="px-3 py-2">Alertas</th>
                   <th className="px-3 py-2">Críticas</th>
@@ -1165,7 +1243,7 @@ export default async function ControleTemperaturaEquipamentosPage({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {resumoDiarioFechamento.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400" colSpan={10}>
+                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400" colSpan={11}>
                       Nenhum registro no período selecionado.
                     </td>
                   </tr>
@@ -1174,6 +1252,7 @@ export default async function ControleTemperaturaEquipamentosPage({
                     <tr key={dia.key}>
                       <td className="px-3 py-2">{formatDateDisplay(dia.data)}</td>
                       <td className="px-3 py-2">{dia.total}</td>
+                      <td className="px-3 py-2">{dia.justificados}</td>
                       <td className="px-3 py-2">{dia.normais}</td>
                       <td className="px-3 py-2">{dia.alertas}</td>
                       <td className="px-3 py-2">{dia.criticas}</td>

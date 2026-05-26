@@ -2,6 +2,7 @@
 
 import {
   StatusFechamentoTemperaturaEquipamento,
+  StatusOperacionalEquipamento,
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento,
   TurnoTemperaturaEquipamento
@@ -140,9 +141,14 @@ async function isMonthSigned(mes: number, ano: number): Promise<boolean> {
 async function getRegistroPayload(formData: FormData, responsavelLogado: string) {
   const equipamentoInput = getInputValue(formData, "equipamento");
   const temperaturaAferidaInput = getInputValue(formData, "temperaturaAferida");
-  const observacoes = getInputValue(formData, "observacoes");
+  const observacaoInput =
+    getInputValue(formData, "observacaoStatusOperacional") ||
+    getInputValue(formData, "observacoes");
+  const statusOperacionalEquipamento = parseOperationalStatusValue(
+    getInputValue(formData, "statusOperacionalEquipamento")
+  );
 
-  if (!equipamentoInput || !temperaturaAferidaInput) {
+  if (!equipamentoInput) {
     throw new Error("Preencha todos os campos obrigatórios do registro.");
   }
 
@@ -161,6 +167,24 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
 
   if (!equipamentoOption.categoriaEquipamento) {
     throw new Error("O equipamento selecionado está sem categoria configurada.");
+  }
+
+  if (statusOperacionalEquipamento !== StatusOperacionalEquipamento.EM_OPERACAO) {
+    return {
+      equipamento: equipamentoOption.nome,
+      categoriaEquipamento: equipamentoOption.categoriaEquipamento,
+      statusOperacionalEquipamento,
+      temperaturaAferida: null,
+      status: StatusTemperaturaEquipamento.CONFORME,
+      acaoCorretiva: null,
+      responsavel: responsavelLogado.trim(),
+      observacoes: null,
+      observacaoStatusOperacional: observacaoInput || null
+    };
+  }
+
+  if (!temperaturaAferidaInput) {
+    throw new Error("Informe a temperatura aferida do equipamento em operação.");
   }
 
   const temperaturaAferida = parseTemperatureInput(temperaturaAferidaInput);
@@ -218,11 +242,13 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
   return {
     equipamento: equipamentoOption.nome,
     categoriaEquipamento: equipamentoOption.categoriaEquipamento,
+    statusOperacionalEquipamento,
     temperaturaAferida,
     status,
     acaoCorretiva,
     responsavel: responsavelLogado.trim(),
-    observacoes: observacoes || null
+    observacoes: observacaoInput || null,
+    observacaoStatusOperacional: null
   };
 }
 
@@ -262,6 +288,18 @@ function parseStatusValue(value: string): StatusTemperaturaEquipamento | null {
   }
 
   return null;
+}
+
+function parseOperationalStatusValue(value: string): StatusOperacionalEquipamento {
+  if (value === StatusOperacionalEquipamento.MANUTENCAO) {
+    return StatusOperacionalEquipamento.MANUTENCAO;
+  }
+
+  if (value === StatusOperacionalEquipamento.INATIVO) {
+    return StatusOperacionalEquipamento.INATIVO;
+  }
+
+  return StatusOperacionalEquipamento.EM_OPERACAO;
 }
 
 async function validateRuleOrderAvailability(
@@ -326,13 +364,16 @@ export async function createRegistroAction(formData: FormData) {
       turno
     });
 
-    const fotoDesvio = await parseImageUploadFromFormData({
-      formData,
-      key: "fotoDesvio",
-      required: isCorrectiveActionRequired(payload.status),
-      requiredMessage:
-        "Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
-    });
+    const fotoDesvio =
+      payload.statusOperacionalEquipamento === StatusOperacionalEquipamento.EM_OPERACAO
+        ? await parseImageUploadFromFormData({
+            formData,
+            key: "fotoDesvio",
+            required: isCorrectiveActionRequired(payload.status),
+            requiredMessage:
+              "Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+          })
+        : null;
 
     await prisma.controleTemperaturaEquipamento.create({
       data: {
@@ -389,12 +430,17 @@ export async function updateRegistroAction(formData: FormData) {
       ignoreId: existing.id
     });
 
-    const fotoDesvio = await parseImageUploadFromFormData({
-      formData,
-      key: "fotoDesvio"
-    });
-    const exigeFoto = isCorrectiveActionRequired(payload.status);
-    const temFotoExistente = Boolean(existing.fotoBase64 && existing.fotoMimeType);
+    const registroEmOperacao =
+      payload.statusOperacionalEquipamento === StatusOperacionalEquipamento.EM_OPERACAO;
+    const fotoDesvio = registroEmOperacao
+      ? await parseImageUploadFromFormData({
+          formData,
+          key: "fotoDesvio"
+        })
+      : null;
+    const exigeFoto = registroEmOperacao && isCorrectiveActionRequired(payload.status);
+    const temFotoExistente =
+      registroEmOperacao && Boolean(existing.fotoBase64 && existing.fotoMimeType);
 
     if (exigeFoto && !fotoDesvio && !temFotoExistente) {
       throw new Error(
@@ -407,7 +453,13 @@ export async function updateRegistroAction(formData: FormData) {
       data: {
         ...payload,
         turno: existing.turno,
-        ...(fotoDesvio
+        ...(!registroEmOperacao
+          ? {
+              fotoNome: null,
+              fotoMimeType: null,
+              fotoBase64: null
+            }
+          : fotoDesvio
           ? {
               fotoNome: fotoDesvio.fileName,
               fotoMimeType: fotoDesvio.mimeType,

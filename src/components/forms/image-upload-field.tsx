@@ -18,6 +18,9 @@ type ImageUploadFieldProps = {
   requiredStatusFieldName?: string;
   requiredStatusValues?: string[];
   requiredMessage?: string;
+  disabledStatusFieldName?: string;
+  disabledStatusValues?: string[];
+  disabledMessage?: string;
 };
 
 const DEFAULT_INPUT_CLASS =
@@ -33,7 +36,10 @@ export function ImageUploadField({
   existingFileName = null,
   requiredStatusFieldName,
   requiredStatusValues = [],
-  requiredMessage = "Anexe uma foto para continuar."
+  requiredMessage = "Anexe uma foto para continuar.",
+  disabledStatusFieldName,
+  disabledStatusValues = [],
+  disabledMessage
 }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>(
@@ -43,6 +49,7 @@ export function ImageUploadField({
     existingImageDataUrl ?? null
   );
   const [validationError, setValidationError] = useState<string>("");
+  const [disabledByStatus, setDisabledByStatus] = useState(false);
 
   useEffect(() => {
     setPreviewUrl(existingImageDataUrl ?? null);
@@ -159,6 +166,41 @@ export function ImageUploadField({
     requiredStatusValues
   ]);
 
+  useEffect(() => {
+    const input = inputRef.current;
+    const form = input?.form;
+
+    if (!input || !form || !disabledStatusFieldName || disabledStatusValues.length === 0) {
+      setDisabledByStatus(false);
+      return;
+    }
+
+    const syncDisabledStatus = () => {
+      const statusField = form.elements.namedItem(disabledStatusFieldName) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | null;
+      const shouldDisable = disabledStatusValues.includes(statusField?.value ?? "");
+
+      setDisabledByStatus(shouldDisable);
+
+      if (shouldDisable) {
+        input.value = "";
+        input.setCustomValidity("");
+        setValidationError("");
+      }
+    };
+
+    form.addEventListener("input", syncDisabledStatus);
+    form.addEventListener("change", syncDisabledStatus);
+    syncDisabledStatus();
+
+    return () => {
+      form.removeEventListener("input", syncDisabledStatus);
+      form.removeEventListener("change", syncDisabledStatus);
+    };
+  }, [disabledStatusFieldName, disabledStatusValues]);
+
   return (
     <label className="text-sm text-slate-700 dark:text-slate-200">
       {label}
@@ -167,11 +209,14 @@ export function ImageUploadField({
         type="file"
         name={name}
         accept={IMAGE_UPLOAD_ACCEPT_ATTRIBUTE}
-        required={required && !existingImageDataUrl}
+        disabled={disabledByStatus}
+        required={!disabledByStatus && required && !existingImageDataUrl}
         className={`${inputClassName} ${
           validationError
             ? "border-red-500 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
             : ""
+        } ${
+          disabledByStatus ? "cursor-not-allowed bg-slate-100 opacity-70 dark:bg-slate-700" : ""
         }`}
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -217,17 +262,22 @@ export function ImageUploadField({
           {helperText}
         </span>
       ) : null}
+      {disabledByStatus && disabledMessage ? (
+        <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+          {disabledMessage}
+        </span>
+      ) : null}
       {validationError ? (
         <span className="mt-1 block text-xs text-red-600 dark:text-red-300">
           {validationError}
         </span>
       ) : null}
-      {selectedFileName ? (
+      {!disabledByStatus && selectedFileName ? (
         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
           Arquivo selecionado: {selectedFileName}
         </span>
       ) : null}
-      {selectedFileName && selectedFileName !== existingFileName ? (
+      {!disabledByStatus && selectedFileName && selectedFileName !== existingFileName ? (
         <button
           type="button"
           className="mt-2 text-xs font-medium text-slate-700 underline dark:text-slate-200"
@@ -236,7 +286,7 @@ export function ImageUploadField({
           Remover foto selecionada
         </button>
       ) : null}
-      {previewUrl ? (
+      {!disabledByStatus && previewUrl ? (
         <div className="mt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

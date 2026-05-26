@@ -16,6 +16,7 @@ const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 export type CategoriaTemperatura = "REFRIGERACAO" | "CONGELAMENTO" | "QUENTE";
 export type TurnoTemperatura = "MANHA" | "TARDE";
 export type StatusTemperatura = "CONFORME" | "ALERTA" | "CRITICO";
+export type StatusOperacionalTemperatura = "EM_OPERACAO" | "MANUTENCAO" | "INATIVO";
 export type CategoriaParametrosTemperatura = {
   temperaturaIdealMin: number | null;
   temperaturaIdealMax: number | null;
@@ -111,7 +112,11 @@ export function formatDateTimeDisplay(date: Date): string {
   return formatAppDateTime(date);
 }
 
-export function formatTemperatureDisplay(value: number): string {
+export function formatTemperatureDisplay(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "Não aplicável";
+  }
+
   return `${value.toLocaleString("pt-BR", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
     maximumFractionDigits: 1
@@ -288,6 +293,26 @@ export function getStatusLabel(status: StatusTemperatura): string {
   }
 
   return "Crítico";
+}
+
+export function getOperationalStatusLabel(
+  status: StatusOperacionalTemperatura
+): string {
+  if (status === "MANUTENCAO") {
+    return "Manutenção";
+  }
+
+  if (status === "INATIVO") {
+    return "Inativo";
+  }
+
+  return "Em Operação";
+}
+
+export function isOperationalTemperatureStatus(
+  status: StatusOperacionalTemperatura
+): boolean {
+  return status === "EM_OPERACAO";
 }
 
 export function getShiftLabel(turno: TurnoTemperatura): string {

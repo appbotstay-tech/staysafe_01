@@ -34,6 +34,12 @@ enum StatusTemperaturaEquipamento {
   CRITICO
 }
 
+enum StatusOperacionalEquipamento {
+  EM_OPERACAO
+  MANUTENCAO
+  INATIVO
+}
+
 enum StatusFechamentoTemperaturaEquipamento {
   ABERTO
   ASSINADO
@@ -338,25 +344,28 @@ model HigienizacaoHortifrutiOpcao {
 }
 
 model ControleTemperaturaEquipamento {
-  id                   Int                             @id @default(autoincrement())
-  data                 DateTime                        @db.Date
-  equipamento          String
-  categoriaEquipamento CategoriaEquipamentoTemperatura
-  turno                TurnoTemperaturaEquipamento
-  temperaturaAferida   Float
-  status               StatusTemperaturaEquipamento
-  acaoCorretiva        String?
-  fotoNome             String?
-  fotoMimeType         String?
-  fotoBase64           String?                         @db.Text
-  responsavel          String
-  observacoes          String?
-  createdAt            DateTime                        @default(now())
-  updatedAt            DateTime                        @updatedAt
+  id                             Int                             @id @default(autoincrement())
+  data                           DateTime                        @db.Date
+  equipamento                    String
+  categoriaEquipamento           CategoriaEquipamentoTemperatura
+  turno                          TurnoTemperaturaEquipamento
+  statusOperacionalEquipamento   StatusOperacionalEquipamento    @default(EM_OPERACAO)
+  temperaturaAferida             Float?
+  status                         StatusTemperaturaEquipamento
+  acaoCorretiva                  String?
+  fotoNome                       String?
+  fotoMimeType                   String?
+  fotoBase64                     String?                         @db.Text
+  responsavel                    String
+  observacoes                    String?
+  observacaoStatusOperacional    String?
+  createdAt                      DateTime                        @default(now())
+  updatedAt                      DateTime                        @updatedAt
 
   @@index([data])
   @@index([equipamento])
   @@index([status])
+  @@index([statusOperacionalEquipamento])
   @@index([responsavel])
   @@map("controle_temperatura_equipamentos")
 }
