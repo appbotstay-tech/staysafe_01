@@ -213,6 +213,9 @@ export function ServiceItemsForm({
   const [ambientRows, setAmbientRows] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(rows.map((row) => [row.rowKey, row.temperaturaAmbiente]))
   );
+  const [nonServedRows, setNonServedRows] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(rows.map((row) => [row.rowKey, row.status === "NAO_SERVIDO"]))
+  );
   const hasEditableRows = rows.some((row) => !row.bloqueado);
   const normalizedItemSearch = normalizeSearchText(itemSearch);
   const hasSearchMatches =
@@ -233,7 +236,58 @@ export function ServiceItemsForm({
 
   useEffect(() => {
     setAmbientRows(Object.fromEntries(rows.map((row) => [row.rowKey, row.temperaturaAmbiente])));
+    setNonServedRows(
+      Object.fromEntries(rows.map((row) => [row.rowKey, row.status === "NAO_SERVIDO"]))
+    );
   }, [rows]);
+
+  const clearRowCollectionFields = (rowKey: string) => {
+    const form = formRef.current;
+    if (!form) {
+      return;
+    }
+
+    const fieldNames = [
+      `${rowKey}-temperaturaTipo`,
+      `${rowKey}-tcEquipamento`,
+      `${rowKey}-primeiraTc`,
+      `${rowKey}-acaoCorretiva`
+    ];
+
+    for (const fieldName of fieldNames) {
+      const field = form.elements.namedItem(fieldName) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | null;
+
+      if (field) {
+        field.value = "";
+      }
+    }
+  };
+
+  const setRowNonServed = (rowKey: string, checked: boolean) => {
+    setNonServedRows((current) => ({
+      ...current,
+      [rowKey]: checked
+    }));
+
+    if (checked) {
+      setAmbientRows((current) => ({
+        ...current,
+        [rowKey]: false
+      }));
+      clearRowCollectionFields(rowKey);
+      setHighlightedRows((current) => {
+        const next = new Set(current);
+        next.delete(rowKey);
+        return next;
+      });
+      setPendingIssues((current) =>
+        current.filter((issue) => issue.rowKey !== rowKey)
+      );
+    }
+  };
 
   const collectPendingIssues = (formData: FormData): PendingItemIssue[] => {
     const issues: PendingItemIssue[] = [];
@@ -248,6 +302,13 @@ export function ServiceItemsForm({
       const temperaturaTipo = String(formData.get(`${row.rowKey}-temperaturaTipo`) ?? "").trim();
       const acaoCorretiva = String(formData.get(`${row.rowKey}-acaoCorretiva`) ?? "").trim();
       const observacao = String(formData.get(`${row.rowKey}-observacao`) ?? "").trim();
+      const naoServido =
+        String(formData.get(`${row.rowKey}-naoServido`) ?? "").trim() === "true";
+
+      if (naoServido) {
+        continue;
+      }
+
       const temperaturaAmbiente = temperaturaTipo === "AMBIENTE";
       const hasAnyValue = [
         tcEquipamento,
@@ -435,7 +496,10 @@ export function ServiceItemsForm({
               !normalizedItemSearch ||
               normalizeSearchText(row.nome).includes(normalizedItemSearch);
             const hiddenBySearch = !matchesSearch && !invalid;
-            const temperaturaAmbiente = ambientRows[row.rowKey] ?? row.temperaturaAmbiente;
+            const naoServido = nonServedRows[row.rowKey] ?? row.status === "NAO_SERVIDO";
+            const temperaturaAmbiente =
+              !naoServido && (ambientRows[row.rowKey] ?? row.temperaturaAmbiente);
+            const collectionDisabled = row.bloqueado || naoServido;
 
             return (
               <section
@@ -443,10 +507,17 @@ export function ServiceItemsForm({
                 className={`${hiddenBySearch ? "hidden" : ""} rounded-lg border p-4 ${
                   invalid
                     ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950"
+                    : naoServido
+                    ? "border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
                     : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
                 }`}
               >
                 <input type="hidden" name="rowKey" value={row.rowKey} />
+                <input
+                  type="hidden"
+                  name={`${row.rowKey}-naoServido`}
+                  value={naoServido ? "true" : "false"}
+                />
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -468,8 +539,12 @@ export function ServiceItemsForm({
                     <span className="text-sm text-slate-700 dark:text-slate-200">
                       {getClassificacaoLabel(row.classificacao)}
                     </span>
-                    {temperaturaAmbiente ? (
+                    {naoServido ? (
                       <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        Não servido
+                      </span>
+                    ) : temperaturaAmbiente ? (
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                         Ambiente
                       </span>
                     ) : (
@@ -477,6 +552,25 @@ export function ServiceItemsForm({
                     )}
                   </div>
                 </div>
+
+                <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={naoServido}
+                    disabled={row.bloqueado}
+                    className="h-5 w-5"
+                    onChange={(event) =>
+                      setRowNonServed(row.rowKey, event.target.checked)
+                    }
+                  />
+                  <span>Não servido</span>
+                </label>
+
+                {naoServido ? (
+                  <p className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    Item não servido neste serviço. Temperaturas, ambiente e ação corretiva não serão registrados.
+                  </p>
+                ) : null}
 
                 {row.avaliacaoOrientacao ? (
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -491,7 +585,7 @@ export function ServiceItemsForm({
                       name={`${row.rowKey}-temperaturaTipo`}
                       defaultValue={getTemperatureTypeDefault(row)}
                       className={inputClassName}
-                      disabled={row.bloqueado}
+                      disabled={collectionDisabled}
                       onChange={(event) =>
                         setAmbientRows((current) => ({
                           ...current,
@@ -513,7 +607,7 @@ export function ServiceItemsForm({
                       placeholder="Ex.: -18 ou 62,5"
                       defaultValue={row.tcEquipamento}
                       className={inputClassName}
-                      disabled={row.bloqueado || temperaturaAmbiente}
+                      disabled={collectionDisabled || temperaturaAmbiente}
                     />
                   </label>
                   <label className="text-sm text-slate-700 dark:text-slate-200">
@@ -525,7 +619,7 @@ export function ServiceItemsForm({
                       placeholder="Ex.: -12,5"
                       defaultValue={row.primeiraTc}
                       className={inputClassName}
-                      disabled={row.bloqueado || temperaturaAmbiente}
+                      disabled={collectionDisabled || temperaturaAmbiente}
                     />
                   </label>
                 </div>
@@ -537,7 +631,7 @@ export function ServiceItemsForm({
                       name={`${row.rowKey}-acaoCorretiva`}
                       defaultValue={row.acaoCorretiva}
                       className={inputClassName}
-                      disabled={row.bloqueado}
+                      disabled={collectionDisabled}
                     >
                       <option value="">Selecione</option>
                       {!acaoEstaAtiva && row.acaoCorretiva ? (

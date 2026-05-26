@@ -73,6 +73,7 @@ type RegistroTemperaturaInput = {
   temperaturaTipo: string;
   acaoCorretivaInput: string;
   observacao: string;
+  naoServido: boolean;
 };
 
 type RegistroItemSource = {
@@ -378,6 +379,10 @@ function getRegistroItemIssue(
   item: RegistroItemSource,
   input: RegistroTemperaturaInput
 ): RegistroItemIssue | null {
+  if (input.naoServido) {
+    return null;
+  }
+
   const temperaturaAmbiente = input.temperaturaTipo === "AMBIENTE";
   const values = [
     input.tcEquipamentoInput,
@@ -453,6 +458,7 @@ export async function saveRegistroItemAction(formData: FormData) {
     const temperaturaTipo = getInputValue(formData, "temperaturaTipo");
     const acaoCorretivaInput = getInputValue(formData, "acaoCorretiva");
     const observacao = getInputValue(formData, "observacao");
+    const naoServido = getInputValue(formData, "naoServido") === "true";
 
     if (!servicoId || !itemId) {
       throw new Error("Serviço ou item inválido para registro.");
@@ -492,17 +498,20 @@ export async function saveRegistroItemAction(formData: FormData) {
       throw new Error("Este item já está assinado e não pode ser alterado.");
     }
 
-    const payload = await buildRegistroPayload({
-      actor,
-      item,
-      input: {
-        tcEquipamentoInput,
-        primeiraTcInput,
-        temperaturaTipo,
-        acaoCorretivaInput,
-        observacao
-      }
-    });
+    const payload = naoServido
+      ? buildNaoServidoPayload({ actor, item, observacao })
+      : await buildRegistroPayload({
+          actor,
+          item,
+          input: {
+            tcEquipamentoInput,
+            primeiraTcInput,
+            temperaturaTipo,
+            acaoCorretivaInput,
+            observacao,
+            naoServido
+          }
+        });
 
     await prisma.controleBuffetAmostraRegistro.upsert({
       where: {
@@ -615,7 +624,8 @@ export async function saveServicoItemsStateAction(
           primeiraTcInput: getRowInputValue(formData, rowKey, "primeiraTc"),
           temperaturaTipo: getRowInputValue(formData, rowKey, "temperaturaTipo"),
           acaoCorretivaInput: getRowInputValue(formData, rowKey, "acaoCorretiva"),
-          observacao: getRowInputValue(formData, rowKey, "observacao")
+          observacao: getRowInputValue(formData, rowKey, "observacao"),
+          naoServido: getRowInputValue(formData, rowKey, "naoServido") === "true"
         };
 
         if (rowKey.startsWith("item-")) {
@@ -628,6 +638,19 @@ export async function saveServicoItemsStateAction(
           }
 
           if (existing?.status === StatusItemBuffetAmostra.ASSINADO) {
+            continue;
+          }
+
+          if (input.naoServido) {
+            updates.push({
+              type: "fixed",
+              itemId,
+              payload: buildNaoServidoPayload({
+                actor,
+                item,
+                observacao: input.observacao
+              })
+            });
             continue;
           }
 
@@ -680,6 +703,20 @@ export async function saveServicoItemsStateAction(
             nome: registro.itemNome,
             classificacao: registro.classificacao
           };
+
+          if (input.naoServido) {
+            updates.push({
+              type: "extra",
+              registroId,
+              payload: buildNaoServidoPayload({
+                actor,
+                item,
+                observacao: input.observacao
+              })
+            });
+            continue;
+          }
+
           const issue = getRegistroItemIssue(item, input);
           if (issue) {
             if (!confirmarItensPendentes) {

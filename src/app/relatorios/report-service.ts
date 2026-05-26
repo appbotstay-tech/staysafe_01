@@ -492,9 +492,13 @@ async function generateRecebimentoReport(moduleId: ReportModuleId, reportId: str
 async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, params: ReportSearchParams, user: AuthenticatedUser) {
   const range = getDateRange(params);
   const records = await prisma.controleBuffetAmostraRegistro.findMany({ where: { data: { gte: range.start, lte: range.end } }, include: { servico: true }, orderBy: [{ data: "asc" }, { dataHoraRegistro: "asc" }] });
+  const statusFilter = getParam(params, "statusBuffet");
   const filtered = records.filter((item) => {
-    const foraRegra = item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO;
-    const descarte = normalize(item.acaoCorretiva).includes("descart") || normalize(item.observacao).includes("descart");
+    const naoServido = item.status === StatusItemBuffetAmostra.NAO_SERVIDO;
+    const foraRegra = !naoServido && (item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO);
+    const descarte = !naoServido && (normalize(item.acaoCorretiva).includes("descart") || normalize(item.observacao).includes("descart"));
+    if (reportId === "itens-servidos" && naoServido) return false;
+    if (!statusFilter && naoServido) return false;
     if (reportId === "itens-extras" && !item.itemExtra) return false;
     if (reportId === "temperaturas-fora-regra" && !foraRegra) return false;
     if (reportId === "acoes-corretivas" && !hasText(item.acaoCorretiva)) return false;
@@ -510,8 +514,7 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
     if (itemExtra === "EXTRA" && !item.itemExtra) return false;
     if (!matchesYesNo(hasText(item.acaoCorretiva), getParam(params, "acaoCorretiva"))) return false;
     if (!includesText(item.responsavelNome, getParam(params, "responsavel"))) return false;
-    const status = getParam(params, "statusBuffet");
-    if (status && item.status !== status) return false;
+    if (statusFilter && item.status !== statusFilter) return false;
     if (!matchesYesNo(foraRegra, getParam(params, "temperaturaForaRegra"))) return false;
     return true;
   });
@@ -524,7 +527,15 @@ async function generateBuffetReport(moduleId: ReportModuleId, reportId: string, 
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length }
     ],
     columns: columns([["data", "Data"], ["servico", "Serviço"], ["tipoServico", "Tipo de serviço"], ["periodoServico", "Período do serviço"], ["item", "Item"], ["classificacao", "Classificação"], ["tcEquipamento", "TC equipamento"], ["primeiraTc", "TC alimento"], ["acaoCorretiva", "Ação corretiva"], ["observacao", "Observação"], ["responsavel", "Executor"], ["supervisor", "Supervisor"], ["dataHoraAssinatura", "Data/hora da supervisão"], ["status", "Status"]]),
-    rows: filtered.map((item) => ({ data: formatDateDisplay(item.data), servico: item.servico.nome, tipoServico: getTipoServicoLabel(item.servico.tipoServico), periodoServico: getServicoPeriodoLabel(item.servico), item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: item.temperaturaAmbiente ? "Ambiente" : formatTemperature(item.tcEquipamento), primeiraTc: item.temperaturaAmbiente ? "Ambiente" : formatTemperature(item.primeiraTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, supervisor: valueOrDash(item.assinaturaNome), dataHoraAssinatura: formatDateTimeDisplay(item.assinaturaDataHora), status: labelStatusBuffet(item.status) }))
+    rows: filtered.map((item) => {
+      const naoServido = item.status === StatusItemBuffetAmostra.NAO_SERVIDO;
+      const temperaturaLabel = naoServido
+        ? "-"
+        : item.temperaturaAmbiente
+          ? "Ambiente"
+          : null;
+      return { data: formatDateDisplay(item.data), servico: item.servico.nome, tipoServico: getTipoServicoLabel(item.servico.tipoServico), periodoServico: getServicoPeriodoLabel(item.servico), item: `${item.itemNome}${item.itemExtra ? " (extra)" : ""}`, classificacao: labelClassificacao(item.classificacao), tcEquipamento: temperaturaLabel ?? formatTemperature(item.tcEquipamento), primeiraTc: temperaturaLabel ?? formatTemperature(item.primeiraTc), acaoCorretiva: valueOrDash(item.acaoCorretiva), observacao: valueOrDash(item.observacao), responsavel: item.responsavelNome, supervisor: valueOrDash(item.assinaturaNome), dataHoraAssinatura: formatDateTimeDisplay(item.assinaturaDataHora), status: labelStatusBuffet(item.status) };
+    })
   });
 }
 
@@ -641,12 +652,15 @@ async function countGeneralModuleRows(range: DateRange) {
   const tempOperacionais = temp.filter((item) =>
     isTemperaturaOperacional(item.statusOperacionalEquipamento)
   );
+  const buffetColetados = buffet.filter(
+    (item) => item.status !== StatusItemBuffetAmostra.NAO_SERVIDO
+  );
   return [
     { id: "higienizacao-hortifruti", modulo: "Higienização de Hortifruti", total: hort.length, pendencias: hort.filter((item) => !hasText(item.inicioProcesso) || !hasText(item.terminoProcesso)).length, concluidos: hort.length, naoConformidades: 0, acoesCorretivas: 0, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "controle-temperatura-equipamentos", modulo: "Controle de Temperatura", total: temp.length, pendencias: tempOperacionais.filter((item) => (item.status === StatusTemperaturaEquipamento.ALERTA || item.status === StatusTemperaturaEquipamento.CRITICO) && !hasText(item.fotoBase64)).length, concluidos: temp.filter((item) => !isTemperaturaOperacional(item.statusOperacionalEquipamento) || item.status === StatusTemperaturaEquipamento.CONFORME).length, naoConformidades: tempOperacionais.filter((item) => item.status !== StatusTemperaturaEquipamento.CONFORME).length, acoesCorretivas: tempOperacionais.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "controle-qualidade-oleo", modulo: "Controle de Qualidade do Óleo", total: oleo.length, pendencias: oleo.filter((item) => item.status === StatusQualidadeOleo.DESCARTAR || item.status === StatusQualidadeOleo.ULTIMA_UTILIZACAO).length, concluidos: oleo.filter((item) => item.status === StatusQualidadeOleo.ADEQUADO || item.status === StatusQualidadeOleo.SEM_UTILIZACAO).length, naoConformidades: oleo.filter((item) => item.status !== StatusQualidadeOleo.ADEQUADO && item.status !== StatusQualidadeOleo.SEM_UTILIZACAO).length, acoesCorretivas: oleo.filter((item) => item.status === StatusQualidadeOleo.DESCARTAR || item.status === StatusQualidadeOleo.ATENCAO || item.status === StatusQualidadeOleo.ULTIMA_UTILIZACAO).length, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "rastreabilidade-recebimento", modulo: "Rastreabilidade de Recebimento", total: receb.length, pendencias: receb.filter((item) => item.statusGeral === StatusRecebimento.PENDENTE).length, concluidos: receb.filter((item) => item.statusGeral === StatusRecebimento.CONFORME).length, naoConformidades: receb.filter((item) => item.statusGeral === StatusRecebimento.NAO_CONFORME).length, acoesCorretivas: receb.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: receb.filter((item) => !hasText(item.responsavelRecebimento)).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
-    { id: "controle-buffet-amostras", modulo: "Controle de Buffet / Amostras", total: buffet.length, pendencias: buffet.filter((item) => item.status === StatusItemBuffetAmostra.PENDENTE).length, concluidos: buffet.filter((item) => item.status === StatusItemBuffetAmostra.ASSINADO || item.status === StatusItemBuffetAmostra.NAO_SERVIDO).length, naoConformidades: buffet.filter((item) => item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO).length, acoesCorretivas: buffet.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: buffet.filter((item) => item.status !== StatusItemBuffetAmostra.NAO_SERVIDO && !hasText(item.assinaturaNome)).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
+    { id: "controle-buffet-amostras", modulo: "Controle de Buffet / Amostras", total: buffetColetados.length, pendencias: buffetColetados.filter((item) => item.status === StatusItemBuffetAmostra.PENDENTE).length, concluidos: buffetColetados.filter((item) => item.status === StatusItemBuffetAmostra.ASSINADO).length, naoConformidades: buffetColetados.filter((item) => item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO).length, acoesCorretivas: buffetColetados.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: buffetColetados.filter((item) => !hasText(item.assinaturaNome)).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "plano-limpeza-diario", modulo: "Plano de Limpeza Diário", total: diario.length, pendencias: diario.filter((item) => item.status !== StatusPlanoLimpeza.CONCLUIDO).length, concluidos: diario.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length, naoConformidades: 0, acoesCorretivas: 0, semAssinatura: diario.filter((item) => item.status !== StatusPlanoLimpeza.CONCLUIDO).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "plano-limpeza-semanal", modulo: "Plano de Limpeza Semanal", total: semanal.length, pendencias: semanal.filter((item) => item.status !== StatusPlanoLimpeza.CONCLUIDO).length, concluidos: semanal.filter((item) => item.status === StatusPlanoLimpeza.CONCLUIDO).length, naoConformidades: 0, acoesCorretivas: 0, semAssinatura: semanal.filter((item) => item.status !== StatusPlanoLimpeza.CONCLUIDO).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "chamados-manutencao", modulo: "Chamados de Manutenção", total: chamados.length, pendencias: chamados.filter((item) => item.status === StatusChamadoManutencao.ABERTO || item.status === StatusChamadoManutencao.EM_ANDAMENTO).length, concluidos: chamados.filter((item) => item.status === StatusChamadoManutencao.CONCLUIDO).length, naoConformidades: 0, acoesCorretivas: 0, semAssinatura: 0, chamadosAbertos: chamados.filter((item) => item.status === StatusChamadoManutencao.ABERTO || item.status === StatusChamadoManutencao.EM_ANDAMENTO).length, chamadosConcluidos: chamados.filter((item) => item.status === StatusChamadoManutencao.CONCLUIDO).length }
