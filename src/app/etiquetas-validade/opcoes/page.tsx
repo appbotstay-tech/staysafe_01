@@ -27,6 +27,7 @@ import {
   UNIT_OPTIONS,
   type PrintConfig
 } from "../constants";
+import { ConfirmSubmitButton } from "../confirm-submit-button";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
@@ -94,6 +95,7 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
           classificacao.ativo || classificacao.id === itemEdicao.classificacaoId
       )
     : activeClassificacoes;
+  const podeExcluir = user.perfil === "DEV";
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -219,13 +221,18 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
                               {classificacao.ativo ? "Inativar" : "Ativar"}
                             </button>
                           </form>
-                          <form action={deleteClassificacaoAction}>
-                            <input type="hidden" name="returnTo" value={OPTIONS_PATH} />
-                            <input type="hidden" name="id" value={String(classificacao.id)} />
-                            <button type="submit" className="btn-danger">
-                              Excluir
-                            </button>
-                          </form>
+                          {podeExcluir ? (
+                            <form action={deleteClassificacaoAction}>
+                              <input type="hidden" name="returnTo" value={OPTIONS_PATH} />
+                              <input type="hidden" name="id" value={String(classificacao.id)} />
+                              <ConfirmSubmitButton
+                                message="Deseja excluir esta classificação?"
+                                className="btn-danger"
+                              >
+                                Excluir
+                              </ConfirmSubmitButton>
+                            </form>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -347,13 +354,20 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
                               {item.ativo ? "Inativar" : "Ativar"}
                             </button>
                           </form>
-                          <form action={deleteItemAction}>
-                            <input type="hidden" name="returnTo" value={OPTIONS_PATH} />
-                            <input type="hidden" name="id" value={String(item.id)} />
-                            <button type="submit" className="btn-danger">
-                              Excluir
-                            </button>
-                          </form>
+                          {podeExcluir ? (
+                            <form action={deleteItemAction}>
+                              <input type="hidden" name="returnTo" value={OPTIONS_PATH} />
+                              <input type="hidden" name="id" value={String(item.id)} />
+                              <ConfirmSubmitButton
+                                message={
+                                  "Deseja excluir este item? Se houver etiquetas geradas, ele será inativado para preservar o histórico."
+                                }
+                                className="btn-danger"
+                              >
+                                Excluir
+                              </ConfirmSubmitButton>
+                            </form>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

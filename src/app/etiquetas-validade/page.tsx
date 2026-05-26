@@ -118,6 +118,8 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
           responsavelNome={user.nomeCompleto}
           defaultDate={formatAppDateInput(getAppDate())}
           returnTo={MODULE_PATH}
+          resetKey={etiquetaId ? String(etiquetaId) : ""}
+          resetOnSuccess={Boolean(etiquetaId && feedbackType === "success")}
         />
       </section>
 

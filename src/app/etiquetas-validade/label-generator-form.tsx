@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { generateEtiquetaAction } from "./actions";
 
@@ -19,6 +19,8 @@ type LabelGeneratorFormProps = {
   responsavelNome: string;
   defaultDate: string;
   returnTo: string;
+  resetKey?: string;
+  resetOnSuccess?: boolean;
 };
 
 function addDaysToDateInput(dateInput: string, days: number): string {
@@ -41,11 +43,12 @@ export function LabelGeneratorForm({
   items,
   responsavelNome,
   defaultDate,
-  returnTo
+  returnTo,
+  resetKey = "",
+  resetOnSuccess = false
 }: LabelGeneratorFormProps) {
-  const [selectedItemId, setSelectedItemId] = useState(
-    items[0] ? String(items[0].id) : ""
-  );
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState("");
   const [dataManipulacao, setDataManipulacao] = useState(defaultDate);
   const selectedItem = useMemo(
     () => items.find((item) => String(item.id) === selectedItemId) ?? null,
@@ -55,13 +58,27 @@ export function LabelGeneratorForm({
     ""
   );
   const [quantidade, setQuantidade] = useState("");
+  const resetForm = useCallback(() => {
+    formRef.current?.reset();
+    setSelectedItemId("");
+    setDataManipulacao(defaultDate);
+    setMarcaFornecedor("");
+    setQuantidade("");
+  }, [defaultDate]);
   const dataValidadePreview = selectedItem
     ? addDaysToDateInput(dataManipulacao, selectedItem.validadeDias)
     : "";
   const generationBlocked = items.length === 0 || !selectedItem || !dataValidadePreview;
 
+  useEffect(() => {
+    if (resetKey && resetOnSuccess) {
+      resetForm();
+    }
+  }, [resetKey, resetOnSuccess, resetForm]);
+
   return (
     <form
+      ref={formRef}
       action={generateEtiquetaAction}
       className="grid gap-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-800 md:grid-cols-4"
     >
@@ -80,9 +97,9 @@ export function LabelGeneratorForm({
           required
           className={INPUT_CLASS}
         >
-          {items.length === 0 ? (
-            <option value="">Cadastre um item ativo antes de gerar</option>
-          ) : null}
+          <option value="">
+            {items.length === 0 ? "Cadastre um item ativo antes de gerar" : "Selecione"}
+          </option>
           {items.map((item) => (
             <option key={item.id} value={String(item.id)}>
               {item.nome}
@@ -203,7 +220,9 @@ export function LabelGeneratorForm({
 
       {generationBlocked ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 md:col-span-4">
-          Classificação sem validade configurada. Cadastre a validade antes de gerar a etiqueta.
+          {items.length === 0
+            ? "Cadastre um item ativo antes de gerar etiquetas."
+            : "Selecione um item com classificação e validade configuradas para gerar a etiqueta."}
         </p>
       ) : null}
 

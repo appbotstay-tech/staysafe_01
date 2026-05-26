@@ -95,6 +95,7 @@ function redirectWithFeedback(
   if (feedbackType === "success") {
     url.searchParams.delete("editClassificacaoId");
     url.searchParams.delete("editItemId");
+    url.searchParams.delete("etiquetaId");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);
@@ -109,6 +110,16 @@ function redirectWithFeedback(
 async function ensureDevAction() {
   const actor = await getCurrentUserForAction();
   ensureCanAccessValidityLabels(actor.perfil);
+  return actor;
+}
+
+async function ensureDevDeletionAction() {
+  const actor = await getCurrentUserForAction();
+
+  if (actor.perfil !== "DEV") {
+    throw new Error("Apenas usuários DEV podem executar esta ação.");
+  }
+
   return actor;
 }
 
@@ -268,7 +279,7 @@ export async function deleteClassificacaoAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await ensureDevAction();
+    await ensureDevDeletionAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
       throw new Error("Classificação inválida para exclusão.");
@@ -279,9 +290,15 @@ export async function deleteClassificacaoAction(formData: FormData) {
       prisma.etiquetaValidadeGerada.count({ where: { classificacaoId: id } })
     ]);
 
-    if (itensVinculados > 0 || etiquetasVinculadas > 0) {
+    if (itensVinculados > 0) {
       throw new Error(
-        "Não é possível excluir classificação com itens ou etiquetas vinculadas. Inative a classificação."
+        "Não é possível excluir esta classificação porque existem itens vinculados a ela. Exclua ou altere os itens antes."
+      );
+    }
+
+    if (etiquetasVinculadas > 0) {
+      throw new Error(
+        "Não é possível excluir esta classificação porque existem etiquetas geradas vinculadas a ela."
       );
     }
 
@@ -406,7 +423,7 @@ export async function deleteItemAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await ensureDevAction();
+    await ensureDevDeletionAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
       throw new Error("Item inválido para exclusão.");
@@ -416,8 +433,16 @@ export async function deleteItemAction(formData: FormData) {
       where: { itemId: id }
     });
     if (etiquetasVinculadas > 0) {
-      throw new Error(
-        "Não é possível excluir item com etiquetas geradas. Inative o item."
+      await prisma.etiquetaValidadeItem.update({
+        where: { id },
+        data: { ativo: false }
+      });
+
+      revalidateEtiquetaPaths();
+      redirectWithFeedback(
+        returnTo,
+        "success",
+        "Este item possui etiquetas geradas. Ele foi inativado para preservar o histórico."
       );
     }
 
@@ -431,6 +456,30 @@ export async function deleteItemAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível excluir o item.")
+    );
+  }
+}
+
+export async function deleteEtiquetaGeradaAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevDeletionAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) {
+      throw new Error("Etiqueta inválida para exclusão.");
+    }
+
+    await prisma.etiquetaValidadeGerada.delete({ where: { id } });
+
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Etiqueta gerada excluída do histórico.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir a etiqueta gerada.")
     );
   }
 }

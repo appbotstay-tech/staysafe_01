@@ -22,6 +22,8 @@ import {
   MODULE_PATH,
   type PrintConfig
 } from "../constants";
+import { deleteEtiquetaGeradaAction } from "../actions";
+import { ConfirmSubmitButton } from "../confirm-submit-button";
 import { EtiquetaCard, EtiquetaPrintStyles } from "../label-card";
 import { PrintButton } from "../print-button";
 
@@ -71,6 +73,8 @@ export default async function EtiquetasValidadeHistoricoPage({
   const filtroClassificacao = firstParam(params.filtroClassificacao).trim();
   const filtroCodigo = firstParam(params.filtroCodigo).trim();
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
+  const feedback = firstParam(params.feedback).trim();
+  const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const etiquetaId = parsePositiveInt(firstParam(params.etiquetaId).trim());
 
   const where: Prisma.EtiquetaValidadeGeradaWhereInput = {};
@@ -126,6 +130,7 @@ export default async function EtiquetasValidadeHistoricoPage({
   if (filtroCodigo) filtrosAtuais.set("filtroCodigo", filtroCodigo);
   if (filtroResponsavel) filtrosAtuais.set("filtroResponsavel", filtroResponsavel);
   const closeModalHref = buildHistoryPath(filtrosAtuais);
+  const podeExcluir = user.perfil === "DEV";
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -148,6 +153,18 @@ export default async function EtiquetasValidadeHistoricoPage({
           </div>
         </div>
       </section>
+
+      {feedback ? (
+        <section
+          className={`rounded-xl border p-4 text-sm ${
+            feedbackType === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          }`}
+        >
+          {feedback}
+        </section>
+      ) : null}
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -214,7 +231,7 @@ export default async function EtiquetasValidadeHistoricoPage({
                 <th className="px-3 py-2">Validade</th>
                 <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Código</th>
-                <th className="px-3 py-2">Ação</th>
+                <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -249,13 +266,27 @@ export default async function EtiquetasValidadeHistoricoPage({
                       <td className="px-3 py-2">{etiqueta.responsavelNomeSnapshot}</td>
                       <td className="px-3 py-2 font-medium">{etiqueta.codigoEtiqueta}</td>
                       <td className="px-3 py-2">
-                        <Link
-                          href={buildHistoryPath(viewParams)}
-                          scroll={false}
-                          className="btn-secondary"
-                        >
-                          Visualizar
-                        </Link>
+                        <div className="btn-group">
+                          <Link
+                            href={buildHistoryPath(viewParams)}
+                            scroll={false}
+                            className="btn-secondary"
+                          >
+                            Visualizar
+                          </Link>
+                          {podeExcluir ? (
+                            <form action={deleteEtiquetaGeradaAction}>
+                              <input type="hidden" name="returnTo" value={closeModalHref} />
+                              <input type="hidden" name="id" value={String(etiqueta.id)} />
+                              <ConfirmSubmitButton
+                                message="Deseja excluir esta etiqueta gerada? Esta ação removerá o registro do histórico."
+                                className="btn-danger"
+                              >
+                                Excluir
+                              </ConfirmSubmitButton>
+                            </form>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
