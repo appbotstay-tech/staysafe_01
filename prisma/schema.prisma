@@ -232,6 +232,7 @@ model Usuario {
   chamadosManutencaoCriados ChamadoManutencao[]           @relation("ChamadoCriadoPor")
   documentosTecnicosCriados DocumentoTecnicoAnexo[]        @relation("DocumentoTecnicoCriadoPor")
   configuracoesModuloAtualizadas ModuloConfiguracao[]      @relation("ModuloConfiguracaoAtualizadoPor")
+  etiquetasValidadeGeradas EtiquetaValidadeGerada[]        @relation("EtiquetaValidadeResponsavel")
 
   @@index([perfil, status, isDevDefinitivo])
   @@map("usuario")
@@ -934,4 +935,85 @@ model ModuloConfiguracao {
 
   @@index([atualizadoPorUsuarioId])
   @@map("modulo_configuracao")
+}
+
+model EtiquetaValidadeClassificacao {
+  id            Int                    @id @default(autoincrement())
+  nome          String                 @unique
+  validadeDias  Int
+  descricao     String?                @db.Text
+  ativo         Boolean                @default(true)
+  criadoEm      DateTime               @default(now())
+  atualizadoEm  DateTime               @updatedAt
+  itens         EtiquetaValidadeItem[]
+  etiquetas     EtiquetaValidadeGerada[]
+
+  @@index([ativo, nome])
+  @@map("etiqueta_validade_classificacao")
+}
+
+model EtiquetaValidadeItem {
+  id               Int                          @id @default(autoincrement())
+  nome             String
+  classificacaoId  Int
+  classificacao    EtiquetaValidadeClassificacao @relation(fields: [classificacaoId], references: [id], onDelete: Restrict)
+  marcaFornecedor  String?
+  unidadePadrao    String?
+  observacao       String?                      @db.Text
+  ativo            Boolean                      @default(true)
+  criadoEm         DateTime                     @default(now())
+  atualizadoEm     DateTime                     @updatedAt
+  etiquetas        EtiquetaValidadeGerada[]
+
+  @@index([classificacaoId])
+  @@index([ativo, nome])
+  @@map("etiqueta_validade_item")
+}
+
+model EtiquetaValidadeGerada {
+  id                          Int                          @id @default(autoincrement())
+  itemId                      Int
+  item                        EtiquetaValidadeItem         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  nomeItemSnapshot            String
+  classificacaoId             Int
+  classificacao               EtiquetaValidadeClassificacao @relation(fields: [classificacaoId], references: [id], onDelete: Restrict)
+  nomeClassificacaoSnapshot   String
+  validadeDiasSnapshot        Int
+  dataManipulacao             DateTime                     @db.Date
+  horaManipulacao             String?
+  dataValidade                DateTime                     @db.Date
+  horaValidade                String?
+  responsavelUsuarioId        Int
+  responsavel                 Usuario                      @relation("EtiquetaValidadeResponsavel", fields: [responsavelUsuarioId], references: [id], onDelete: Restrict)
+  responsavelNomeSnapshot     String
+  marcaFornecedorSnapshot     String?
+  sif                         String?
+  lote                        String?
+  quantidadePeso              String?
+  observacao                  String?                      @db.Text
+  codigoEtiqueta              String                       @unique
+  criadoEm                    DateTime                     @default(now())
+
+  @@index([itemId])
+  @@index([classificacaoId])
+  @@index([responsavelUsuarioId])
+  @@index([dataValidade])
+  @@index([criadoEm])
+  @@map("etiqueta_validade_gerada")
+}
+
+model EtiquetaValidadeConfiguracaoImpressao {
+  id                       Int      @id @default(autoincrement())
+  larguraMm                Int      @default(80)
+  alturaMm                 Int      @default(50)
+  margemMm                 Int      @default(3)
+  tamanhoFonte             Int      @default(11)
+  mostrarQrCode            Boolean  @default(false)
+  mostrarSif               Boolean  @default(true)
+  mostrarLote              Boolean  @default(true)
+  mostrarMarcaFornecedor   Boolean  @default(true)
+  criadoEm                 DateTime @default(now())
+  atualizadoEm             DateTime @updatedAt
+
+  @@map("etiqueta_validade_configuracao_impressao")
 }

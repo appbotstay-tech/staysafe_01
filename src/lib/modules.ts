@@ -43,6 +43,11 @@ export const modules: AppModule[] = [
     allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"]
   },
   {
+    name: "Etiquetas de Validade",
+    href: "/etiquetas-validade",
+    allowedRoles: ["DEV"]
+  },
+  {
     name: "Anexos e Documentos",
     href: "/documentos-tecnicos",
     allowedRoles: ["DEV", "GERENTE", "NUTRICIONISTA"]

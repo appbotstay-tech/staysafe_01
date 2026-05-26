@@ -8,6 +8,7 @@ import {
   canCloseMonth,
   canAccessReports,
   canDeleteOperationalRecords,
+  canAccessValidityLabels,
   canManageModuleOptions,
   canManageTechnicalDocuments,
   canManageUsers,
@@ -49,6 +50,12 @@ export function ensureCanManageOptions(role: UserRole) {
 export function ensureCanManageTechnicalDocuments(role: UserRole) {
   if (!canManageTechnicalDocuments(role)) {
     throw new Error("Você não tem permissão para gerenciar anexos e documentos técnicos.");
+  }
+}
+
+export function ensureCanAccessValidityLabels(role: UserRole) {
+  if (!canAccessValidityLabels(role)) {
+    throw new Error("Módulo interno disponível apenas para perfil DEV.");
   }
 }
 

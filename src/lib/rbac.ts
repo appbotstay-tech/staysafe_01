@@ -14,6 +14,7 @@ const OPERATIONAL_MODULES = [
   "/plano-limpeza",
   "/chamados-manutencao"
 ];
+const DEV_INTERNAL_MODULES = ["/etiquetas-validade"];
 
 export function getRoleLabel(role: UserRole): string {
   if (role === "DEV") return "DEV";
@@ -23,7 +24,12 @@ export function getRoleLabel(role: UserRole): string {
 }
 
 const MODULE_ACCESS: Record<UserRole, string[]> = {
-  DEV: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
+  DEV: [
+    ...OPERATIONAL_MODULES,
+    ...DEV_INTERNAL_MODULES,
+    "/relatorios",
+    "/documentos-tecnicos"
+  ],
   GERENTE: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
   NUTRICIONISTA: [...OPERATIONAL_MODULES, "/relatorios", "/documentos-tecnicos"],
   COLABORADOR: OPERATIONAL_MODULES
@@ -63,6 +69,10 @@ export function canAccessTechnicalDocuments(role: UserRole): boolean {
 
 export function canManageTechnicalDocuments(role: UserRole): boolean {
   return role === "DEV" || role === "GERENTE";
+}
+
+export function canAccessValidityLabels(role: UserRole): boolean {
+  return role === "DEV";
 }
 
 export function canDeleteOperationalRecords(role: UserRole): boolean {
