@@ -11,8 +11,7 @@ export type LabelItemOption = {
   nome: string;
   classificacaoNome: string;
   validadeDias: number;
-  marcaFornecedor: string;
-  unidadePadrao: string;
+  unidadeMedidaPadrao: string;
 };
 
 type LabelGeneratorFormProps = {
@@ -53,9 +52,9 @@ export function LabelGeneratorForm({
     [items, selectedItemId]
   );
   const [marcaFornecedor, setMarcaFornecedor] = useState(
-    selectedItem?.marcaFornecedor ?? ""
+    ""
   );
-  const [quantidadePeso, setQuantidadePeso] = useState(selectedItem?.unidadePadrao ?? "");
+  const [quantidade, setQuantidade] = useState("");
   const dataValidadePreview = selectedItem
     ? addDaysToDateInput(dataManipulacao, selectedItem.validadeDias)
     : "";
@@ -75,10 +74,8 @@ export function LabelGeneratorForm({
           value={selectedItemId}
           onChange={(event) => {
             const nextId = event.target.value;
-            const nextItem = items.find((item) => String(item.id) === nextId) ?? null;
             setSelectedItemId(nextId);
-            setMarcaFornecedor(nextItem?.marcaFornecedor ?? "");
-            setQuantidadePeso(nextItem?.unidadePadrao ?? "");
+            setQuantidade("");
           }}
           required
           className={INPUT_CLASS}
@@ -109,6 +106,16 @@ export function LabelGeneratorForm({
         <input
           type="text"
           value={selectedItem ? `${selectedItem.validadeDias} dia(s)` : ""}
+          readOnly
+          className={INPUT_CLASS}
+        />
+      </label>
+
+      <label className="text-sm text-slate-700 dark:text-slate-200">
+        Unidade padrão
+        <input
+          type="text"
+          value={selectedItem?.unidadeMedidaPadrao ?? ""}
           readOnly
           className={INPUT_CLASS}
         />
@@ -152,14 +159,20 @@ export function LabelGeneratorForm({
       </label>
 
       <label className="text-sm text-slate-700 dark:text-slate-200">
-        Quantidade/peso
-        <input
-          type="text"
-          name="quantidadePeso"
-          value={quantidadePeso}
-          onChange={(event) => setQuantidadePeso(event.target.value)}
-          className={INPUT_CLASS}
-        />
+        Quantidade *
+        <div className="mt-1 flex gap-2">
+          <input
+            type="text"
+            name="quantidade"
+            value={quantidade}
+            onChange={(event) => setQuantidade(event.target.value)}
+            required
+            className={INPUT_CLASS}
+          />
+          <span className="inline-flex min-h-10 min-w-20 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            {selectedItem?.unidadeMedidaPadrao ?? "-"}
+          </span>
+        </div>
       </label>
 
       <label className="text-sm text-slate-700 dark:text-slate-200">

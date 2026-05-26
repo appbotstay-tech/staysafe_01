@@ -1,0 +1,151 @@
+import { formatAppDate, formatAppDateTime } from "@/lib/date-time";
+
+import type { PrintConfig } from "./constants";
+
+export type EtiquetaSnapshot = {
+  nomeItemSnapshot: string;
+  nomeClassificacaoSnapshot: string;
+  dataManipulacao: Date;
+  horaManipulacao: string | null;
+  dataValidade: Date;
+  horaValidade: string | null;
+  responsavelNomeSnapshot: string;
+  marcaFornecedorSnapshot: string | null;
+  sif: string | null;
+  lote: string | null;
+  quantidade: string | null;
+  unidadeMedidaSnapshot: string;
+  observacao: string | null;
+  codigoEtiqueta: string;
+  criadoEm: Date;
+};
+
+function labelDate(date: Date, time?: string | null): string {
+  return time ? `${formatAppDate(date)} ${time}` : formatAppDate(date);
+}
+
+function optionalText(value?: string | null): string {
+  return value?.trim() || "-";
+}
+
+function quantityLabel(label: EtiquetaSnapshot): string {
+  if (!label.quantidade?.trim()) {
+    return "-";
+  }
+
+  return `${label.quantidade.trim()} ${label.unidadeMedidaSnapshot}`;
+}
+
+function LabelInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="leading-tight">
+      <span className="font-semibold">{label}:</span> {value}
+    </p>
+  );
+}
+
+export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
+  const printStyles = `
+    @media print {
+      @page {
+        size: ${config.larguraMm}mm ${config.alturaMm}mm;
+        margin: ${config.margemMm}mm;
+      }
+      body * {
+        visibility: hidden !important;
+      }
+      #etiqueta-print-area,
+      #etiqueta-print-area * {
+        visibility: visible !important;
+      }
+      #etiqueta-print-area {
+        position: absolute;
+        inset: 0 auto auto 0;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  `;
+
+  return <style dangerouslySetInnerHTML={{ __html: printStyles }} />;
+}
+
+export function EtiquetaCard({
+  etiqueta,
+  config
+}: {
+  etiqueta: EtiquetaSnapshot;
+  config: PrintConfig;
+}) {
+  return (
+    <div id="etiqueta-print-area" className="overflow-x-auto">
+      <article
+        className="rounded border border-slate-900 bg-white p-3 text-slate-950 shadow-sm"
+        data-zebra-model="ZD220"
+        data-zpl-ready="future"
+        style={{
+          width: `${config.larguraMm}mm`,
+          minHeight: `${config.alturaMm}mm`,
+          padding: `${config.margemMm}mm`,
+          fontSize: `${config.tamanhoFonte}pt`,
+          lineHeight: 1.18
+        }}
+      >
+        <div className="flex items-start justify-between gap-2 border-b border-slate-900 pb-1">
+          <div className="min-w-0">
+            <h3 className="break-words text-base font-black uppercase leading-tight">
+              {etiqueta.nomeItemSnapshot}
+            </h3>
+            <p className="text-[0.72em]">
+              Classificação: {etiqueta.nomeClassificacaoSnapshot}
+            </p>
+          </div>
+          {config.mostrarQrCode ? (
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center border border-slate-900 p-1 text-center text-[0.55em] font-bold leading-tight">
+              {etiqueta.codigoEtiqueta}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+          <LabelInfo
+            label="Manipulação"
+            value={labelDate(etiqueta.dataManipulacao, etiqueta.horaManipulacao)}
+          />
+          <LabelInfo
+            label="Validade"
+            value={labelDate(etiqueta.dataValidade, etiqueta.horaValidade)}
+          />
+          <LabelInfo label="Resp." value={etiqueta.responsavelNomeSnapshot} />
+          <LabelInfo label="Qtd." value={quantityLabel(etiqueta)} />
+          {config.mostrarMarcaFornecedor ? (
+            <LabelInfo
+              label="Marca/Forn."
+              value={optionalText(etiqueta.marcaFornecedorSnapshot)}
+            />
+          ) : null}
+          {config.mostrarSif ? (
+            <LabelInfo label="SIF" value={optionalText(etiqueta.sif)} />
+          ) : null}
+          {config.mostrarLote ? (
+            <LabelInfo label="Lote" value={optionalText(etiqueta.lote)} />
+          ) : null}
+          <LabelInfo label="Gerada" value={formatAppDateTime(etiqueta.criadoEm)} />
+        </div>
+
+        {etiqueta.observacao ? (
+          <p className="mt-2 border-t border-slate-300 pt-1 text-[0.8em]">
+            Obs.: {etiqueta.observacao}
+          </p>
+        ) : null}
+
+        <p className="mt-2 border-t border-slate-900 pt-1 text-center text-[0.8em] font-bold">
+          Código: {etiqueta.codigoEtiqueta}
+        </p>
+      </article>
+    </div>
+  );
+}

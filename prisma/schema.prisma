@@ -957,8 +957,7 @@ model EtiquetaValidadeItem {
   nome             String
   classificacaoId  Int
   classificacao    EtiquetaValidadeClassificacao @relation(fields: [classificacaoId], references: [id], onDelete: Restrict)
-  marcaFornecedor  String?
-  unidadePadrao    String?
+  unidadeMedidaPadrao String
   observacao       String?                      @db.Text
   ativo            Boolean                      @default(true)
   criadoEm         DateTime                     @default(now())
@@ -989,7 +988,8 @@ model EtiquetaValidadeGerada {
   marcaFornecedorSnapshot     String?
   sif                         String?
   lote                        String?
-  quantidadePeso              String?
+  quantidade                  String?
+  unidadeMedidaSnapshot       String
   observacao                  String?                      @db.Text
   codigoEtiqueta              String                       @unique
   criadoEm                    DateTime                     @default(now())

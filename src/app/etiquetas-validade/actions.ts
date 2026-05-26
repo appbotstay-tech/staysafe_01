@@ -13,7 +13,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
-const MODULE_PATH = "/etiquetas-validade";
+import { HISTORY_PATH, MODULE_PATH, OPTIONS_PATH, UNIT_OPTIONS } from "./constants";
+
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 type FeedbackType = "success" | "error";
@@ -115,6 +116,12 @@ function formatEtiquetaCode(id: number): string {
   return `STS-${String(id).padStart(6, "0")}`;
 }
 
+function revalidateEtiquetaPaths() {
+  revalidatePath(MODULE_PATH);
+  revalidatePath(OPTIONS_PATH);
+  revalidatePath(HISTORY_PATH);
+}
+
 function getClassificacaoPayload(formData: FormData) {
   const nome = sanitizeText(getInputValue(formData, "nome"), 120);
   const validadeDias = parsePositiveInt(getInputValue(formData, "validadeDias"));
@@ -140,8 +147,10 @@ function getClassificacaoPayload(formData: FormData) {
 function getItemPayload(formData: FormData) {
   const nome = sanitizeText(getInputValue(formData, "nome"), 160);
   const classificacaoId = parsePositiveInt(getInputValue(formData, "classificacaoId"));
-  const marcaFornecedor = sanitizeText(getInputValue(formData, "marcaFornecedor"), 160);
-  const unidadePadrao = sanitizeText(getInputValue(formData, "unidadePadrao"), 80);
+  const unidadeMedidaPadrao = sanitizeText(
+    getInputValue(formData, "unidadeMedidaPadrao"),
+    40
+  );
   const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
   const ativo = getInputValue(formData, "ativo") !== "false";
 
@@ -153,11 +162,17 @@ function getItemPayload(formData: FormData) {
     throw new Error("Selecione uma classificação ativa para o item.");
   }
 
+  if (
+    !unidadeMedidaPadrao ||
+    !(UNIT_OPTIONS as readonly string[]).includes(unidadeMedidaPadrao)
+  ) {
+    throw new Error("Selecione a unidade de medida padrão do item.");
+  }
+
   return {
     nome,
     classificacaoId,
-    marcaFornecedor,
-    unidadePadrao,
+    unidadeMedidaPadrao,
     observacao,
     ativo
   };
@@ -174,7 +189,7 @@ export async function createClassificacaoAction(formData: FormData) {
       data: payload
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Classificação cadastrada com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -202,7 +217,7 @@ export async function updateClassificacaoAction(formData: FormData) {
       data: payload
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Classificação atualizada com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -237,7 +252,7 @@ export async function toggleClassificacaoStatusAction(formData: FormData) {
       data: { ativo: !existing.ativo }
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Status da classificação atualizado.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -245,6 +260,41 @@ export async function toggleClassificacaoStatusAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível atualizar a classificação.")
+    );
+  }
+}
+
+export async function deleteClassificacaoAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) {
+      throw new Error("Classificação inválida para exclusão.");
+    }
+
+    const [itensVinculados, etiquetasVinculadas] = await Promise.all([
+      prisma.etiquetaValidadeItem.count({ where: { classificacaoId: id } }),
+      prisma.etiquetaValidadeGerada.count({ where: { classificacaoId: id } })
+    ]);
+
+    if (itensVinculados > 0 || etiquetasVinculadas > 0) {
+      throw new Error(
+        "Não é possível excluir classificação com itens ou etiquetas vinculadas. Inative a classificação."
+      );
+    }
+
+    await prisma.etiquetaValidadeClassificacao.delete({ where: { id } });
+
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Classificação excluída com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir a classificação.")
     );
   }
 }
@@ -268,7 +318,7 @@ export async function createItemAction(formData: FormData) {
       data: payload
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Item cadastrado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -305,7 +355,7 @@ export async function updateItemAction(formData: FormData) {
       data: payload
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Item atualizado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -340,7 +390,7 @@ export async function toggleItemStatusAction(formData: FormData) {
       data: { ativo: !existing.ativo }
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Status do item atualizado.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -348,6 +398,39 @@ export async function toggleItemStatusAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível atualizar o item.")
+    );
+  }
+}
+
+export async function deleteItemAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) {
+      throw new Error("Item inválido para exclusão.");
+    }
+
+    const etiquetasVinculadas = await prisma.etiquetaValidadeGerada.count({
+      where: { itemId: id }
+    });
+    if (etiquetasVinculadas > 0) {
+      throw new Error(
+        "Não é possível excluir item com etiquetas geradas. Inative o item."
+      );
+    }
+
+    await prisma.etiquetaValidadeItem.delete({ where: { id } });
+
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Item excluído com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir o item.")
     );
   }
 }
@@ -393,7 +476,7 @@ export async function updatePrintConfigAction(formData: FormData) {
       }
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(returnTo, "success", "Configuração de impressão atualizada.");
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -423,7 +506,7 @@ export async function generateEtiquetaAction(formData: FormData) {
       parseAppDateInput(getInputValue(formData, "dataManipulacao")) ?? getAppDate();
     const horaManipulacao = parseOptionalTime(getInputValue(formData, "horaManipulacao"));
     const horaValidade = parseOptionalTime(getInputValue(formData, "horaValidade"));
-    const quantidadePeso = sanitizeText(getInputValue(formData, "quantidadePeso"), 80);
+    const quantidade = sanitizeText(getInputValue(formData, "quantidade"), 80);
     const marcaFornecedorManual = sanitizeText(
       getInputValue(formData, "marcaFornecedor"),
       160
@@ -431,6 +514,10 @@ export async function generateEtiquetaAction(formData: FormData) {
     const sif = sanitizeText(getInputValue(formData, "sif"), 40);
     const lote = sanitizeText(getInputValue(formData, "lote"), 80);
     const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
+
+    if (!quantidade) {
+      throw new Error("Informe a quantidade/gramatura da etiqueta.");
+    }
 
     const item = await prisma.etiquetaValidadeItem.findUnique({
       where: { id: itemId },
@@ -452,7 +539,7 @@ export async function generateEtiquetaAction(formData: FormData) {
     }
 
     const dataValidade = addDays(dataManipulacao, item.classificacao.validadeDias);
-    const marcaFornecedorSnapshot = marcaFornecedorManual ?? item.marcaFornecedor;
+    const marcaFornecedorSnapshot = marcaFornecedorManual;
 
     const etiqueta = await prisma.$transaction(async (tx) => {
       const created = await tx.etiquetaValidadeGerada.create({
@@ -471,7 +558,8 @@ export async function generateEtiquetaAction(formData: FormData) {
           marcaFornecedorSnapshot,
           sif,
           lote,
-          quantidadePeso,
+          quantidade,
+          unidadeMedidaSnapshot: item.unidadeMedidaPadrao,
           observacao,
           codigoEtiqueta: `STS-TMP-${actor.id}-${Date.now()}`
         }
@@ -483,7 +571,7 @@ export async function generateEtiquetaAction(formData: FormData) {
       });
     });
 
-    revalidatePath(MODULE_PATH);
+    revalidateEtiquetaPaths();
     redirectWithFeedback(
       returnTo,
       "success",
