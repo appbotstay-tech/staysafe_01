@@ -10,6 +10,7 @@ import { canAccessValidityLabels } from "@/lib/rbac";
 import {
   createClassificacaoAction,
   createItemAction,
+  createManualClassificationsAction,
   deleteClassificacaoAction,
   deleteItemAction,
   toggleClassificacaoStatusAction,
@@ -133,6 +134,15 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Classificações
         </h2>
+        <form action={createManualClassificationsAction} className="mb-4">
+          <input type="hidden" name="returnTo" value={OPTIONS_PATH} />
+          <ConfirmSubmitButton
+            message="Criar ou atualizar classificações sugeridas com base no Manual de Boas Práticas?"
+            className="btn-secondary"
+          >
+            Criar sugestões do Manual
+          </ConfirmSubmitButton>
+        </form>
         <form
           action={createClassificacaoAction}
           className="grid gap-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-800 md:grid-cols-4"
@@ -153,9 +163,21 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
               <option value="false">Inativo</option>
             </select>
           </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-4">
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Condição
+            <input name="condicaoArmazenamento" className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Temperatura
+            <input name="temperaturaConservacao" className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
             Descrição/orientação
             <textarea name="descricao" rows={3} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+            Observação normativa/procedimento
+            <textarea name="observacaoNormativa" rows={3} className={INPUT_CLASS} />
           </label>
           <div className="md:col-span-4">
             <button type="submit" className="btn-primary">
@@ -170,6 +192,7 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
               <tr>
                 <th className="px-3 py-2">Classificação</th>
                 <th className="px-3 py-2">Validade</th>
+                <th className="px-3 py-2">Condição</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Atualizado</th>
                 <th className="px-3 py-2">Ações</th>
@@ -178,7 +201,7 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {classificacoes.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={5}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={6}>
                     Nenhuma classificação cadastrada.
                   </td>
                 </tr>
@@ -201,8 +224,19 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
                             {classificacao.descricao}
                           </p>
                         ) : null}
+                        {classificacao.observacaoNormativa ? (
+                          <p className="mt-1 max-w-xl text-xs text-slate-500 dark:text-slate-400">
+                            {classificacao.observacaoNormativa}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2">{classificacao.validadeDias} dia(s)</td>
+                      <td className="px-3 py-2">
+                        <p>{classificacao.condicaoArmazenamento ?? "-"}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {classificacao.temperaturaConservacao ?? "-"}
+                        </p>
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClass(classificacao.ativo)}`}>
                           {classificacao.ativo ? "Ativo" : "Inativo"}
@@ -508,12 +542,37 @@ export default async function EtiquetasValidadeOpcoesPage({ searchParams }: Page
                 <option value="false">Inativo</option>
               </select>
             </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Condição
+              <input
+                name="condicaoArmazenamento"
+                defaultValue={classificacaoEdicao.condicaoArmazenamento ?? ""}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Temperatura
+              <input
+                name="temperaturaConservacao"
+                defaultValue={classificacaoEdicao.temperaturaConservacao ?? ""}
+                className={INPUT_CLASS}
+              />
+            </label>
             <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
               Descrição/orientação
               <textarea
                 name="descricao"
                 rows={3}
                 defaultValue={classificacaoEdicao.descricao ?? ""}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+              Observação normativa/procedimento
+              <textarea
+                name="observacaoNormativa"
+                rows={3}
+                defaultValue={classificacaoEdicao.observacaoNormativa ?? ""}
                 className={INPUT_CLASS}
               />
             </label>

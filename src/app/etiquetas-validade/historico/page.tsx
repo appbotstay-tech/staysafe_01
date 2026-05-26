@@ -54,6 +54,10 @@ function quantityLabel(params: {
     : "-";
 }
 
+function originLabel(origem: string): string {
+  return origem === "LIVRE" ? "Livre/manual" : "Cadastrado";
+}
+
 function buildHistoryPath(params: URLSearchParams): string {
   const queryString = params.toString();
   return queryString ? `${HISTORY_PATH}?${queryString}` : HISTORY_PATH;
@@ -231,13 +235,14 @@ export default async function EtiquetasValidadeHistoricoPage({
                 <th className="px-3 py-2">Validade</th>
                 <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Código</th>
+                <th className="px-3 py-2">Origem</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {etiquetas.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={9}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={10}>
                     Nenhuma etiqueta encontrada.
                   </td>
                 </tr>
@@ -253,7 +258,9 @@ export default async function EtiquetasValidadeHistoricoPage({
                       <td className="px-3 py-2">
                         {etiqueta.nomeClassificacaoSnapshot}
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {etiqueta.validadeDiasSnapshot} dia(s)
+                          {etiqueta.validadeDiasSnapshot
+                            ? `${etiqueta.validadeDiasSnapshot} dia(s)`
+                            : "Validade manual"}
                         </p>
                       </td>
                       <td className="px-3 py-2">{quantityLabel(etiqueta)}</td>
@@ -265,6 +272,7 @@ export default async function EtiquetasValidadeHistoricoPage({
                       </td>
                       <td className="px-3 py-2">{etiqueta.responsavelNomeSnapshot}</td>
                       <td className="px-3 py-2 font-medium">{etiqueta.codigoEtiqueta}</td>
+                      <td className="px-3 py-2">{originLabel(etiqueta.origem)}</td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
                           <Link

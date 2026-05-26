@@ -3,6 +3,7 @@ import { formatAppDate, formatAppDateTime } from "@/lib/date-time";
 import type { PrintConfig } from "./constants";
 
 export type EtiquetaSnapshot = {
+  origem?: "CADASTRADO" | "LIVRE";
   nomeItemSnapshot: string;
   nomeClassificacaoSnapshot: string;
   dataManipulacao: Date;
@@ -42,6 +43,10 @@ function LabelInfo({ label, value }: { label: string; value: string }) {
       <span className="font-semibold">{label}:</span> {value}
     </p>
   );
+}
+
+function originLabel(origem?: "CADASTRADO" | "LIVRE"): string {
+  return origem === "LIVRE" ? "Livre/manual" : "Cadastrado";
 }
 
 export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
@@ -121,6 +126,7 @@ export function EtiquetaCard({
           />
           <LabelInfo label="Resp." value={etiqueta.responsavelNomeSnapshot} />
           <LabelInfo label="Qtd." value={quantityLabel(etiqueta)} />
+          <LabelInfo label="Origem" value={originLabel(etiqueta.origem)} />
           {config.mostrarMarcaFornecedor ? (
             <LabelInfo
               label="Marca/Forn."

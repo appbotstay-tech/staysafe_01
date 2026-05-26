@@ -216,6 +216,11 @@ enum ModuloDocumento {
   RELATORIOS_AUDITORIA
 }
 
+enum EtiquetaValidadeOrigem {
+  CADASTRADO
+  LIVRE
+}
+
 model Usuario {
   id                        Int                           @id @default(autoincrement())
   nomeCompleto              String
@@ -947,15 +952,18 @@ model ModuloConfiguracao {
 }
 
 model EtiquetaValidadeClassificacao {
-  id            Int                    @id @default(autoincrement())
-  nome          String                 @unique
-  validadeDias  Int
-  descricao     String?                @db.Text
-  ativo         Boolean                @default(true)
-  criadoEm      DateTime               @default(now())
-  atualizadoEm  DateTime               @updatedAt
-  itens         EtiquetaValidadeItem[]
-  etiquetas     EtiquetaValidadeGerada[]
+  id                       Int                    @id @default(autoincrement())
+  nome                     String                 @unique
+  validadeDias             Int
+  descricao                String?                @db.Text
+  condicaoArmazenamento    String?
+  temperaturaConservacao   String?
+  observacaoNormativa      String?                @db.Text
+  ativo                    Boolean                @default(true)
+  criadoEm                 DateTime               @default(now())
+  atualizadoEm             DateTime               @updatedAt
+  itens                    EtiquetaValidadeItem[]
+  etiquetas                EtiquetaValidadeGerada[]
 
   @@index([ativo, nome])
   @@map("etiqueta_validade_classificacao")
@@ -980,13 +988,14 @@ model EtiquetaValidadeItem {
 
 model EtiquetaValidadeGerada {
   id                          Int                          @id @default(autoincrement())
-  itemId                      Int
-  item                        EtiquetaValidadeItem         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  origem                      EtiquetaValidadeOrigem       @default(CADASTRADO)
+  itemId                      Int?
+  item                        EtiquetaValidadeItem?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
   nomeItemSnapshot            String
-  classificacaoId             Int
-  classificacao               EtiquetaValidadeClassificacao @relation(fields: [classificacaoId], references: [id], onDelete: Restrict)
+  classificacaoId             Int?
+  classificacao               EtiquetaValidadeClassificacao? @relation(fields: [classificacaoId], references: [id], onDelete: SetNull)
   nomeClassificacaoSnapshot   String
-  validadeDiasSnapshot        Int
+  validadeDiasSnapshot        Int?
   dataManipulacao             DateTime                     @db.Date
   horaManipulacao             String?
   dataValidade                DateTime                     @db.Date
