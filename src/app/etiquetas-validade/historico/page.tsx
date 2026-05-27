@@ -14,6 +14,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { canAccessValidityLabels } from "@/lib/rbac";
 
+import { deleteEtiquetaGeradaAction } from "../actions";
+import { ConfirmSubmitButton } from "../confirm-submit-button";
 import {
   CARD_CLASS,
   DEFAULT_PRINT_CONFIG,
@@ -22,8 +24,6 @@ import {
   MODULE_PATH,
   type PrintConfig
 } from "../constants";
-import { deleteEtiquetaGeradaAction } from "../actions";
-import { ConfirmSubmitButton } from "../confirm-submit-button";
 import { EtiquetaCard, EtiquetaPrintStyles } from "../label-card";
 import { PrintButton } from "../print-button";
 
@@ -47,15 +47,15 @@ function labelDate(date: Date, time?: string | null): string {
 
 function quantityLabel(params: {
   quantidade: string | null;
-  unidadeMedidaSnapshot: string;
+  unidadeSnapshot: string;
 }): string {
   return params.quantidade?.trim()
-    ? `${params.quantidade.trim()} ${params.unidadeMedidaSnapshot}`
+    ? `${params.quantidade.trim()} ${params.unidadeSnapshot}`
     : "-";
 }
 
 function originLabel(origem: string): string {
-  return origem === "LIVRE" ? "Livre/manual" : "Cadastrado";
+  return origem === "MANUAL" ? "Manual" : "Automática";
 }
 
 function buildHistoryPath(params: URLSearchParams): string {
@@ -73,15 +73,16 @@ export default async function EtiquetasValidadeHistoricoPage({
 
   const params = await searchParams;
   const filtroEmissaoInput = firstParam(params.filtroEmissao).trim();
-  const filtroItem = firstParam(params.filtroItem).trim();
-  const filtroClassificacao = firstParam(params.filtroClassificacao).trim();
+  const filtroProduto = firstParam(params.filtroProduto).trim();
+  const filtroGrupo = firstParam(params.filtroGrupo).trim();
+  const filtroMetodo = firstParam(params.filtroMetodo).trim();
   const filtroCodigo = firstParam(params.filtroCodigo).trim();
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const etiquetaId = parsePositiveInt(firstParam(params.etiquetaId).trim());
 
-  const where: Prisma.EtiquetaValidadeGeradaWhereInput = {};
+  const where: Prisma.EtiquetaValidadeEmissaoWhereInput = {};
   const filtroEmissao = parseAppDateInput(filtroEmissaoInput);
   if (filtroEmissao) {
     where.criadoEm = {
@@ -90,15 +91,19 @@ export default async function EtiquetasValidadeHistoricoPage({
     };
   }
 
-  if (filtroItem) {
-    where.nomeItemSnapshot = { contains: filtroItem, mode: "insensitive" };
+  if (filtroProduto) {
+    where.produtoNomeSnapshot = { contains: filtroProduto, mode: "insensitive" };
   }
 
-  if (filtroClassificacao) {
-    where.nomeClassificacaoSnapshot = {
-      contains: filtroClassificacao,
-      mode: "insensitive"
-    };
+  if (filtroGrupo) {
+    where.OR = [
+      { grupoNomeSnapshot: { contains: filtroGrupo, mode: "insensitive" } },
+      { subgrupoNomeSnapshot: { contains: filtroGrupo, mode: "insensitive" } }
+    ];
+  }
+
+  if (filtroMetodo) {
+    where.metodoNomeSnapshot = { contains: filtroMetodo, mode: "insensitive" };
   }
 
   if (filtroCodigo) {
@@ -113,13 +118,13 @@ export default async function EtiquetasValidadeHistoricoPage({
   }
 
   const [etiquetas, etiquetaSelecionada, configuracaoDb] = await Promise.all([
-    prisma.etiquetaValidadeGerada.findMany({
+    prisma.etiquetaValidadeEmissao.findMany({
       where,
       orderBy: [{ criadoEm: "desc" }],
       take: 150
     }),
     etiquetaId
-      ? prisma.etiquetaValidadeGerada.findUnique({ where: { id: etiquetaId } })
+      ? prisma.etiquetaValidadeEmissao.findUnique({ where: { id: etiquetaId } })
       : Promise.resolve(null),
     prisma.etiquetaValidadeConfiguracaoImpressao.findFirst({
       orderBy: { id: "asc" }
@@ -129,12 +134,12 @@ export default async function EtiquetasValidadeHistoricoPage({
   const configuracao: PrintConfig = configuracaoDb ?? DEFAULT_PRINT_CONFIG;
   const filtrosAtuais = new URLSearchParams();
   if (filtroEmissaoInput) filtrosAtuais.set("filtroEmissao", filtroEmissaoInput);
-  if (filtroItem) filtrosAtuais.set("filtroItem", filtroItem);
-  if (filtroClassificacao) filtrosAtuais.set("filtroClassificacao", filtroClassificacao);
+  if (filtroProduto) filtrosAtuais.set("filtroProduto", filtroProduto);
+  if (filtroGrupo) filtrosAtuais.set("filtroGrupo", filtroGrupo);
+  if (filtroMetodo) filtrosAtuais.set("filtroMetodo", filtroMetodo);
   if (filtroCodigo) filtrosAtuais.set("filtroCodigo", filtroCodigo);
   if (filtroResponsavel) filtrosAtuais.set("filtroResponsavel", filtroResponsavel);
   const closeModalHref = buildHistoryPath(filtrosAtuais);
-  const podeExcluir = user.perfil === "DEV";
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -147,7 +152,7 @@ export default async function EtiquetasValidadeHistoricoPage({
               Histórico Completo - Etiquetas de Validade
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Consulta de etiquetas emitidas, com snapshot dos dados usados na geração.
+              Consulta de etiquetas emitidas com snapshot completo da regra usada.
             </p>
           </div>
           <div className="btn-group">
@@ -174,27 +179,22 @@ export default async function EtiquetasValidadeHistoricoPage({
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Filtros
         </h2>
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-800 md:grid-cols-5">
+        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-800 md:grid-cols-6">
           <label className="text-sm text-slate-700 dark:text-slate-200">
-            Data de emissão
-            <input
-              type="date"
-              name="filtroEmissao"
-              defaultValue={filtroEmissaoInput}
-              className={INPUT_CLASS}
-            />
+            Data emissão
+            <input type="date" name="filtroEmissao" defaultValue={filtroEmissaoInput} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
-            Item
-            <input name="filtroItem" defaultValue={filtroItem} className={INPUT_CLASS} />
+            Produto
+            <input name="filtroProduto" defaultValue={filtroProduto} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
-            Classificação
-            <input
-              name="filtroClassificacao"
-              defaultValue={filtroClassificacao}
-              className={INPUT_CLASS}
-            />
+            Grupo
+            <input name="filtroGrupo" defaultValue={filtroGrupo} className={INPUT_CLASS} />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Método
+            <input name="filtroMetodo" defaultValue={filtroMetodo} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Código
@@ -202,19 +202,11 @@ export default async function EtiquetasValidadeHistoricoPage({
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Responsável
-            <input
-              name="filtroResponsavel"
-              defaultValue={filtroResponsavel}
-              className={INPUT_CLASS}
-            />
+            <input name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
           </label>
-          <div className="btn-group md:col-span-5">
-            <button type="submit" className="btn-primary">
-              Aplicar Filtros
-            </button>
-            <Link href={HISTORY_PATH} className="btn-secondary">
-              Limpar
-            </Link>
+          <div className="btn-group md:col-span-6">
+            <button type="submit" className="btn-primary">Aplicar filtros</button>
+            <Link href={HISTORY_PATH} className="btn-secondary">Limpar</Link>
           </div>
         </form>
       </section>
@@ -228,21 +220,22 @@ export default async function EtiquetasValidadeHistoricoPage({
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Emissão</th>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2">Classificação</th>
+                <th className="px-3 py-2">Produto</th>
+                <th className="px-3 py-2">Grupo/Subgrupo</th>
+                <th className="px-3 py-2">Método</th>
                 <th className="px-3 py-2">Quantidade</th>
                 <th className="px-3 py-2">Manipulação</th>
                 <th className="px-3 py-2">Validade</th>
                 <th className="px-3 py-2">Responsável</th>
-                <th className="px-3 py-2">Código</th>
                 <th className="px-3 py-2">Origem</th>
+                <th className="px-3 py-2">Código</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {etiquetas.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={10}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={11}>
                     Nenhuma etiqueta encontrada.
                   </td>
                 </tr>
@@ -254,46 +247,32 @@ export default async function EtiquetasValidadeHistoricoPage({
                   return (
                     <tr key={etiqueta.id}>
                       <td className="px-3 py-2">{formatAppDateTime(etiqueta.criadoEm)}</td>
-                      <td className="px-3 py-2">{etiqueta.nomeItemSnapshot}</td>
+                      <td className="px-3 py-2">{etiqueta.produtoNomeSnapshot}</td>
                       <td className="px-3 py-2">
-                        {etiqueta.nomeClassificacaoSnapshot}
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {etiqueta.validadeDiasSnapshot
-                            ? `${etiqueta.validadeDiasSnapshot} dia(s)`
-                            : "Validade manual"}
-                        </p>
+                        {etiqueta.subgrupoNomeSnapshot || etiqueta.grupoNomeSnapshot || "-"}
                       </td>
+                      <td className="px-3 py-2">{etiqueta.metodoNomeSnapshot}</td>
                       <td className="px-3 py-2">{quantityLabel(etiqueta)}</td>
-                      <td className="px-3 py-2">
-                        {labelDate(etiqueta.dataManipulacao, etiqueta.horaManipulacao)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {labelDate(etiqueta.dataValidade, etiqueta.horaValidade)}
-                      </td>
+                      <td className="px-3 py-2">{labelDate(etiqueta.dataManipulacao, etiqueta.horaManipulacao)}</td>
+                      <td className="px-3 py-2">{labelDate(etiqueta.dataValidade, etiqueta.horaValidade)}</td>
                       <td className="px-3 py-2">{etiqueta.responsavelNomeSnapshot}</td>
-                      <td className="px-3 py-2 font-medium">{etiqueta.codigoEtiqueta}</td>
                       <td className="px-3 py-2">{originLabel(etiqueta.origem)}</td>
+                      <td className="px-3 py-2 font-medium">{etiqueta.codigoEtiqueta}</td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
-                          <Link
-                            href={buildHistoryPath(viewParams)}
-                            scroll={false}
-                            className="btn-secondary"
-                          >
-                            Visualizar
+                          <Link href={buildHistoryPath(viewParams)} scroll={false} className="btn-secondary">
+                            Visualizar/Reimprimir
                           </Link>
-                          {podeExcluir ? (
-                            <form action={deleteEtiquetaGeradaAction}>
-                              <input type="hidden" name="returnTo" value={closeModalHref} />
-                              <input type="hidden" name="id" value={String(etiqueta.id)} />
-                              <ConfirmSubmitButton
-                                message="Deseja excluir esta etiqueta gerada? Esta ação removerá o registro do histórico."
-                                className="btn-danger"
-                              >
-                                Excluir
-                              </ConfirmSubmitButton>
-                            </form>
-                          ) : null}
+                          <form action={deleteEtiquetaGeradaAction}>
+                            <input type="hidden" name="returnTo" value={closeModalHref} />
+                            <input type="hidden" name="id" value={etiqueta.id} />
+                            <ConfirmSubmitButton
+                              message="Deseja excluir esta etiqueta gerada? Esta ação removerá o registro do histórico."
+                              className="btn-danger"
+                            >
+                              Excluir
+                            </ConfirmSubmitButton>
+                          </form>
                         </div>
                       </td>
                     </tr>

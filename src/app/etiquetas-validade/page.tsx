@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { requireAuthenticatedUser } from "@/lib/auth-session";
-import { formatAppDateInput, getAppDate } from "@/lib/date-time";
+import { APP_TIME_ZONE, formatAppDateInput, getAppDate, getAppNow } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { canAccessValidityLabels } from "@/lib/rbac";
 
@@ -15,13 +15,20 @@ import {
   type PrintConfig
 } from "./constants";
 import { EtiquetaCard, EtiquetaPrintStyles } from "./label-card";
-import { LabelGeneratorForm, type LabelItemOption } from "./label-generator-form";
+import { LabelGeneratorForm } from "./label-generator-form";
 import { PrintButton } from "./print-button";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
 
 export const dynamic = "force-dynamic";
+
+const APP_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23"
+});
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -43,17 +50,33 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const etiquetaId = parsePositiveInt(firstParam(params.etiquetaId).trim());
 
-  const [itens, etiquetaVisualizacao, configuracaoDb] = await Promise.all([
-    prisma.etiquetaValidadeItem.findMany({
-      where: {
-        ativo: true,
-        classificacao: { ativo: true }
-      },
-      include: { classificacao: true },
+  const [
+    grupos,
+    produtos,
+    metodos,
+    regras,
+    etiquetaVisualizacao,
+    configuracaoDb
+  ] = await Promise.all([
+    prisma.etiquetaValidadeGrupo.findMany({
+      where: { ativo: true },
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }]
+    }),
+    prisma.etiquetaValidadeProduto.findMany({
+      where: { ativo: true },
+      include: { grupos: true },
       orderBy: [{ nome: "asc" }]
     }),
+    prisma.etiquetaValidadeMetodo.findMany({
+      where: { ativo: true },
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }]
+    }),
+    prisma.etiquetaValidadeRegra.findMany({
+      where: { ativo: true, metodo: { ativo: true } },
+      orderBy: [{ prioridade: "desc" }, { id: "asc" }]
+    }),
     etiquetaId
-      ? prisma.etiquetaValidadeGerada.findUnique({ where: { id: etiquetaId } })
+      ? prisma.etiquetaValidadeEmissao.findUnique({ where: { id: etiquetaId } })
       : Promise.resolve(null),
     prisma.etiquetaValidadeConfiguracaoImpressao.findFirst({
       orderBy: { id: "asc" }
@@ -61,13 +84,7 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
   ]);
 
   const configuracao: PrintConfig = configuracaoDb ?? DEFAULT_PRINT_CONFIG;
-  const activeItems: LabelItemOption[] = itens.map((item) => ({
-    id: item.id,
-    nome: item.nome,
-    classificacaoNome: item.classificacao.nome,
-    validadeDias: item.classificacao.validadeDias,
-    unidadeMedidaPadrao: item.unidadeMedidaPadrao
-  }));
+  const now = getAppNow();
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -80,7 +97,7 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
               Etiquetas de Validade
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Módulo interno para emissão de etiquetas de identificação e validade de alimentos manipulados.
+              Fluxo interno StayLabel para emissão guiada por grupo, produto, conservação e regra de validade.
             </p>
             <p className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               Módulo em desenvolvimento. Disponível apenas para DEV.
@@ -110,40 +127,59 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
       ) : null}
 
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Emitir Etiqueta
-        </h2>
         <LabelGeneratorForm
-          items={activeItems}
+          grupos={grupos.map((grupo) => ({
+            id: grupo.id,
+            nome: grupo.nome,
+            grupoPaiId: grupo.grupoPaiId,
+            icone: grupo.icone
+          }))}
+          produtos={produtos.map((produto) => ({
+            id: produto.id,
+            nome: produto.nome,
+            unidadePadrao: produto.unidadePadrao,
+            grupos: produto.grupos.map((grupo) => grupo.grupoId)
+          }))}
+          metodos={metodos.map((metodo) => ({
+            id: metodo.id,
+            nome: metodo.nome,
+            tipo: metodo.tipo,
+            icone: metodo.icone
+          }))}
+          regras={regras.map((regra) => ({
+            id: regra.id,
+            produtoId: regra.produtoId,
+            grupoId: regra.grupoId,
+            metodoId: regra.metodoId,
+            validadeDias: regra.validadeDias,
+            validadeHoras: regra.validadeHoras,
+            exigeValidadeManual: regra.exigeValidadeManual,
+            temperaturaReferencia: regra.temperaturaReferencia,
+            prioridade: regra.prioridade
+          }))}
           responsavelNome={user.nomeCompleto}
-          defaultDate={formatAppDateInput(getAppDate())}
+          defaultDate={formatAppDateInput(getAppDate(now))}
+          defaultTime={APP_TIME_FORMATTER.format(now)}
           returnTo={MODULE_PATH}
-          resetKey={etiquetaId ? String(etiquetaId) : ""}
-          resetOnSuccess={Boolean(etiquetaId && feedbackType === "success")}
         />
       </section>
 
-      <section className={CARD_CLASS}>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Etiqueta para Impressão
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Visualização HTML/CSS imprimível, preparada para configuração por bobina e futura geração ZPL.
-            </p>
+      {etiquetaVisualizacao ? (
+        <section className={CARD_CLASS}>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Etiqueta gerada
+              </h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Visualização HTML/CSS imprimível, preparada para Zebra ZD220 em fase futura.
+              </p>
+            </div>
+            <PrintButton />
           </div>
-          {etiquetaVisualizacao ? <PrintButton /> : null}
-        </div>
-
-        {etiquetaVisualizacao ? (
           <EtiquetaCard etiqueta={etiquetaVisualizacao} config={configuracao} />
-        ) : (
-          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            Gere uma etiqueta para visualizar e imprimir o cartão.
-          </p>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

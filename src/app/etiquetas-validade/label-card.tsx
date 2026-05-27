@@ -3,19 +3,25 @@ import { formatAppDate, formatAppDateTime } from "@/lib/date-time";
 import type { PrintConfig } from "./constants";
 
 export type EtiquetaSnapshot = {
-  origem?: "CADASTRADO" | "LIVRE";
-  nomeItemSnapshot: string;
-  nomeClassificacaoSnapshot: string;
+  origem?: "AUTOMATICA" | "MANUAL";
+  produtoNomeSnapshot: string;
+  grupoNomeSnapshot: string | null;
+  subgrupoNomeSnapshot: string | null;
+  metodoNomeSnapshot: string;
+  validadeDiasSnapshot: number | null;
+  validadeHorasSnapshot: number | null;
+  temperaturaReferenciaSnapshot: string | null;
   dataManipulacao: Date;
   horaManipulacao: string | null;
   dataValidade: Date;
   horaValidade: string | null;
   responsavelNomeSnapshot: string;
-  marcaFornecedorSnapshot: string | null;
+  marcaFornecedor: string | null;
   sif: string | null;
   lote: string | null;
   quantidade: string | null;
-  unidadeMedidaSnapshot: string;
+  unidadeSnapshot: string;
+  validadeOriginal: Date | null;
   observacao: string | null;
   codigoEtiqueta: string;
   criadoEm: Date;
@@ -34,7 +40,19 @@ function quantityLabel(label: EtiquetaSnapshot): string {
     return "-";
   }
 
-  return `${label.quantidade.trim()} ${label.unidadeMedidaSnapshot}`;
+  return `${label.quantidade.trim()} ${label.unidadeSnapshot}`;
+}
+
+function validityRuleLabel(label: EtiquetaSnapshot): string {
+  if (label.origem === "MANUAL") {
+    return "Manual";
+  }
+
+  const parts = [];
+  if (label.validadeDiasSnapshot) parts.push(`${label.validadeDiasSnapshot} dia(s)`);
+  if (label.validadeHorasSnapshot) parts.push(`${label.validadeHorasSnapshot} hora(s)`);
+
+  return parts.join(" + ") || "Automática";
 }
 
 function LabelInfo({ label, value }: { label: string; value: string }) {
@@ -43,10 +61,6 @@ function LabelInfo({ label, value }: { label: string; value: string }) {
       <span className="font-semibold">{label}:</span> {value}
     </p>
   );
-}
-
-function originLabel(origem?: "CADASTRADO" | "LIVRE"): string {
-  return origem === "LIVRE" ? "Livre/manual" : "Cadastrado";
 }
 
 export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
@@ -85,6 +99,8 @@ export function EtiquetaCard({
   etiqueta: EtiquetaSnapshot;
   config: PrintConfig;
 }) {
+  const grupo = etiqueta.subgrupoNomeSnapshot || etiqueta.grupoNomeSnapshot || "-";
+
   return (
     <div id="etiqueta-print-area" className="overflow-x-auto">
       <article
@@ -102,10 +118,10 @@ export function EtiquetaCard({
         <div className="flex items-start justify-between gap-2 border-b border-slate-900 pb-1">
           <div className="min-w-0">
             <h3 className="break-words text-base font-black uppercase leading-tight">
-              {etiqueta.nomeItemSnapshot}
+              {etiqueta.produtoNomeSnapshot}
             </h3>
             <p className="text-[0.72em]">
-              Classificação: {etiqueta.nomeClassificacaoSnapshot}
+              {grupo} • {etiqueta.metodoNomeSnapshot}
             </p>
           </div>
           {config.mostrarQrCode ? (
@@ -126,12 +142,13 @@ export function EtiquetaCard({
           />
           <LabelInfo label="Resp." value={etiqueta.responsavelNomeSnapshot} />
           <LabelInfo label="Qtd." value={quantityLabel(etiqueta)} />
-          <LabelInfo label="Origem" value={originLabel(etiqueta.origem)} />
+          <LabelInfo label="Regra" value={validityRuleLabel(etiqueta)} />
+          <LabelInfo
+            label="Temp."
+            value={optionalText(etiqueta.temperaturaReferenciaSnapshot)}
+          />
           {config.mostrarMarcaFornecedor ? (
-            <LabelInfo
-              label="Marca/Forn."
-              value={optionalText(etiqueta.marcaFornecedorSnapshot)}
-            />
+            <LabelInfo label="Marca/Forn." value={optionalText(etiqueta.marcaFornecedor)} />
           ) : null}
           {config.mostrarSif ? (
             <LabelInfo label="SIF" value={optionalText(etiqueta.sif)} />
@@ -139,6 +156,10 @@ export function EtiquetaCard({
           {config.mostrarLote ? (
             <LabelInfo label="Lote" value={optionalText(etiqueta.lote)} />
           ) : null}
+          <LabelInfo
+            label="Val. original"
+            value={etiqueta.validadeOriginal ? formatAppDate(etiqueta.validadeOriginal) : "-"}
+          />
           <LabelInfo label="Gerada" value={formatAppDateTime(etiqueta.criadoEm)} />
         </div>
 

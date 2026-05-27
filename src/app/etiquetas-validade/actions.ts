@@ -1,6 +1,6 @@
 "use server";
 
-import { EtiquetaValidadeOrigem } from "@prisma/client";
+import { EtiquetaValidadeOrigemRegra } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -27,201 +27,20 @@ const APP_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23"
 });
 
-const MANUAL_CLASSIFICATION_REFERENCE = [
-  {
-    nome: "Carnes / aves / suínos refrigerados",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Conforme procedimento interno",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Carnes / aves / suínos congelados",
-    validadeDias: 30,
-    condicaoArmazenamento: "Congelado",
-    temperaturaConservacao: "Conforme procedimento interno",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Peixes e frutos do mar refrigerados",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Conforme procedimento interno",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Peixes e frutos do mar congelados",
-    validadeDias: 30,
-    condicaoArmazenamento: "Congelado",
-    temperaturaConservacao: "Conforme procedimento interno",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Ovos refrigerados",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Conforme procedimento interno",
-    observacaoNormativa: "Não congelar. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Condimentos / temperos / produtos secos",
-    validadeDias: 30,
-    condicaoArmazenamento: "Ambiente",
-    temperaturaConservacao: "Ambiente",
-    observacaoNormativa: "30 dias ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Frutas secas",
-    validadeDias: 15,
-    condicaoArmazenamento: "Ambiente",
-    temperaturaConservacao: "Ambiente",
-    observacaoNormativa: "15 dias ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Pães",
-    validadeDias: 5,
-    condicaoArmazenamento: "Ambiente",
-    temperaturaConservacao: "Ambiente",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Torradas",
-    validadeDias: 5,
-    condicaoArmazenamento: "Ambiente",
-    temperaturaConservacao: "Ambiente",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Croutons",
-    validadeDias: 5,
-    condicaoArmazenamento: "Ambiente",
-    temperaturaConservacao: "Ambiente",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Bolos / tortas / pudim",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Recheios / caldas / coberturas / cremes / chantilly / geleias",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Doces caseiros em calda",
-    validadeDias: 15,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Molhos à base de maionese",
-    validadeDias: 2,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Sanduíches com frios ou pastas",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Conservas abertas",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Azeitonas, alcaparras e palmito: 3 dias ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Salada de frutas / frutas manipuladas",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Hortifruti higienizado",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Saladas diversas preparadas",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Temperos frescos",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Temperos preparados",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Frios fatiados, picados ou ralados",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Creme de leite",
-    validadeDias: 2,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "2 dias ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Leite",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "1 dia ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Iogurte",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "3 dias ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Sucos naturais",
-    validadeDias: 3,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  },
-  {
-    nome: "Sucos industrializados abertos",
-    validadeDias: 1,
-    condicaoArmazenamento: "Refrigerado",
-    temperaturaConservacao: "Até 4°C",
-    observacaoNormativa: "1 dia ou de acordo com o fabricante. Critério conforme Manual de Boas Práticas K-Platz, item 13.8."
-  }
-];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getInputValues(formData: FormData, key: string): string[] {
+  return formData
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 function parsePositiveInt(value: string): number | null {
@@ -229,39 +48,32 @@ function parsePositiveInt(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function parseOptionalPositiveInt(value: string): number | null {
+  return value ? parsePositiveInt(value) : null;
+}
+
 function parsePositiveNumber(value: string): number | null {
   const parsed = Number.parseFloat(value.replace(",", "."));
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
 }
 
+function parseNonNegativeInt(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function sanitizeText(value: string, maxLength = 1000): string | null {
   const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function sanitizeRequiredText(value: string, label: string, maxLength = 160): string {
+  const cleaned = sanitizeText(value, maxLength);
   if (!cleaned) {
-    return null;
+    throw new Error(`Informe ${label}.`);
   }
 
-  return cleaned.slice(0, maxLength);
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
-function getCurrentAppTimeInput(date = getAppNow()): string {
-  return APP_TIME_FORMATTER.format(date);
-}
-
-function calculateValidityDaysSnapshot(
-  dataManipulacao: Date,
-  dataValidade: Date
-): number | null {
-  const diffDays = Math.round(
-    (dataValidade.getTime() - dataManipulacao.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  return diffDays > 0 ? diffDays : null;
+  return cleaned;
 }
 
 function getReturnToPath(formData: FormData): string {
@@ -296,8 +108,10 @@ function redirectWithFeedback(
 ): never {
   const url = new URL(returnTo, "http://localhost");
   if (feedbackType === "success") {
-    url.searchParams.delete("editClassificacaoId");
-    url.searchParams.delete("editItemId");
+    url.searchParams.delete("editGrupoId");
+    url.searchParams.delete("editProdutoId");
+    url.searchParams.delete("editMetodoId");
+    url.searchParams.delete("editRegraId");
     url.searchParams.delete("etiquetaId");
   }
   url.searchParams.set("feedbackType", feedbackType);
@@ -316,389 +130,464 @@ async function ensureDevAction() {
   return actor;
 }
 
-async function ensureDevDeletionAction() {
-  const actor = await getCurrentUserForAction();
-
-  if (actor.perfil !== "DEV") {
-    throw new Error("Apenas usuários DEV podem executar esta ação.");
-  }
-
-  return actor;
-}
-
-function formatEtiquetaCode(id: number): string {
-  return `STS-${String(id).padStart(6, "0")}`;
-}
-
 function revalidateEtiquetaPaths() {
   revalidatePath(MODULE_PATH);
   revalidatePath(OPTIONS_PATH);
   revalidatePath(HISTORY_PATH);
 }
 
-function getClassificacaoPayload(formData: FormData) {
-  const nome = sanitizeText(getInputValue(formData, "nome"), 120);
-  const validadeDias = parsePositiveInt(getInputValue(formData, "validadeDias"));
-  const descricao = sanitizeText(getInputValue(formData, "descricao"), 1000);
-  const condicaoArmazenamento = sanitizeText(
-    getInputValue(formData, "condicaoArmazenamento"),
-    120
-  );
-  const temperaturaConservacao = sanitizeText(
-    getInputValue(formData, "temperaturaConservacao"),
-    120
-  );
-  const observacaoNormativa = sanitizeText(
-    getInputValue(formData, "observacaoNormativa"),
-    1000
-  );
-  const ativo = getInputValue(formData, "ativo") !== "false";
-
-  if (!nome) {
-    throw new Error("Informe o nome da classificação.");
-  }
-
-  if (!validadeDias) {
-    throw new Error("Informe a validade em dias, maior que zero.");
-  }
-
-  return {
-    nome,
-    validadeDias,
-    descricao,
-    condicaoArmazenamento,
-    temperaturaConservacao,
-    observacaoNormativa,
-    ativo
-  };
+function formatEtiquetaCode(id: number): string {
+  return `STS-${String(id).padStart(6, "0")}`;
 }
 
-function getItemPayload(formData: FormData) {
-  const nome = sanitizeText(getInputValue(formData, "nome"), 160);
-  const classificacaoId = parsePositiveInt(getInputValue(formData, "classificacaoId"));
-  const unidadeMedidaPadrao = sanitizeText(
-    getInputValue(formData, "unidadeMedidaPadrao"),
+function getCurrentAppTimeInput(date = getAppNow()): string {
+  return APP_TIME_FORMATTER.format(date);
+}
+
+function getValidityDateTime(params: {
+  now: Date;
+  validadeDias: number | null;
+  validadeHoras: number | null;
+}): Date {
+  const days = params.validadeDias ?? 0;
+  const hours = params.validadeHoras ?? 0;
+  return new Date(params.now.getTime() + days * DAY_MS + hours * HOUR_MS);
+}
+
+function getGroupPayload(formData: FormData) {
+  const nome = sanitizeRequiredText(getInputValue(formData, "nome"), "o nome do grupo");
+  const grupoPaiId = parseOptionalPositiveInt(getInputValue(formData, "grupoPaiId"));
+  const icone = sanitizeText(getInputValue(formData, "icone"), 40);
+  const ordem = parseNonNegativeInt(getInputValue(formData, "ordem"));
+  const ativo = getInputValue(formData, "ativo") !== "false";
+
+  return { nome, grupoPaiId, icone, ordem, ativo };
+}
+
+function getProductPayload(formData: FormData) {
+  const nome = sanitizeRequiredText(getInputValue(formData, "nome"), "o nome do produto");
+  const unidadePadrao = sanitizeRequiredText(
+    getInputValue(formData, "unidadePadrao"),
+    "a unidade padrão",
     40
   );
   const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
   const ativo = getInputValue(formData, "ativo") !== "false";
+  const grupoIds = Array.from(
+    new Set(getInputValues(formData, "grupoIds").map(parsePositiveInt).filter(Boolean))
+  ) as number[];
 
-  if (!nome) {
-    throw new Error("Informe o nome do item/produto.");
+  if (!(UNIT_OPTIONS as readonly string[]).includes(unidadePadrao)) {
+    throw new Error("Selecione uma unidade padrão válida.");
   }
 
-  if (!classificacaoId) {
-    throw new Error("Selecione uma classificação ativa para o item.");
+  if (grupoIds.length === 0) {
+    throw new Error("Vincule o produto a pelo menos um grupo ou subgrupo.");
   }
 
-  if (
-    !unidadeMedidaPadrao ||
-    !(UNIT_OPTIONS as readonly string[]).includes(unidadeMedidaPadrao)
-  ) {
-    throw new Error("Selecione a unidade de medida padrão do item.");
+  return { nome, unidadePadrao, observacao, ativo, grupoIds };
+}
+
+function getMethodPayload(formData: FormData) {
+  const nome = sanitizeRequiredText(getInputValue(formData, "nome"), "o nome do método");
+  const tipo = sanitizeText(getInputValue(formData, "tipo"), 80);
+  const icone = sanitizeText(getInputValue(formData, "icone"), 40);
+  const ordem = parseNonNegativeInt(getInputValue(formData, "ordem"));
+  const ativo = getInputValue(formData, "ativo") !== "false";
+
+  return { nome, tipo, icone, ordem, ativo };
+}
+
+function getRulePayload(formData: FormData) {
+  const produtoId = parseOptionalPositiveInt(getInputValue(formData, "produtoId"));
+  const grupoId = parseOptionalPositiveInt(getInputValue(formData, "grupoId"));
+  const metodoId = parsePositiveInt(getInputValue(formData, "metodoId"));
+  const validadeDias = parseOptionalPositiveInt(getInputValue(formData, "validadeDias"));
+  const validadeHoras = parseOptionalPositiveInt(getInputValue(formData, "validadeHoras"));
+  const exigeValidadeManual = getInputValue(formData, "exigeValidadeManual") === "on";
+  const temperaturaReferencia = sanitizeText(
+    getInputValue(formData, "temperaturaReferencia"),
+    120
+  );
+  const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
+  const prioridade = parseNonNegativeInt(getInputValue(formData, "prioridade"));
+  const ativo = getInputValue(formData, "ativo") !== "false";
+
+  if (!metodoId) {
+    throw new Error("Selecione um método/conservação.");
+  }
+
+  if (!exigeValidadeManual && !validadeDias && !validadeHoras) {
+    throw new Error("Informe dias/horas de validade ou marque validade manual.");
   }
 
   return {
-    nome,
-    classificacaoId,
-    unidadeMedidaPadrao,
+    produtoId,
+    grupoId,
+    metodoId,
+    validadeDias,
+    validadeHoras,
+    exigeValidadeManual,
+    temperaturaReferencia,
     observacao,
+    prioridade,
     ativo
   };
 }
 
-export async function createClassificacaoAction(formData: FormData) {
+export async function createGroupAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
-    const payload = getClassificacaoPayload(formData);
-
-    await prisma.etiquetaValidadeClassificacao.create({
-      data: payload
-    });
-
+    const payload = getGroupPayload(formData);
+    await prisma.etiquetaValidadeGrupo.create({ data: payload });
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Classificação cadastrada com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Grupo cadastrado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível cadastrar a classificação.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível cadastrar o grupo."));
   }
 }
 
-export async function updateClassificacaoAction(formData: FormData) {
+export async function updateGroupAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Classificação inválida para edição.");
+    if (!id) throw new Error("Grupo inválido para edição.");
+    const payload = getGroupPayload(formData);
+    if (payload.grupoPaiId === id) {
+      throw new Error("Um grupo não pode ser subgrupo dele mesmo.");
     }
-
-    const payload = getClassificacaoPayload(formData);
-    await prisma.etiquetaValidadeClassificacao.update({
-      where: { id },
-      data: payload
-    });
-
+    await prisma.etiquetaValidadeGrupo.update({ where: { id }, data: payload });
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Classificação atualizada com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Grupo atualizado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível atualizar a classificação.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o grupo."));
   }
 }
 
-export async function toggleClassificacaoStatusAction(formData: FormData) {
+export async function toggleGroupStatusAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Classificação inválida para atualização.");
-    }
-
-    const existing = await prisma.etiquetaValidadeClassificacao.findUnique({
+    if (!id) throw new Error("Grupo inválido para atualização.");
+    const existing = await prisma.etiquetaValidadeGrupo.findUnique({
       where: { id },
       select: { ativo: true }
     });
-    if (!existing) {
-      throw new Error("Classificação não encontrada.");
-    }
-
-    await prisma.etiquetaValidadeClassificacao.update({
+    if (!existing) throw new Error("Grupo não encontrado.");
+    await prisma.etiquetaValidadeGrupo.update({
       where: { id },
       data: { ativo: !existing.ativo }
     });
-
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Status da classificação atualizado.");
+    redirectWithFeedback(returnTo, "success", "Status do grupo atualizado.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível atualizar a classificação.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o grupo."));
   }
 }
 
-export async function deleteClassificacaoAction(formData: FormData) {
+export async function deleteGroupAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await ensureDevDeletionAction();
+    await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Classificação inválida para exclusão.");
-    }
+    if (!id) throw new Error("Grupo inválido para exclusão.");
 
-    const [itensVinculados, etiquetasVinculadas] = await Promise.all([
-      prisma.etiquetaValidadeItem.count({ where: { classificacaoId: id } }),
-      prisma.etiquetaValidadeGerada.count({ where: { classificacaoId: id } })
+    const [subgrupos, produtos, regras, emissoes] = await Promise.all([
+      prisma.etiquetaValidadeGrupo.count({ where: { grupoPaiId: id } }),
+      prisma.etiquetaValidadeProdutoGrupo.count({ where: { grupoId: id } }),
+      prisma.etiquetaValidadeRegra.count({ where: { grupoId: id } }),
+      prisma.etiquetaValidadeEmissao.count({
+        where: { OR: [{ grupoId: id }, { subgrupoId: id }] }
+      })
     ]);
 
-    if (itensVinculados > 0) {
-      throw new Error(
-        "Não é possível excluir esta classificação porque existem itens vinculados a ela. Exclua ou altere os itens antes."
-      );
+    if (subgrupos + produtos + regras + emissoes > 0) {
+      throw new Error("Não é possível excluir este grupo porque existem vínculos. Inative-o ou remova os vínculos antes.");
     }
 
-    if (etiquetasVinculadas > 0) {
-      throw new Error(
-        "Não é possível excluir esta classificação porque existem etiquetas geradas vinculadas a ela."
-      );
-    }
-
-    await prisma.etiquetaValidadeClassificacao.delete({ where: { id } });
-
+    await prisma.etiquetaValidadeGrupo.delete({ where: { id } });
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Classificação excluída com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Grupo excluído com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível excluir a classificação.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível excluir o grupo."));
   }
 }
 
-export async function createItemAction(formData: FormData) {
+export async function createProductAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
-    const payload = getItemPayload(formData);
-    const classificacao = await prisma.etiquetaValidadeClassificacao.findUnique({
-      where: { id: payload.classificacaoId },
-      select: { ativo: true }
+    const payload = getProductPayload(formData);
+    await prisma.$transaction(async (tx) => {
+      const produto = await tx.etiquetaValidadeProduto.create({
+        data: {
+          nome: payload.nome,
+          unidadePadrao: payload.unidadePadrao,
+          observacao: payload.observacao,
+          ativo: payload.ativo
+        }
+      });
+      await tx.etiquetaValidadeProdutoGrupo.createMany({
+        data: payload.grupoIds.map((grupoId) => ({ produtoId: produto.id, grupoId }))
+      });
     });
-
-    if (!classificacao?.ativo) {
-      throw new Error("Selecione uma classificação ativa para o item.");
-    }
-
-    await prisma.etiquetaValidadeItem.create({
-      data: payload
-    });
-
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Item cadastrado com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Produto cadastrado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível cadastrar o item.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível cadastrar o produto."));
   }
 }
 
-export async function updateItemAction(formData: FormData) {
+export async function updateProductAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Item inválido para edição.");
-    }
-
-    const payload = getItemPayload(formData);
-    const classificacao = await prisma.etiquetaValidadeClassificacao.findUnique({
-      where: { id: payload.classificacaoId },
-      select: { ativo: true }
+    if (!id) throw new Error("Produto inválido para edição.");
+    const payload = getProductPayload(formData);
+    await prisma.$transaction(async (tx) => {
+      await tx.etiquetaValidadeProduto.update({
+        where: { id },
+        data: {
+          nome: payload.nome,
+          unidadePadrao: payload.unidadePadrao,
+          observacao: payload.observacao,
+          ativo: payload.ativo
+        }
+      });
+      await tx.etiquetaValidadeProdutoGrupo.deleteMany({ where: { produtoId: id } });
+      await tx.etiquetaValidadeProdutoGrupo.createMany({
+        data: payload.grupoIds.map((grupoId) => ({ produtoId: id, grupoId }))
+      });
     });
-
-    if (!classificacao?.ativo) {
-      throw new Error("Selecione uma classificação ativa para o item.");
-    }
-
-    await prisma.etiquetaValidadeItem.update({
-      where: { id },
-      data: payload
-    });
-
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Item atualizado com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Produto atualizado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível atualizar o item.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o produto."));
   }
 }
 
-export async function toggleItemStatusAction(formData: FormData) {
+export async function toggleProductStatusAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Item inválido para atualização.");
-    }
-
-    const existing = await prisma.etiquetaValidadeItem.findUnique({
+    if (!id) throw new Error("Produto inválido para atualização.");
+    const existing = await prisma.etiquetaValidadeProduto.findUnique({
       where: { id },
       select: { ativo: true }
     });
-    if (!existing) {
-      throw new Error("Item não encontrado.");
-    }
-
-    await prisma.etiquetaValidadeItem.update({
+    if (!existing) throw new Error("Produto não encontrado.");
+    await prisma.etiquetaValidadeProduto.update({
       where: { id },
       data: { ativo: !existing.ativo }
     });
-
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Status do item atualizado.");
+    redirectWithFeedback(returnTo, "success", "Status do produto atualizado.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível atualizar o item.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o produto."));
   }
 }
 
-export async function deleteItemAction(formData: FormData) {
+export async function deleteProductAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await ensureDevDeletionAction();
+    await ensureDevAction();
     const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Item inválido para exclusão.");
-    }
-
-    const etiquetasVinculadas = await prisma.etiquetaValidadeGerada.count({
-      where: { itemId: id }
-    });
-    if (etiquetasVinculadas > 0) {
-      await prisma.etiquetaValidadeItem.update({
-        where: { id },
-        data: { ativo: false }
-      });
-
+    if (!id) throw new Error("Produto inválido para exclusão.");
+    const emissoes = await prisma.etiquetaValidadeEmissao.count({ where: { produtoId: id } });
+    if (emissoes > 0) {
+      await prisma.etiquetaValidadeProduto.update({ where: { id }, data: { ativo: false } });
       revalidateEtiquetaPaths();
-      redirectWithFeedback(
-        returnTo,
-        "success",
-        "Este item possui etiquetas geradas. Ele foi inativado para preservar o histórico."
-      );
+      redirectWithFeedback(returnTo, "success", "Produto inativado para preservar o histórico.");
     }
-
-    await prisma.etiquetaValidadeItem.delete({ where: { id } });
-
+    await prisma.etiquetaValidadeProduto.delete({ where: { id } });
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Item excluído com sucesso.");
+    redirectWithFeedback(returnTo, "success", "Produto excluído com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível excluir o item.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível excluir o produto."));
   }
 }
 
-export async function deleteEtiquetaGeradaAction(formData: FormData) {
+export async function createMethodAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
-    await ensureDevDeletionAction();
-    const id = parsePositiveInt(getInputValue(formData, "id"));
-    if (!id) {
-      throw new Error("Etiqueta inválida para exclusão.");
-    }
-
-    await prisma.etiquetaValidadeGerada.delete({ where: { id } });
-
+    await ensureDevAction();
+    await prisma.etiquetaValidadeMetodo.create({ data: getMethodPayload(formData) });
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Etiqueta gerada excluída do histórico.");
+    redirectWithFeedback(returnTo, "success", "Método cadastrado com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível excluir a etiqueta gerada.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível cadastrar o método."));
+  }
+}
+
+export async function updateMethodAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Método inválido para edição.");
+    await prisma.etiquetaValidadeMetodo.update({
+      where: { id },
+      data: getMethodPayload(formData)
+    });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Método atualizado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o método."));
+  }
+}
+
+export async function toggleMethodStatusAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Método inválido para atualização.");
+    const existing = await prisma.etiquetaValidadeMetodo.findUnique({
+      where: { id },
+      select: { ativo: true }
+    });
+    if (!existing) throw new Error("Método não encontrado.");
+    await prisma.etiquetaValidadeMetodo.update({
+      where: { id },
+      data: { ativo: !existing.ativo }
+    });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Status do método atualizado.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar o método."));
+  }
+}
+
+export async function deleteMethodAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Método inválido para exclusão.");
+    const [regras, emissoes] = await Promise.all([
+      prisma.etiquetaValidadeRegra.count({ where: { metodoId: id } }),
+      prisma.etiquetaValidadeEmissao.count({ where: { metodoId: id } })
+    ]);
+    if (regras + emissoes > 0) {
+      await prisma.etiquetaValidadeMetodo.update({ where: { id }, data: { ativo: false } });
+      revalidateEtiquetaPaths();
+      redirectWithFeedback(returnTo, "success", "Método inativado porque possui vínculos.");
+    }
+    await prisma.etiquetaValidadeMetodo.delete({ where: { id } });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Método excluído com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível excluir o método."));
+  }
+}
+
+export async function createValidityRuleAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    await prisma.etiquetaValidadeRegra.create({ data: getRulePayload(formData) });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Regra de validade cadastrada com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível cadastrar a regra."));
+  }
+}
+
+export async function updateValidityRuleAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Regra inválida para edição.");
+    await prisma.etiquetaValidadeRegra.update({
+      where: { id },
+      data: getRulePayload(formData)
+    });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Regra de validade atualizada.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar a regra."));
+  }
+}
+
+export async function toggleValidityRuleStatusAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Regra inválida para atualização.");
+    const existing = await prisma.etiquetaValidadeRegra.findUnique({
+      where: { id },
+      select: { ativo: true }
+    });
+    if (!existing) throw new Error("Regra não encontrada.");
+    await prisma.etiquetaValidadeRegra.update({
+      where: { id },
+      data: { ativo: !existing.ativo }
+    });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Status da regra atualizado.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar a regra."));
+  }
+}
+
+export async function deleteValidityRuleAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Regra inválida para exclusão.");
+    const emissoes = await prisma.etiquetaValidadeEmissao.count({
+      where: { regraValidadeId: id }
+    });
+    if (emissoes > 0) {
+      await prisma.etiquetaValidadeRegra.update({ where: { id }, data: { ativo: false } });
+      revalidateEtiquetaPaths();
+      redirectWithFeedback(returnTo, "success", "Regra inativada para preservar o histórico.");
+    }
+    await prisma.etiquetaValidadeRegra.delete({ where: { id } });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Regra excluída com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível excluir a regra."));
   }
 }
 
@@ -744,54 +633,260 @@ export async function updatePrintConfigAction(formData: FormData) {
     });
 
     revalidateEtiquetaPaths();
-    redirectWithFeedback(returnTo, "success", "Configuração de impressão atualizada.");
+    redirectWithFeedback(returnTo, "success", "Configuração da etiqueta atualizada.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível atualizar a configuração de impressão.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível atualizar a configuração."));
   }
 }
 
-export async function createManualClassificationsAction(formData: FormData) {
+async function upsertRule(params: {
+  grupoId?: number | null;
+  produtoId?: number | null;
+  metodoId: number;
+  validadeDias?: number | null;
+  validadeHoras?: number | null;
+  temperaturaReferencia?: string | null;
+  observacao?: string | null;
+  prioridade?: number;
+}) {
+  const existing = await prisma.etiquetaValidadeRegra.findFirst({
+    where: {
+      grupoId: params.grupoId ?? null,
+      produtoId: params.produtoId ?? null,
+      metodoId: params.metodoId
+    },
+    select: { id: true }
+  });
+  const data = {
+    grupoId: params.grupoId ?? null,
+    produtoId: params.produtoId ?? null,
+    metodoId: params.metodoId,
+    validadeDias: params.validadeDias ?? null,
+    validadeHoras: params.validadeHoras ?? null,
+    temperaturaReferencia: params.temperaturaReferencia ?? null,
+    observacao: params.observacao ?? null,
+    prioridade: params.prioridade ?? 0,
+    exigeValidadeManual: false,
+    ativo: true
+  };
+
+  if (existing) {
+    await prisma.etiquetaValidadeRegra.update({ where: { id: existing.id }, data });
+    return;
+  }
+
+  await prisma.etiquetaValidadeRegra.create({ data });
+}
+
+export async function createManualBaseAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
   try {
     await ensureDevAction();
+    const groups = [
+      { nome: "Proteínas", ordem: 10 },
+      { nome: "Proteínas - Aves", pai: "Proteínas", ordem: 11 },
+      { nome: "Proteínas - Carnes Bovinas", pai: "Proteínas", ordem: 12 },
+      { nome: "Proteínas - Peixes", pai: "Proteínas", ordem: 13 },
+      { nome: "Proteínas - Frutos do Mar", pai: "Proteínas", ordem: 14 },
+      { nome: "Proteínas - Suínos", pai: "Proteínas", ordem: 15 },
+      { nome: "Proteínas - Ovos", pai: "Proteínas", ordem: 16 },
+      { nome: "Hortifruti", ordem: 20 },
+      { nome: "Hortifruti - Frutas", pai: "Hortifruti", ordem: 21 },
+      { nome: "Hortifruti - Legumes", pai: "Hortifruti", ordem: 22 },
+      { nome: "Hortifruti - Verduras", pai: "Hortifruti", ordem: 23 },
+      { nome: "Itens Secos", ordem: 30 },
+      { nome: "Produtos Refrigerados", ordem: 40 },
+      { nome: "Frios e Laticínios", ordem: 50 }
+    ];
+    const methods = [
+      { nome: "Resfriado", tipo: "Conservação", ordem: 10 },
+      { nome: "Congelado", tipo: "Conservação", ordem: 20 },
+      { nome: "Temperatura Ambiente", tipo: "Conservação", ordem: 30 },
+      { nome: "Descongelando", tipo: "Processo", ordem: 40 },
+      { nome: "Amostra Resfriada", tipo: "Amostra", ordem: 50 },
+      { nome: "Pista Fria", tipo: "Buffet", ordem: 60 },
+      { nome: "Pista Quente", tipo: "Buffet", ordem: 70 },
+      { nome: "Aberto", tipo: "Processo", ordem: 80 },
+      { nome: "Manipulado", tipo: "Processo", ordem: 90 }
+    ];
+    const products = [
+      { nome: "Bacon", unidadePadrao: "g", grupos: ["Proteínas - Suínos"] },
+      { nome: "Pernil suíno", unidadePadrao: "g", grupos: ["Proteínas - Suínos"] },
+      { nome: "Frango cozido", unidadePadrao: "g", grupos: ["Proteínas - Aves"] },
+      { nome: "Peixe em posta", unidadePadrao: "g", grupos: ["Proteínas - Peixes"] },
+      { nome: "Abacate", unidadePadrao: "unidade", grupos: ["Hortifruti - Frutas"] },
+      { nome: "Abacaxi", unidadePadrao: "unidade", grupos: ["Hortifruti - Frutas"] },
+      { nome: "Bolo", unidadePadrao: "porção", grupos: ["Produtos Refrigerados"] },
+      { nome: "Presunto", unidadePadrao: "g", grupos: ["Frios e Laticínios"] },
+      { nome: "Queijo mussarela", unidadePadrao: "g", grupos: ["Frios e Laticínios"] },
+      { nome: "Salada de frutas", unidadePadrao: "porção", grupos: ["Produtos Refrigerados"] },
+      { nome: "Suco natural", unidadePadrao: "L", grupos: ["Produtos Refrigerados"] },
+      { nome: "Pães", unidadePadrao: "unidade", grupos: ["Itens Secos"] },
+      { nome: "Torradas", unidadePadrao: "pacote", grupos: ["Itens Secos"] },
+      { nome: "Croutons", unidadePadrao: "pacote", grupos: ["Itens Secos"] }
+    ];
 
-    await prisma.$transaction(
-      MANUAL_CLASSIFICATION_REFERENCE.map((item) =>
-        prisma.etiquetaValidadeClassificacao.upsert({
-          where: { nome: item.nome },
-          create: {
-            ...item,
-            descricao: "Sugestão editável baseada no Manual de Boas Práticas."
-          },
-          update: {
-            validadeDias: item.validadeDias,
-            condicaoArmazenamento: item.condicaoArmazenamento,
-            temperaturaConservacao: item.temperaturaConservacao,
-            observacaoNormativa: item.observacaoNormativa
-          }
-        })
-      )
+    for (const group of groups) {
+      const parent = group.pai
+        ? await prisma.etiquetaValidadeGrupo.findUnique({ where: { nome: group.pai } })
+        : null;
+      await prisma.etiquetaValidadeGrupo.upsert({
+        where: { nome: group.nome },
+        create: {
+          nome: group.nome,
+          grupoPaiId: parent?.id ?? null,
+          ordem: group.ordem,
+          ativo: true
+        },
+        update: {
+          grupoPaiId: parent?.id ?? null,
+          ordem: group.ordem,
+          ativo: true
+        }
+      });
+    }
+
+    for (const method of methods) {
+      await prisma.etiquetaValidadeMetodo.upsert({
+        where: { nome: method.nome },
+        create: { ...method, ativo: true },
+        update: { tipo: method.tipo, ordem: method.ordem, ativo: true }
+      });
+    }
+
+    for (const product of products) {
+      const created = await prisma.etiquetaValidadeProduto.upsert({
+        where: { nome: product.nome },
+        create: {
+          nome: product.nome,
+          unidadePadrao: product.unidadePadrao,
+          ativo: true
+        },
+        update: {
+          unidadePadrao: product.unidadePadrao,
+          ativo: true
+        }
+      });
+      const productGroups = await prisma.etiquetaValidadeGrupo.findMany({
+        where: { nome: { in: product.grupos } },
+        select: { id: true }
+      });
+      await prisma.etiquetaValidadeProdutoGrupo.deleteMany({
+        where: { produtoId: created.id }
+      });
+      await prisma.etiquetaValidadeProdutoGrupo.createMany({
+        data: productGroups.map((group) => ({ produtoId: created.id, grupoId: group.id })),
+        skipDuplicates: true
+      });
+    }
+
+    const groupByName = Object.fromEntries(
+      (await prisma.etiquetaValidadeGrupo.findMany()).map((group) => [group.nome, group.id])
     );
+    const methodByName = Object.fromEntries(
+      (await prisma.etiquetaValidadeMetodo.findMany()).map((method) => [method.nome, method.id])
+    );
+    const productByName = Object.fromEntries(
+      (await prisma.etiquetaValidadeProduto.findMany()).map((product) => [product.nome, product.id])
+    );
+    const manualObservation = "Sugestão editável baseada no Manual de Boas Práticas K-Platz, item 13.8.";
+
+    for (const groupName of [
+      "Proteínas - Aves",
+      "Proteínas - Carnes Bovinas",
+      "Proteínas - Suínos"
+    ]) {
+      await upsertRule({
+        grupoId: groupByName[groupName],
+        metodoId: methodByName.Resfriado,
+        validadeDias: 3,
+        observacao: manualObservation
+      });
+      await upsertRule({
+        grupoId: groupByName[groupName],
+        metodoId: methodByName.Congelado,
+        validadeDias: 30,
+        observacao: manualObservation
+      });
+    }
+
+    for (const groupName of ["Proteínas - Peixes", "Proteínas - Frutos do Mar"]) {
+      await upsertRule({
+        grupoId: groupByName[groupName],
+        metodoId: methodByName.Resfriado,
+        validadeDias: 1,
+        observacao: manualObservation
+      });
+      await upsertRule({
+        grupoId: groupByName[groupName],
+        metodoId: methodByName.Congelado,
+        validadeDias: 30,
+        observacao: manualObservation
+      });
+    }
+
+    await upsertRule({
+      grupoId: groupByName["Proteínas - Ovos"],
+      metodoId: methodByName.Resfriado,
+      validadeDias: 1,
+      observacao: manualObservation
+    });
+    await upsertRule({
+      grupoId: groupByName["Itens Secos"],
+      metodoId: methodByName["Temperatura Ambiente"],
+      validadeDias: 30,
+      observacao: "30 dias ou conforme fabricante. Sugestão editável do Manual de Boas Práticas."
+    });
+
+    for (const [productName, days] of [
+      ["Pães", 5],
+      ["Torradas", 5],
+      ["Croutons", 5],
+      ["Bolo", 3],
+      ["Salada de frutas", 1],
+      ["Suco natural", 3],
+      ["Presunto", 3],
+      ["Queijo mussarela", 3]
+    ] as const) {
+      await upsertRule({
+        produtoId: productByName[productName],
+        metodoId:
+          productName === "Pães" || productName === "Torradas" || productName === "Croutons"
+            ? methodByName["Temperatura Ambiente"]
+            : methodByName.Resfriado,
+        validadeDias: days,
+        temperaturaReferencia:
+          productName === "Pães" || productName === "Torradas" || productName === "Croutons"
+            ? "Ambiente"
+            : "Até 4°C",
+        observacao: manualObservation,
+        prioridade: 10
+      });
+    }
 
     revalidateEtiquetaPaths();
-    redirectWithFeedback(
-      returnTo,
-      "success",
-      "Classificações sugeridas do Manual de Boas Práticas criadas/atualizadas."
-    );
+    redirectWithFeedback(returnTo, "success", "Base sugerida do Manual preparada com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível preparar as classificações do manual.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível preparar a base sugerida."));
+  }
+}
+
+export async function deleteEtiquetaGeradaAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    await ensureDevAction();
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) throw new Error("Etiqueta inválida para exclusão.");
+    await prisma.etiquetaValidadeEmissao.delete({ where: { id } });
+    revalidateEtiquetaPaths();
+    redirectWithFeedback(returnTo, "success", "Etiqueta excluída do histórico.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível excluir a etiqueta."));
   }
 }
 
@@ -805,163 +900,141 @@ export async function generateEtiquetaAction(formData: FormData) {
     }
 
     const now = getAppNow();
-    const isManualMode = getInputValue(formData, "modoLivre") === "true";
-    const dataManipulacao =
-      parseAppDateInput(getInputValue(formData, "dataManipulacao")) ?? getAppDate(now);
+    const dataManipulacao = getAppDate(now);
     const horaManipulacao = getCurrentAppTimeInput(now);
-    const horaValidade = horaManipulacao;
-    const quantidade = sanitizeText(getInputValue(formData, "quantidade"), 80);
-    const marcaFornecedorManual = sanitizeText(
-      getInputValue(formData, "marcaFornecedor"),
-      160
-    );
+    const produtoId = parseOptionalPositiveInt(getInputValue(formData, "produtoId"));
+    const grupoId = parseOptionalPositiveInt(getInputValue(formData, "grupoId"));
+    const subgrupoId = parseOptionalPositiveInt(getInputValue(formData, "subgrupoId"));
+    const metodoId = parseOptionalPositiveInt(getInputValue(formData, "metodoId"));
+    const regraId = parseOptionalPositiveInt(getInputValue(formData, "regraId"));
+    const produtoManual = getInputValue(formData, "produtoManual") === "true";
+    const validadeManual = getInputValue(formData, "validadeManual") === "true";
+    const quantidade = sanitizeRequiredText(getInputValue(formData, "quantidade"), "a quantidade", 80);
+    const unidadeManual = sanitizeText(getInputValue(formData, "unidadeManual"), 40);
+    const marcaFornecedor = sanitizeText(getInputValue(formData, "marcaFornecedor"), 160);
     const sif = sanitizeText(getInputValue(formData, "sif"), 40);
     const lote = sanitizeText(getInputValue(formData, "lote"), 80);
     const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
+    const validadeOriginal = parseAppDateInput(getInputValue(formData, "validadeOriginal"));
 
-    if (!quantidade) {
-      throw new Error("Informe a quantidade/gramatura da etiqueta.");
+    let produtoNomeSnapshot: string;
+    let unidadeSnapshot: string;
+    let produtoDbId: number | null = null;
+    if (produtoManual) {
+      produtoNomeSnapshot = sanitizeRequiredText(
+        getInputValue(formData, "produtoManualNome"),
+        "o nome do produto manual"
+      );
+      unidadeSnapshot = sanitizeRequiredText(getInputValue(formData, "unidadeManual"), "a unidade", 40);
+    } else {
+      if (!produtoId) throw new Error("Selecione um produto.");
+      const produto = await prisma.etiquetaValidadeProduto.findUnique({
+        where: { id: produtoId },
+        select: { id: true, nome: true, unidadePadrao: true, ativo: true }
+      });
+      if (!produto?.ativo) {
+        throw new Error("Produto inativo ou inexistente.");
+      }
+      produtoDbId = produto.id;
+      produtoNomeSnapshot = produto.nome;
+      unidadeSnapshot = unidadeManual || produto.unidadePadrao;
     }
 
-    let etiquetaData: {
-      origem: EtiquetaValidadeOrigem;
-      itemId: number | null;
-      nomeItemSnapshot: string;
-      classificacaoId: number | null;
-      nomeClassificacaoSnapshot: string;
-      validadeDiasSnapshot: number | null;
-      dataManipulacao: Date;
-      horaManipulacao: string;
-      dataValidade: Date;
-      horaValidade: string;
-      responsavelUsuarioId: number;
-      responsavelNomeSnapshot: string;
-      marcaFornecedorSnapshot: string | null;
-      sif: string | null;
-      lote: string | null;
-      quantidade: string;
-      unidadeMedidaSnapshot: string;
-      observacao: string | null;
-      codigoEtiqueta: string;
-    };
+    if (!(UNIT_OPTIONS as readonly string[]).includes(unidadeSnapshot)) {
+      throw new Error("Selecione uma unidade válida para a etiqueta.");
+    }
 
-    if (isManualMode) {
-      const nomeItemManual = sanitizeText(getInputValue(formData, "nomeItemManual"), 160);
-      const classificacaoManual = sanitizeText(
-        getInputValue(formData, "classificacaoManual"),
-        160
-      );
-      const unidadeMedidaManual = sanitizeText(
-        getInputValue(formData, "unidadeMedidaManual"),
-        40
-      );
-      const dataValidadeManual = parseAppDateInput(
-        getInputValue(formData, "dataValidadeManual")
-      );
+    const [grupo, subgrupo, metodo] = await Promise.all([
+      grupoId
+        ? prisma.etiquetaValidadeGrupo.findUnique({ where: { id: grupoId } })
+        : Promise.resolve(null),
+      subgrupoId
+        ? prisma.etiquetaValidadeGrupo.findUnique({ where: { id: subgrupoId } })
+        : Promise.resolve(null),
+      metodoId
+        ? prisma.etiquetaValidadeMetodo.findUnique({ where: { id: metodoId } })
+        : Promise.resolve(null)
+    ]);
+    const metodoManualNome = sanitizeText(getInputValue(formData, "metodoManualNome"), 120);
+    const metodoNomeSnapshot = metodo?.nome ?? metodoManualNome;
+    if (!metodoNomeSnapshot) {
+      throw new Error("Selecione ou informe a conservação/método.");
+    }
 
-      if (!nomeItemManual) {
-        throw new Error("Informe o nome do item/produto no modo livre.");
+    const regra = regraId
+      ? await prisma.etiquetaValidadeRegra.findUnique({ where: { id: regraId } })
+      : null;
+    if (regra) {
+      const regraGrupoOk =
+        !regra.grupoId || regra.grupoId === grupo?.id || regra.grupoId === subgrupo?.id;
+      const regraProdutoOk = !regra.produtoId || regra.produtoId === produtoDbId;
+      const regraMetodoOk = !metodo?.id || regra.metodoId === metodo.id;
+
+      if (!regra.ativo || !regraGrupoOk || !regraProdutoOk || !regraMetodoOk) {
+        throw new Error("Regra de validade incompatível com a seleção da etiqueta.");
       }
+    }
+    const exigeManual = validadeManual || produtoManual || !regra || regra.exigeValidadeManual;
+    const dataValidadeManual = parseAppDateInput(getInputValue(formData, "dataValidadeManual"));
+    let dataValidade: Date;
+    let horaValidade: string;
 
-      if (!classificacaoManual) {
-        throw new Error("Informe a classificação manual.");
-      }
-
-      if (
-        !unidadeMedidaManual ||
-        !(UNIT_OPTIONS as readonly string[]).includes(unidadeMedidaManual)
-      ) {
-        throw new Error("Selecione a unidade de medida no modo livre.");
-      }
-
+    if (exigeManual) {
       if (!dataValidadeManual) {
-        throw new Error("Informe a data de validade no modo livre.");
+        throw new Error("Informe a data de validade manual.");
       }
-
       if (dataValidadeManual.getTime() < dataManipulacao.getTime()) {
-        throw new Error("A data de validade não pode ser anterior à data de manipulação.");
+        throw new Error("A validade não pode ser anterior à manipulação.");
       }
-
-      etiquetaData = {
-        origem: EtiquetaValidadeOrigem.LIVRE,
-        itemId: null,
-        nomeItemSnapshot: nomeItemManual,
-        classificacaoId: null,
-        nomeClassificacaoSnapshot: classificacaoManual,
-        validadeDiasSnapshot: calculateValidityDaysSnapshot(
-          dataManipulacao,
-          dataValidadeManual
-        ),
-        dataManipulacao,
-        horaManipulacao,
-        dataValidade: dataValidadeManual,
-        horaValidade,
-        responsavelUsuarioId: actor.id,
-        responsavelNomeSnapshot: actor.nomeCompleto,
-        marcaFornecedorSnapshot: marcaFornecedorManual,
-        sif,
-        lote,
-        quantidade,
-        unidadeMedidaSnapshot: unidadeMedidaManual,
-        observacao,
-        codigoEtiqueta: `STS-TMP-${actor.id}-${Date.now()}`
-      };
+      dataValidade = dataValidadeManual;
+      horaValidade = horaManipulacao;
     } else {
-      const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
-      if (!itemId) {
-        throw new Error("Selecione um item/produto ativo.");
-      }
-
-      const item = await prisma.etiquetaValidadeItem.findUnique({
-        where: { id: itemId },
-        include: { classificacao: true }
+      const validadeDateTime = getValidityDateTime({
+        now,
+        validadeDias: regra.validadeDias,
+        validadeHoras: regra.validadeHoras
       });
-
-      if (!item || !item.ativo) {
-        throw new Error("Não é possível gerar etiqueta para item inativo ou inexistente.");
-      }
-
-      if (!item.classificacao.ativo) {
-        throw new Error("Não é possível gerar etiqueta com classificação inativa.");
-      }
-
-      if (!item.classificacao.validadeDias || item.classificacao.validadeDias <= 0) {
-        throw new Error(
-          "Classificação sem validade configurada. Cadastre a validade antes de gerar a etiqueta."
-        );
-      }
-
-      const dataValidade = addDays(dataManipulacao, item.classificacao.validadeDias);
-
-      etiquetaData = {
-        origem: EtiquetaValidadeOrigem.CADASTRADO,
-        itemId: item.id,
-        nomeItemSnapshot: item.nome,
-        classificacaoId: item.classificacaoId,
-        nomeClassificacaoSnapshot: item.classificacao.nome,
-        validadeDiasSnapshot: item.classificacao.validadeDias,
-        dataManipulacao,
-        horaManipulacao,
-        dataValidade,
-        horaValidade,
-        responsavelUsuarioId: actor.id,
-        responsavelNomeSnapshot: actor.nomeCompleto,
-        marcaFornecedorSnapshot: marcaFornecedorManual,
-        sif,
-        lote,
-        quantidade,
-        unidadeMedidaSnapshot: item.unidadeMedidaPadrao,
-        observacao,
-        codigoEtiqueta: `STS-TMP-${actor.id}-${Date.now()}`
-      };
+      dataValidade = getAppDate(validadeDateTime);
+      horaValidade = getCurrentAppTimeInput(validadeDateTime);
     }
 
     const etiqueta = await prisma.$transaction(async (tx) => {
-      const created = await tx.etiquetaValidadeGerada.create({
-        data: etiquetaData
+      const created = await tx.etiquetaValidadeEmissao.create({
+        data: {
+          codigoEtiqueta: `STS-TMP-${actor.id}-${Date.now()}`,
+          produtoId: produtoDbId,
+          grupoId: grupo?.id ?? null,
+          subgrupoId: subgrupo?.id ?? null,
+          metodoId: metodo?.id ?? null,
+          regraValidadeId: regra?.id ?? null,
+          produtoNomeSnapshot,
+          grupoNomeSnapshot: grupo?.nome ?? null,
+          subgrupoNomeSnapshot: subgrupo?.nome ?? null,
+          metodoNomeSnapshot,
+          validadeDiasSnapshot: regra?.validadeDias ?? null,
+          validadeHorasSnapshot: regra?.validadeHoras ?? null,
+          temperaturaReferenciaSnapshot: regra?.temperaturaReferencia ?? null,
+          quantidade,
+          unidadeSnapshot,
+          dataManipulacao,
+          horaManipulacao,
+          dataValidade,
+          horaValidade,
+          responsavelUsuarioId: actor.id,
+          responsavelNomeSnapshot: actor.nomeCompleto,
+          responsavelPerfilSnapshot: actor.perfil,
+          marcaFornecedor,
+          sif,
+          lote,
+          validadeOriginal,
+          observacao,
+          origem: exigeManual
+            ? EtiquetaValidadeOrigemRegra.MANUAL
+            : EtiquetaValidadeOrigemRegra.AUTOMATICA
+        }
       });
 
-      return tx.etiquetaValidadeGerada.update({
+      return tx.etiquetaValidadeEmissao.update({
         where: { id: created.id },
         data: { codigoEtiqueta: formatEtiquetaCode(created.id) }
       });
@@ -971,17 +1044,11 @@ export async function generateEtiquetaAction(formData: FormData) {
     redirectWithFeedback(
       returnTo,
       "success",
-      `Etiqueta ${etiqueta.codigoEtiqueta} gerada com validade em ${formatAppDateInput(
-        etiqueta.dataValidade
-      )}.`,
+      `Etiqueta ${etiqueta.codigoEtiqueta} gerada com validade em ${formatAppDateInput(etiqueta.dataValidade)}.`,
       { etiquetaId: String(etiqueta.id) }
     );
   } catch (error) {
     rethrowIfRedirectError(error);
-    redirectWithFeedback(
-      returnTo,
-      "error",
-      getErrorMessage(error, "Não foi possível gerar a etiqueta.")
-    );
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error, "Não foi possível gerar a etiqueta."));
   }
 }
