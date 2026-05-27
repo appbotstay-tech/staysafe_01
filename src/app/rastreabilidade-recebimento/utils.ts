@@ -17,6 +17,10 @@ export function parseDateInput(value: string): Date | null {
   return parseAppDateInput(normalizeDateInputString(value));
 }
 
+export function isValidDateValue(value: Date | null | undefined): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
 export function parseXmlDateToDatabase(value: string): Date | null {
   const normalized = value.trim();
 
@@ -91,10 +95,18 @@ export function parseTemperatureInput(value: string): number | null {
 }
 
 export function formatDateInput(date: Date): string {
+  if (!isValidDateValue(date)) {
+    return "";
+  }
+
   return formatAppDateInput(date);
 }
 
 export function formatDateDisplay(date: Date): string {
+  if (!isValidDateValue(date)) {
+    return "Data inválida";
+  }
+
   return formatAppDate(date);
 }
 
@@ -103,11 +115,15 @@ export function formatOptionalDateDisplay(date: Date | null): string {
 }
 
 export function formatDateTimeDisplay(date: Date): string {
+  if (!isValidDateValue(date)) {
+    return "Data inválida";
+  }
+
   return formatAppDateTime(date);
 }
 
 export function formatTemperatureDisplay(value: number | null): string {
-  if (value === null) {
+  if (value === null || !Number.isFinite(value)) {
     return "-";
   }
 
@@ -184,6 +200,10 @@ export function calculateTemperatureStatus(
   temperatura: number,
   temperaturaMaxima: number
 ): Conformidade {
+  if (!Number.isFinite(temperatura) || !Number.isFinite(temperaturaMaxima)) {
+    return "CONFORME";
+  }
+
   return temperatura > temperaturaMaxima ? "NAO_CONFORME" : "CONFORME";
 }
 
