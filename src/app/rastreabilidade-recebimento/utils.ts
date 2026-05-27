@@ -13,7 +13,7 @@ import {
 export type Conformidade = "CONFORME" | "NAO_CONFORME";
 export type StatusRecebimento = "PENDENTE" | "CONFORME" | "NAO_CONFORME";
 
-export function parseDateInput(value: string): Date | null {
+export function parseDateInput(value: string | null | undefined): Date | null {
   return parseAppDateInput(normalizeDateInputString(value));
 }
 
@@ -21,8 +21,8 @@ export function isValidDateValue(value: Date | null | undefined): value is Date 
   return value instanceof Date && Number.isFinite(value.getTime());
 }
 
-export function parseXmlDateToDatabase(value: string): Date | null {
-  const normalized = value.trim();
+export function parseXmlDateToDatabase(value: string | null | undefined): Date | null {
+  const normalized = String(value ?? "").trim();
 
   if (!normalized) {
     return null;
@@ -46,8 +46,8 @@ export function parseXmlDateToDatabase(value: string): Date | null {
   return null;
 }
 
-export function parsePositiveInt(value: string): number | null {
-  const parsed = Number(value);
+export function parsePositiveInt(value: string | null | undefined): number | null {
+  const parsed = Number(String(value ?? ""));
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
     return null;
@@ -56,8 +56,8 @@ export function parsePositiveInt(value: string): number | null {
   return parsed;
 }
 
-export function normalizeDateInputString(value: string): string {
-  const trimmed = value.trim();
+export function normalizeDateInputString(value: string | null | undefined): string {
+  const trimmed = String(value ?? "").trim();
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     return trimmed;
@@ -71,11 +71,11 @@ export function normalizeDateInputString(value: string): string {
   return trimmed;
 }
 
-export function normalizeTemperatureInputString(value: string): string {
-  return value.trim().replace(",", ".");
+export function normalizeTemperatureInputString(value: string | null | undefined): string {
+  return String(value ?? "").trim().replace(",", ".");
 }
 
-export function parseTemperatureInput(value: string): number | null {
+export function parseTemperatureInput(value: string | null | undefined): number | null {
   const normalized = normalizeTemperatureInputString(value);
 
   if (!normalized) {
@@ -94,7 +94,7 @@ export function parseTemperatureInput(value: string): number | null {
   return parsed;
 }
 
-export function formatDateInput(date: Date): string {
+export function formatDateInput(date: Date | null | undefined): string {
   if (!isValidDateValue(date)) {
     return "";
   }
@@ -102,7 +102,7 @@ export function formatDateInput(date: Date): string {
   return formatAppDateInput(date);
 }
 
-export function formatDateDisplay(date: Date): string {
+export function formatDateDisplay(date: Date | null | undefined): string {
   if (!isValidDateValue(date)) {
     return "Data inválida";
   }
@@ -114,7 +114,7 @@ export function formatOptionalDateDisplay(date: Date | null): string {
   return date ? formatDateDisplay(date) : "-";
 }
 
-export function formatDateTimeDisplay(date: Date): string {
+export function formatDateTimeDisplay(date: Date | null | undefined): string {
   if (!isValidDateValue(date)) {
     return "Data inválida";
   }
@@ -122,8 +122,8 @@ export function formatDateTimeDisplay(date: Date): string {
   return formatAppDateTime(date);
 }
 
-export function formatTemperatureDisplay(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
+export function formatTemperatureDisplay(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return "-";
   }
 
@@ -197,10 +197,15 @@ export function getStatusRecebimentoLabel(status: StatusRecebimento): string {
 }
 
 export function calculateTemperatureStatus(
-  temperatura: number,
-  temperaturaMaxima: number
+  temperatura: number | null | undefined,
+  temperaturaMaxima: number | null | undefined
 ): Conformidade {
-  if (!Number.isFinite(temperatura) || !Number.isFinite(temperaturaMaxima)) {
+  if (
+    typeof temperatura !== "number" ||
+    typeof temperaturaMaxima !== "number" ||
+    !Number.isFinite(temperatura) ||
+    !Number.isFinite(temperaturaMaxima)
+  ) {
     return "CONFORME";
   }
 

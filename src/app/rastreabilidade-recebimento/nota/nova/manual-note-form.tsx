@@ -5,7 +5,6 @@ import { useActionState, useState } from "react";
 import { createManualNoteStateAction } from "../../actions";
 import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
 import { SifInput } from "../../sif-input";
-import { normalizeDateInputString } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -25,22 +24,11 @@ const INITIAL_STATE: ActionState = {
 
 type TemperaturaTipo = "NUMERICA" | "AMBIENTE" | "NAO_APLICAVEL";
 
-const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-function sanitizeDateDraftInput(value: string): string {
-  return value.replace(/[^\d/-]/g, "").slice(0, 10);
-}
-
-function normalizeDateOnBlur(value: string): string {
-  const normalized = normalizeDateInputString(value);
-  return DATE_INPUT_PATTERN.test(normalized) ? normalized : value.trim();
-}
-
-function sanitizeTemperatureInput(value: string): string {
+function sanitizeTemperatureInput(value: string | null | undefined): string {
   let sanitized = "";
   let hasDecimalSeparator = false;
 
-  for (const char of value.trim()) {
+  for (const char of String(value ?? "").trim()) {
     if (/\d/.test(char)) {
       sanitized += char;
       continue;
@@ -60,9 +48,10 @@ function sanitizeTemperatureInput(value: string): string {
   return sanitized;
 }
 
-function normalizeTemperatureOnBlur(value: string): string {
-  const normalized = value.trim().replace(",", ".");
-  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : value.trim();
+function normalizeTemperatureOnBlur(value: string | null | undefined): string {
+  const trimmed = String(value ?? "").trim();
+  const normalized = trimmed.replace(",", ".");
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : trimmed;
 }
 
 export function ManualNoteForm({
@@ -107,14 +96,13 @@ export function ManualNoteForm({
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Data de Fabricação *
         <input
-          type="text"
+          type="date"
           name="dataFabricacao"
           value={dataFabricacao}
-          onChange={(event) => setDataFabricacao(sanitizeDateDraftInput(event.currentTarget.value))}
-          onBlur={(event) => setDataFabricacao(normalizeDateOnBlur(event.currentTarget.value))}
-          inputMode="numeric"
-          placeholder="AAAA-MM-DD"
-          maxLength={10}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setDataFabricacao(value);
+          }}
           required
           className={state.invalidField === "dataFabricacao" ? errorInputClass : inputClassName}
         />
@@ -122,16 +110,15 @@ export function ManualNoteForm({
       <div className="text-sm text-slate-700 dark:text-slate-200">
         <p>Validade *</p>
         <input
-          type="text"
+          type="date"
           name="dataValidade"
           required={!validadeNaoAplicavel}
           disabled={validadeNaoAplicavel}
           value={validadeNaoAplicavel ? "" : dataValidade}
-          onChange={(event) => setDataValidade(sanitizeDateDraftInput(event.currentTarget.value))}
-          onBlur={(event) => setDataValidade(normalizeDateOnBlur(event.currentTarget.value))}
-          inputMode="numeric"
-          placeholder="AAAA-MM-DD"
-          maxLength={10}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setDataValidade(value);
+          }}
           className={state.invalidField === "dataValidade" ? errorInputClass : inputClassName}
         />
         <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
@@ -141,8 +128,9 @@ export function ManualNoteForm({
             value="true"
             checked={validadeNaoAplicavel}
             onChange={(event) => {
-              setValidadeNaoAplicavel(event.currentTarget.checked);
-              if (event.currentTarget.checked) {
+              const checked = event.currentTarget.checked;
+              setValidadeNaoAplicavel(checked);
+              if (checked) {
                 setDataValidade("");
               }
             }}
@@ -186,8 +174,14 @@ export function ManualNoteForm({
           disabled={temperaturaTipo !== "NUMERICA"}
           inputMode="decimal"
           value={temperaturaTipo === "NUMERICA" ? temperatura : ""}
-          onChange={(event) => setTemperatura(sanitizeTemperatureInput(event.currentTarget.value))}
-          onBlur={(event) => setTemperatura(normalizeTemperatureOnBlur(event.currentTarget.value))}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setTemperatura(sanitizeTemperatureInput(value));
+          }}
+          onBlur={(event) => {
+            const value = event.currentTarget.value;
+            setTemperatura(normalizeTemperatureOnBlur(value));
+          }}
           className={state.invalidField === "temperatura" ? errorInputClass : inputClassName}
         />
       </label>

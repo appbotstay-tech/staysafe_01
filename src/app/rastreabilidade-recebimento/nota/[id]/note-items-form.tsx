@@ -10,7 +10,6 @@ import { saveNotaItemsStateAction } from "../../actions";
 import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
 import { SifInput } from "../../sif-input";
 import { ConformidadeBadge } from "../../status-badges";
-import { normalizeDateInputString } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -118,27 +117,17 @@ function getConformidadeBadgeValue(status: StatusRecebimento) {
 }
 
 const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const BR_DATE_INPUT_PATTERN = /^\d{2}[/-]\d{2}[/-]\d{4}$/;
 
-function normalizeDateInputValue(value: string): string {
-  const trimmed = value.trim();
-  return DATE_INPUT_PATTERN.test(trimmed) || BR_DATE_INPUT_PATTERN.test(trimmed) ? trimmed : "";
+function normalizeDateInputValue(value: string | null | undefined): string {
+  const trimmed = String(value ?? "").trim();
+  return DATE_INPUT_PATTERN.test(trimmed) ? trimmed : "";
 }
 
-function sanitizeDateDraftInput(value: string): string {
-  return value.replace(/[^\d/-]/g, "").slice(0, 10);
-}
-
-function normalizeDateOnBlur(value: string): string {
-  const normalized = normalizeDateInputString(value);
-  return DATE_INPUT_PATTERN.test(normalized) ? normalized : value.trim();
-}
-
-function sanitizeTemperatureInput(value: string): string {
+function sanitizeTemperatureInput(value: string | null | undefined): string {
   let sanitized = "";
   let hasDecimalSeparator = false;
 
-  for (const char of value.trim()) {
+  for (const char of String(value ?? "").trim()) {
     if (/\d/.test(char)) {
       sanitized += char;
       continue;
@@ -158,9 +147,10 @@ function sanitizeTemperatureInput(value: string): string {
   return sanitized;
 }
 
-function normalizeTemperatureOnBlur(value: string): string {
-  const normalized = value.trim().replace(",", ".");
-  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : value.trim();
+function normalizeTemperatureOnBlur(value: string | null | undefined): string {
+  const trimmed = String(value ?? "").trim();
+  const normalized = trimmed.replace(",", ".");
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : trimmed;
 }
 
 export function NoteItemsForm({
@@ -333,7 +323,8 @@ export function NoteItemsForm({
                           event.currentTarget.setCustomValidity("");
                         }}
                         onBlur={(event) => {
-                          event.currentTarget.value = event.currentTarget.value.trim();
+                          const input = event.currentTarget;
+                          input.value = input.value.trim();
                         }}
                       />
                       {invalidLote ? (
@@ -348,25 +339,16 @@ export function NoteItemsForm({
                     <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Data de Fabricação *</span>
                       <input
-                        type="text"
+                        type="date"
                         name={`${rowKey}-dataFabricacao`}
                         value={dataFabricacaoValue}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           setDataFabricacaoValues((current) => ({
                             ...current,
-                            [rowKey]: sanitizeDateDraftInput(event.currentTarget.value)
-                          }))
-                        }
-                        onBlur={(event) => {
-                          const value = normalizeDateOnBlur(event.currentTarget.value);
-                          setDataFabricacaoValues((current) => ({
-                            ...current,
-                            [rowKey]: value
+                            [rowKey]: normalizeDateInputValue(value)
                           }));
                         }}
-                        inputMode="numeric"
-                        placeholder="AAAA-MM-DD"
-                        maxLength={10}
                         required
                         disabled={readOnlyMode}
                         className={`${inputClassName} ${DATE_INPUT_CLASS} ${
@@ -377,25 +359,16 @@ export function NoteItemsForm({
                     <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Validade *</span>
                       <input
-                        type="text"
+                        type="date"
                         name={`${rowKey}-dataValidade`}
                         value={validadeNaoAplicavel ? "" : dataValidadeValue}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           setDataValidadeValues((current) => ({
                             ...current,
-                            [rowKey]: sanitizeDateDraftInput(event.currentTarget.value)
-                          }))
-                        }
-                        onBlur={(event) => {
-                          const value = normalizeDateOnBlur(event.currentTarget.value);
-                          setDataValidadeValues((current) => ({
-                            ...current,
-                            [rowKey]: value
+                            [rowKey]: normalizeDateInputValue(value)
                           }));
                         }}
-                        inputMode="numeric"
-                        placeholder="AAAA-MM-DD"
-                        maxLength={10}
                         required={!validadeNaoAplicavel}
                         disabled={readOnlyMode || validadeNaoAplicavel}
                         className={`${inputClassName} ${DATE_INPUT_CLASS} ${
@@ -468,17 +441,19 @@ export function NoteItemsForm({
                         name={`${rowKey}-temperatura`}
                         inputMode="decimal"
                         value={temperaturaTipo === "NUMERICA" ? temperaturaValue : ""}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           setTemperaturaValues((current) => ({
                             ...current,
-                            [rowKey]: sanitizeTemperatureInput(event.currentTarget.value)
-                          }))
-                        }
+                            [rowKey]: sanitizeTemperatureInput(value)
+                          }));
+                        }}
                         onBlur={(event) => {
-                          const value = normalizeTemperatureOnBlur(event.currentTarget.value);
+                          const value = event.currentTarget.value;
+                          const normalizedValue = normalizeTemperatureOnBlur(value);
                           setTemperaturaValues((current) => ({
                             ...current,
-                            [rowKey]: value
+                            [rowKey]: normalizedValue
                           }));
                         }}
                         required={temperaturaTipo === "NUMERICA"}
