@@ -371,7 +371,7 @@ export async function createRegistroAction(formData: FormData) {
             key: "fotoDesvio",
             required: isCorrectiveActionRequired(payload.status),
             requiredMessage:
-              "Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+              "Anexe uma foto da evidência para salvar este registro."
           })
         : null;
 
@@ -444,7 +444,7 @@ export async function updateRegistroAction(formData: FormData) {
 
     if (exigeFoto && !fotoDesvio && !temFotoExistente) {
       throw new Error(
-        "Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+        "Anexe uma foto da evidência para salvar este registro."
       );
     }
 

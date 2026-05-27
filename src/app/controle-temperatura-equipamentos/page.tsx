@@ -686,13 +686,13 @@ export default async function ControleTemperaturaEquipamentosPage({
 
             <ImageUploadField
               name="fotoDesvio"
-              label="Foto da Evidência"
+              label="Anexar foto da evidência"
               existingImageDataUrl={fotoRegistroEmEdicao}
               existingFileName={registroEmEdicao?.fotoNome ?? null}
-              helperText="Obrigatória em Alerta/Crítico. Envie JPG, PNG ou WEBP de até 5 MB."
+              helperText="Selecione uma imagem da galeria ou dos arquivos do dispositivo. Obrigatória em Alerta/Crítico. Formatos: JPG, PNG ou WEBP de até 5 MB."
               requiredStatusFieldName="statusCalculado"
               requiredStatusValues={["ALERTA", "CRITICO"]}
-              requiredMessage="Anexe uma foto para continuar. Ela é obrigatória quando a temperatura estiver em Alerta ou Crítico."
+              requiredMessage="Anexe uma foto da evidência para salvar este registro."
               disabledStatusFieldName="statusOperacionalEquipamento"
               disabledStatusValues={[
                 StatusOperacionalEquipamento.MANUTENCAO,

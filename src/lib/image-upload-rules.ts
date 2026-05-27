@@ -13,7 +13,7 @@ export const IMAGE_UPLOAD_ACCEPT_ATTRIBUTE =
   "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
 
 export const UNSUPPORTED_IMAGE_FORMAT_MESSAGE =
-  "Formato de imagem não suportado. Envie uma foto em JPG, PNG ou WEBP.";
+  "Formato de imagem não suportado. Selecione uma imagem JPG, PNG ou WEBP.";
 
 export const IMAGE_TOO_LARGE_MESSAGE =
   "A foto selecionada é muito grande. Envie uma imagem menor.";
