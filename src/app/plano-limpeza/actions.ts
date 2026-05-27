@@ -4,7 +4,8 @@ import {
   Prisma,
   StatusFechamentoPlanoLimpeza,
   StatusPlanoLimpeza,
-  TipoPlanoLimpeza
+  TipoPlanoLimpeza,
+  TurnoPlanoLimpeza
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -360,6 +361,150 @@ export async function updateDailyRecordAction(formData: FormData) {
 
     revalidateModulePaths();
     redirectWithFeedback(successReturnTo, "success", "Checklist Diário Assinado com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function signDailyAreaPendingItemsAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanSignResponsible(actor.perfil);
+
+    const dataRaw = getInputValue(formData, "data");
+    const areaNome = getInputValue(formData, "area");
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+    const data = parseDateInput(dataRaw);
+
+    if (!data) {
+      throw new Error("Data inválida para assinatura dos itens da área.");
+    }
+    ensureNonEmpty(areaNome, "Área");
+
+    const period = getMonthYear(data);
+    if (await isMonthSigned(TipoPlanoLimpeza.DIARIO, period.mes, period.ano)) {
+      throw new Error("Este dia pertence a um período fechado e não pode ser alterado.");
+    }
+
+    const area = await prisma.planoLimpezaDiarioArea.findFirst({
+      where: { nome: areaNome, ativo: true },
+      include: {
+        itens: {
+          where: { ativo: true, excluidoEm: null },
+          orderBy: [{ ordem: "asc" }, { descricao: "asc" }]
+        }
+      }
+    });
+
+    if (!area) {
+      throw new Error("Área diária ativa não encontrada.");
+    }
+    if (area.itens.length === 0) {
+      throw new Error("Esta área não possui itens ativos para assinatura.");
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    const itemIds = area.itens.map((item) => item.id);
+    const registrosExistentes = await prisma.planoLimpezaDiarioRegistro.findMany({
+      where: { data, itemId: { in: itemIds } },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }]
+    });
+
+    const registrosPorItem = new Map<number, typeof registrosExistentes>();
+    for (const registro of registrosExistentes) {
+      if (!registro.itemId) {
+        continue;
+      }
+      const atuais = registrosPorItem.get(registro.itemId) ?? [];
+      atuais.push(registro);
+      registrosPorItem.set(registro.itemId, atuais);
+    }
+
+    const signedAt = getCurrentSystemDateTime();
+    let itensAssinados = 0;
+    let itensJaAssinados = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const item of area.itens) {
+        const registrosDoItem = registrosPorItem.get(item.id) ?? [];
+        const jaAssinado = registrosDoItem.some(
+          (registro) =>
+            registro.assinaturaResponsavel.trim().length > 0 ||
+            Boolean(registro.assinaturaResponsavelDataHora) ||
+            registro.assinaturaSupervisor.trim().length > 0 ||
+            Boolean(registro.assinaturaSupervisorDataHora)
+        );
+
+        if (jaAssinado) {
+          itensJaAssinados += 1;
+          continue;
+        }
+
+        const updateIds = registrosDoItem.map((registro) => registro.id);
+        if (updateIds.length > 0) {
+          await tx.planoLimpezaDiarioRegistro.updateMany({
+            where: { id: { in: updateIds } },
+            data: {
+              area: area.nome,
+              itemDescricao: item.descricao,
+              produtoUtilizado: item.produtoUtilizado,
+              setorResponsavel: item.setorResponsavel,
+              funcionarioResponsavel: item.funcionarioResponsavel,
+              assinaturaResponsavel: actor.nomeCompleto,
+              assinaturaResponsavelUsuarioId: actor.id,
+              assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+              assinaturaResponsavelPerfil: actor.perfil,
+              assinaturaResponsavelDataHora: signedAt,
+              status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+            }
+          });
+        } else {
+          await tx.planoLimpezaDiarioRegistro.create({
+            data: {
+              data,
+              turno: TurnoPlanoLimpeza.MANHA,
+              area: area.nome,
+              itemId: item.id,
+              itemDescricao: item.descricao,
+              produtoUtilizado: item.produtoUtilizado,
+              setorResponsavel: item.setorResponsavel,
+              funcionarioResponsavel: item.funcionarioResponsavel,
+              assinaturaResponsavel: actor.nomeCompleto,
+              assinaturaResponsavelUsuarioId: actor.id,
+              assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+              assinaturaResponsavelPerfil: actor.perfil,
+              assinaturaResponsavelDataHora: signedAt,
+              status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+            }
+          });
+        }
+
+        itensAssinados += 1;
+      }
+    });
+
+    if (itensAssinados === 0) {
+      throw new Error("Todos os itens ativos desta área já estavam assinados.");
+    }
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL",
+      modulo: "plano-limpeza/diario/area",
+      referenciaId: `${area.id}:${dataRaw}`,
+      observacao: `Assinar Todos - ${itensAssinados} item(ns) assinados, ${itensJaAssinados} já assinados.`
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      `Itens assinados com sucesso. ${itensAssinados} pendente(s) assinado(s), ${itensJaAssinados} já assinado(s).`
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));

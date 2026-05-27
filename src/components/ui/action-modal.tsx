@@ -6,6 +6,7 @@ type ActionModalProps = {
   cancelHref: string;
   children: ReactNode;
   description?: ReactNode;
+  headerActions?: ReactNode;
   maxWidthClassName?: string;
 };
 
@@ -14,6 +15,7 @@ export function ActionModal({
   cancelHref,
   children,
   description,
+  headerActions,
   maxWidthClassName = "max-w-lg"
 }: ActionModalProps) {
   return (
@@ -26,14 +28,17 @@ export function ActionModal({
               <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{description}</div>
             ) : null}
           </div>
-          <Link
-            href={cancelHref}
-            scroll={false}
-            className="btn-secondary shrink-0"
-            aria-label={`Fechar ${title}`}
-          >
-            Fechar
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {headerActions}
+            <Link
+              href={cancelHref}
+              scroll={false}
+              className="btn-secondary"
+              aria-label={`Fechar ${title}`}
+            >
+              Fechar
+            </Link>
+          </div>
         </div>
         <div className="mt-4">{children}</div>
       </section>

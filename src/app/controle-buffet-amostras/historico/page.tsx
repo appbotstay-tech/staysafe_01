@@ -7,7 +7,7 @@ import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
+import { canSignNutritionReview, getRoleLabel } from "@/lib/rbac";
 
 import {
   buildBuffetServiceHistoryGroups,
@@ -52,6 +52,11 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function buildPathWithParams(params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${HISTORY_PATH}?${query}` : HISTORY_PATH;
+}
+
 function parseClassificacao(
   value: string
 ): ClassificacaoItemBuffetAmostra | null {
@@ -89,8 +94,11 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const podeAssinarNutri = authUser ? canSignNutritionReview(authUser.perfil) : false;
 
   const params = await searchParams;
+  const feedback = firstParam(params.feedback).trim();
+  const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const filtroData = firstParam(params.filtroData).trim();
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes).trim());
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno).trim());
@@ -170,7 +178,18 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const gruposHistorico = buildBuffetServiceHistoryGroups(registros);
   const totalizadoresHistorico = buildBuffetServiceHistoryTotals(gruposHistorico);
 
+  const parametrosRetorno = new URLSearchParams();
+  if (filtroData) parametrosRetorno.set("filtroData", filtroData);
+  if (filtroMes) parametrosRetorno.set("filtroMes", String(filtroMes));
+  if (filtroAno) parametrosRetorno.set("filtroAno", String(filtroAno));
+  if (filtroServicoId) parametrosRetorno.set("filtroServicoId", String(filtroServicoId));
+  if (filtroItemId) parametrosRetorno.set("filtroItemId", String(filtroItemId));
+  if (filtroClassificacao) parametrosRetorno.set("filtroClassificacao", filtroClassificacao);
+  if (filtroStatus) parametrosRetorno.set("filtroStatus", filtroStatus);
+  if (filtroResponsavel) parametrosRetorno.set("filtroResponsavel", filtroResponsavel);
+
   const limparHref = HISTORY_PATH;
+  const returnTo = buildPathWithParams(parametrosRetorno);
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -194,6 +213,18 @@ export default async function ControleBuffetAmostrasHistoricoPage({
           </div>
         </div>
       </section>
+
+      {feedback ? (
+        <section
+          className={`rounded-xl border p-4 text-sm ${
+            feedbackType === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          }`}
+        >
+          {feedback}
+        </section>
+      ) : null}
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -316,6 +347,8 @@ export default async function ControleBuffetAmostrasHistoricoPage({
           groups={gruposHistorico}
           totals={totalizadoresHistorico}
           emptyMessage="Nenhum registro encontrado."
+          canSignNutritionReview={podeAssinarNutri}
+          returnTo={returnTo}
         />
       </section>
     </div>

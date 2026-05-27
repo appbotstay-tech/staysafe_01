@@ -8,7 +8,7 @@ import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
-import { ActionModal } from "@/components/ui/action-modal";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -19,13 +19,16 @@ import {
   getRoleLabel
 } from "@/lib/rbac";
 
-import { closeDailyMonthAction, reopenDailyMonthAction } from "../actions";
+import {
+  closeDailyMonthAction,
+  reopenDailyMonthAction,
+  signDailyAreaPendingItemsAction
+} from "../actions";
 import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS } from "../constants";
 import { ReopenMonthModal } from "../reopen-month-modal";
 import {
   consolidateDailyRecordsByDay,
-  getDailyConsolidatedStatusClass,
-  getDailySignStage
+  getDailyConsolidatedStatusClass
 } from "../service";
 import { StatusBadge } from "../status-badge";
 import {
@@ -43,7 +46,6 @@ import {
   periodKey
 } from "../utils";
 import { DailyChecklistSync } from "./daily-checklist-sync";
-import { DailySignChecklistModal } from "./sign-checklist-modal";
 
 const PAGE_PATH = "/plano-limpeza/diario";
 const CARD_CLASS =
@@ -89,7 +91,6 @@ function getDailyAreaStatus(totalItems: number, signedItems: number): DailyAreaS
 export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const usuarioLogadoId = authUser?.id ?? null;
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
@@ -181,12 +182,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
     areaConfigs.map((item) => [item.nome, item.detalhamentoLimpeza])
   );
 
-  const signId = parsePositiveInt(firstParam(params.signId));
-  const registroParaAssinatura = signId
-    ? await prisma.planoLimpezaDiarioRegistro.findUnique({ where: { id: signId } })
-    : null;
-  const etapaAssinatura = registroParaAssinatura ? getDailySignStage(registroParaAssinatura) : null;
-
   const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
   const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
   const periodoAtual = getMonthYear(now);
@@ -201,8 +196,8 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
     const periodo = getMonthYear(registro.data);
     periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
   }
-  if (registroParaAssinatura) {
-    const periodo = getMonthYear(registroParaAssinatura.data);
+  if (dataFiltro) {
+    const periodo = getMonthYear(dataFiltro);
     periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
   }
   periodos.set(periodKey(fechamentoMes, fechamentoAno), {
@@ -223,22 +218,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       })
     : [];
   const fechadosSet = new Set(periodosFechados.map((item) => periodKey(item.mes, item.ano)));
-
-  const assinaturaBloqueadaPorFechamento = registroParaAssinatura
-    ? fechadosSet.has(
-        periodKey(
-          getMonthYear(registroParaAssinatura.data).mes,
-          getMonthYear(registroParaAssinatura.data).ano
-        )
-      )
-    : false;
-  const assinaturaBloqueadaPorExecutor =
-    registroParaAssinatura && etapaAssinatura === "supervisor"
-      ? (usuarioLogadoId !== null &&
-          registroParaAssinatura.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
-        (!registroParaAssinatura.assinaturaResponsavelUsuarioId &&
-          registroParaAssinatura.assinaturaResponsavel.trim() === responsavelLogado.trim())
-      : false;
 
   const paramsRetorno = new URLSearchParams();
   if (filtroData) paramsRetorno.set("filtroData", filtroData);
@@ -439,19 +418,25 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         return buildPathWithParams(query);
       })()
     : returnTo;
-  const signModalReturnTo = registroParaAssinatura
+  const signAreaSelecionada = openedSummary && firstParam(params.signArea) === "1";
+  const openedSummaryPeriod = openedSummary ? getMonthYear(openedSummary.data) : null;
+  const openedSummaryBloqueado =
+    openedSummaryPeriod !== null &&
+    fechadosSet.has(periodKey(openedSummaryPeriod.mes, openedSummaryPeriod.ano));
+  const podeAssinarTodos =
+    openedSummary !== null &&
+    openedSummary.totalItems > 0 &&
+    openedSummary.signedItems < openedSummary.totalItems &&
+    !openedSummaryBloqueado;
+  const hrefAssinarTodos = openedSummary
     ? (() => {
         const query = new URLSearchParams(paramsRetorno);
-        if (openedSummary) {
-          query.set("openData", formatDateInput(openedSummary.data));
-          query.set("openArea", openedSummary.area);
-        }
-        query.set("signId", String(registroParaAssinatura.id));
+        query.set("openData", formatDateInput(openedSummary.data));
+        query.set("openArea", openedSummary.area);
+        query.set("signArea", "1");
         return buildPathWithParams(query);
       })()
     : returnTo;
-  const signModalError =
-    registroParaAssinatura && feedbackType === "error" ? feedback : "";
 
   const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
   const [registrosFechamento, fechamentoAtual] = await Promise.all([
@@ -527,18 +512,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           }`}
         >
           {feedback}
-        </section>
-      ) : null}
-
-      {registroParaAssinatura && assinaturaBloqueadaPorFechamento ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          Este checklist pertence a um mês fechado e não pode receber assinatura.
-        </section>
-      ) : null}
-
-      {registroParaAssinatura && assinaturaBloqueadaPorExecutor ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          Quem executou o serviço não pode assinar como supervisor. Solicite a assinatura de outro responsável autorizado.
         </section>
       ) : null}
 
@@ -946,6 +919,19 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           title={openedSummary.area}
           cancelHref={returnTo}
           maxWidthClassName="max-w-5xl"
+          headerActions={
+            openedSummary.totalItems > 0 ? (
+              podeAssinarTodos ? (
+                <Link href={hrefAssinarTodos} scroll={false} className="btn-primary">
+                  Assinar Todos
+                </Link>
+              ) : (
+                <button type="button" disabled className="btn-primary opacity-60">
+                  Assinar Todos
+                </button>
+              )
+            ) : null
+          }
           description={
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <span>{formatDateDisplay(openedSummary.data)}</span>
@@ -998,25 +984,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             <div className="grid gap-3">
               {modalDailyRows.map((row) => {
                 const registro = row.registro;
-                const periodo = registro ? getMonthYear(registro.data) : null;
-                const bloqueado = periodo ? fechadosSet.has(periodKey(periodo.mes, periodo.ano)) : false;
-                const etapa = registro ? getDailySignStage(registro) : null;
-                const supervisorMesmoExecutor =
-                  registro !== null &&
-                  etapa === "supervisor" &&
-                  ((usuarioLogadoId !== null &&
-                    registro.assinaturaResponsavelUsuarioId === usuarioLogadoId) ||
-                    (!registro.assinaturaResponsavelUsuarioId &&
-                      registro.assinaturaResponsavel.trim() === responsavelLogado.trim()));
-                const hrefAssinar = registro
-                  ? (() => {
-                      const query = new URLSearchParams(paramsRetorno);
-                      query.set("openData", formatDateInput(openedSummary.data));
-                      query.set("openArea", openedSummary.area);
-                      query.set("signId", String(registro.id));
-                      return buildPathWithParams(query);
-                    })()
-                  : "";
 
                 return (
                   <article
@@ -1060,19 +1027,9 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                       </div>
                       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         <StatusBadge status={registro?.status ?? "Pendente"} />
-                        {bloqueado ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
-                        ) : supervisorMesmoExecutor ? (
+                        {!registro ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Outro supervisor
-                          </span>
-                        ) : registro && etapa ? (
-                          <Link href={hrefAssinar} scroll={false} className="btn-action">
-                            Assinar
-                          </Link>
-                        ) : !registro ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Registro em preparação
+                            Será assinado no lote
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -1089,21 +1046,48 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         </ActionModal>
       ) : null}
 
-      {registroParaAssinatura &&
-      etapaAssinatura &&
-      !assinaturaBloqueadaPorFechamento &&
-      !assinaturaBloqueadaPorExecutor ? (
-        <DailySignChecklistModal
-          closeHref={openSummaryReturnTo}
-          returnTo={signModalReturnTo}
-          successReturnTo={openSummaryReturnTo}
-          record={registroParaAssinatura}
-          detalhamentoLimpeza={detalhamentoPorArea.get(registroParaAssinatura.area) ?? null}
-          etapa={etapaAssinatura}
-          usuarioAssinando={responsavelLogado}
-          dataHoraAtual={formatDateTimeDisplay(now)}
-          errorMessage={signModalError}
-        />
+      {openedSummary && signAreaSelecionada ? (
+        <ActionModal
+          title="Assinar todos os itens"
+          cancelHref={openSummaryReturnTo}
+          description={
+            <p>
+              {openedSummary.area} em {formatDateDisplay(openedSummary.data)}.
+            </p>
+          }
+        >
+          {!podeAssinarTodos ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Não há itens pendentes elegíveis para assinatura em lote nesta área.
+            </p>
+          ) : (
+            <form action={signDailyAreaPendingItemsAction} className="space-y-4">
+              <input type="hidden" name="data" value={formatDateInput(openedSummary.data)} />
+              <input type="hidden" name="area" value={openedSummary.area} />
+              <input type="hidden" name="returnTo" value={openSummaryReturnTo} />
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Deseja assinar todos os itens pendentes desta área?
+              </p>
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                Confirme sua senha *
+                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
+              </label>
+              <SignatureContextCard
+                nomeUsuario={responsavelLogado}
+                perfil={perfilLogado}
+                dataHora={formatDateTimeDisplay(now)}
+              />
+              <ModalActions>
+                <Link href={openSummaryReturnTo} className="btn-secondary text-center">
+                  Cancelar
+                </Link>
+                <button type="submit" className="btn-primary">
+                  Assinar Todos
+                </button>
+              </ModalActions>
+            </form>
+          )}
+        </ActionModal>
       ) : null}
     </div>
   );

@@ -116,6 +116,41 @@ function getConformidadeBadgeValue(status: StatusRecebimento) {
   return null;
 }
 
+const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function normalizeDateInputValue(value: string): string {
+  return DATE_INPUT_PATTERN.test(value) ? value : "";
+}
+
+function sanitizeTemperatureInput(value: string): string {
+  let sanitized = "";
+  let hasDecimalSeparator = false;
+
+  for (const char of value.trim()) {
+    if (/\d/.test(char)) {
+      sanitized += char;
+      continue;
+    }
+
+    if (char === "-" && sanitized.length === 0) {
+      sanitized += char;
+      continue;
+    }
+
+    if ((char === "," || char === ".") && !hasDecimalSeparator) {
+      sanitized += char;
+      hasDecimalSeparator = true;
+    }
+  }
+
+  return sanitized;
+}
+
+function normalizeTemperatureOnBlur(value: string): string {
+  const normalized = value.trim().replace(",", ".");
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : value.trim();
+}
+
 export function NoteItemsForm({
   notaId,
   returnTo,
@@ -140,7 +175,9 @@ export function NoteItemsForm({
     )
   );
   const [dataValidadeValues, setDataValidadeValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.dataValidade]))
+    Object.fromEntries(
+      rows.map((item) => [`item-${item.id}`, normalizeDateInputValue(item.dataValidade)])
+    )
   );
   const [temperaturaTipoValues, setTemperaturaTipoValues] = useState<
     Record<string, TemperaturaTipo>
@@ -148,7 +185,9 @@ export function NoteItemsForm({
     Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.temperaturaTipo]))
   );
   const [temperaturaValues, setTemperaturaValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(rows.map((item) => [`item-${item.id}`, item.temperatura]))
+    Object.fromEntries(
+      rows.map((item) => [`item-${item.id}`, sanitizeTemperatureInput(item.temperatura)])
+    )
   );
 
   useEffect(() => {
@@ -207,7 +246,7 @@ export function NoteItemsForm({
                 const validadeNaoAplicavel =
                   validadeNaoAplicavelRows[rowKey] ?? item.validadeNaoAplicavel;
                 const dataValidadeValue =
-                  dataValidadeValues[rowKey] ?? item.dataValidade;
+                  dataValidadeValues[rowKey] ?? normalizeDateInputValue(item.dataValidade);
                 const temperaturaTipo =
                   temperaturaTipoValues[rowKey] ?? item.temperaturaTipo;
                 const temperaturaValue = temperaturaValues[rowKey] ?? item.temperatura;
@@ -304,7 +343,7 @@ export function NoteItemsForm({
                         onChange={(event) =>
                           setDataValidadeValues((current) => ({
                             ...current,
-                            [rowKey]: event.currentTarget.value
+                            [rowKey]: normalizeDateInputValue(event.currentTarget.value)
                           }))
                         }
                         required={!validadeNaoAplicavel}
@@ -375,14 +414,21 @@ export function NoteItemsForm({
                       <input
                         type="text"
                         name={`${rowKey}-temperatura`}
-                        inputMode="text"
+                        inputMode="decimal"
                         value={temperaturaTipo === "NUMERICA" ? temperaturaValue : ""}
                         onChange={(event) =>
                           setTemperaturaValues((current) => ({
                             ...current,
-                            [rowKey]: event.currentTarget.value
+                            [rowKey]: sanitizeTemperatureInput(event.currentTarget.value)
                           }))
                         }
+                        onBlur={(event) => {
+                          const value = normalizeTemperatureOnBlur(event.currentTarget.value);
+                          setTemperaturaValues((current) => ({
+                            ...current,
+                            [rowKey]: value
+                          }));
+                        }}
                         required={temperaturaTipo === "NUMERICA"}
                         disabled={readOnlyMode || temperaturaTipo !== "NUMERICA"}
                         className={inputClassName}

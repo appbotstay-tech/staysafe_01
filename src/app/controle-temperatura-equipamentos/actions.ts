@@ -17,6 +17,7 @@ import {
   ensureCanCloseMonth,
   ensureCanDeleteOperationalRecords,
   ensureCanManageOptions,
+  ensureCanSignNutritionReview,
   ensureCanReopenMonth,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -643,6 +644,70 @@ export async function reopenMonthAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível processar a operação.")
+    );
+  }
+}
+
+export async function signRegistroNutricionistaAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanSignNutritionReview(actor.perfil);
+
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+    if (!id) {
+      throw new Error("Registro inválido para assinatura da nutrição.");
+    }
+
+    const registro = await prisma.controleTemperaturaEquipamento.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        assinaturaNutricionistaDataHora: true
+      }
+    });
+
+    if (!registro) {
+      throw new Error("Registro não encontrado.");
+    }
+
+    if (registro.assinaturaNutricionistaDataHora) {
+      throw new Error("Este registro já foi assinado pela nutrição.");
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    const now = getCurrentSystemDateTime();
+    await prisma.controleTemperaturaEquipamento.update({
+      where: { id },
+      data: {
+        assinaturaNutricionistaUsuarioId: actor.id,
+        assinaturaNutricionistaNome: actor.nomeCompleto,
+        assinaturaNutricionistaPerfil: actor.perfil,
+        assinaturaNutricionistaDataHora: now
+      }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "REVISAO_NUTRICIONISTA",
+      modulo: "controle-temperatura-equipamentos/registro",
+      referenciaId: String(id)
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Registro assinado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(
+        error,
+        "Não foi possível assinar a conferência como revisada pela nutrição."
+      )
     );
   }
 }

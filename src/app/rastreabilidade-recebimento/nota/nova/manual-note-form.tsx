@@ -24,6 +24,41 @@ const INITIAL_STATE: ActionState = {
 
 type TemperaturaTipo = "NUMERICA" | "AMBIENTE" | "NAO_APLICAVEL";
 
+const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function normalizeDateInputValue(value: string): string {
+  return DATE_INPUT_PATTERN.test(value) ? value : "";
+}
+
+function sanitizeTemperatureInput(value: string): string {
+  let sanitized = "";
+  let hasDecimalSeparator = false;
+
+  for (const char of value.trim()) {
+    if (/\d/.test(char)) {
+      sanitized += char;
+      continue;
+    }
+
+    if (char === "-" && sanitized.length === 0) {
+      sanitized += char;
+      continue;
+    }
+
+    if ((char === "," || char === ".") && !hasDecimalSeparator) {
+      sanitized += char;
+      hasDecimalSeparator = true;
+    }
+  }
+
+  return sanitized;
+}
+
+function normalizeTemperatureOnBlur(value: string): string {
+  const normalized = value.trim().replace(",", ".");
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : value.trim();
+}
+
 export function ManualNoteForm({
   responsavelLogado,
   inputClassName
@@ -72,8 +107,8 @@ export function ManualNoteForm({
           name="dataValidade"
           required={!validadeNaoAplicavel}
           disabled={validadeNaoAplicavel}
-          value={validadeNaoAplicavel ? "" : dataValidade}
-          onChange={(event) => setDataValidade(event.currentTarget.value)}
+          value={validadeNaoAplicavel ? "" : normalizeDateInputValue(dataValidade)}
+          onChange={(event) => setDataValidade(normalizeDateInputValue(event.currentTarget.value))}
           className={inputClassName}
         />
         <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
@@ -126,9 +161,10 @@ export function ManualNoteForm({
           name="temperatura"
           required={temperaturaTipo === "NUMERICA"}
           disabled={temperaturaTipo !== "NUMERICA"}
-          inputMode="text"
+          inputMode="decimal"
           value={temperaturaTipo === "NUMERICA" ? temperatura : ""}
-          onChange={(event) => setTemperatura(event.currentTarget.value)}
+          onChange={(event) => setTemperatura(sanitizeTemperatureInput(event.currentTarget.value))}
+          onBlur={(event) => setTemperatura(normalizeTemperatureOnBlur(event.currentTarget.value))}
           className={inputClassName}
         />
       </label>

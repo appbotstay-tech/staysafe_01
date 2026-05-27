@@ -35,6 +35,8 @@ type BuffetServiceRecord = {
   dataHoraRegistro: Date;
   assinaturaNome: string | null;
   assinaturaDataHora: Date | null;
+  assinaturaNutricionistaNome: string | null;
+  assinaturaNutricionistaDataHora: Date | null;
   status: StatusItemBuffetAmostra;
   servico: {
     nome: string;
@@ -61,15 +63,20 @@ export type BuffetServiceHistoryItem = {
   dataHoraRegistroLabel: string;
   responsavelVerificacao: string;
   assinaturaResumo: string;
+  assinaturaNutricionistaResumo: string;
 };
 
 export type BuffetServiceHistoryGroup = {
   key: string;
+  servicoId: number;
+  dataInput: string;
   servicoNome: string;
   dataLabel: string;
   tipoServicoLabel: string;
   responsavelExecucao: string;
   assinaturaResumo: string;
+  assinaturaNutricionistaResumo: string;
+  assinadoNutricionista: boolean;
   status: StatusServicoBuffet;
   totalItens: number;
   itensPreenchidos: number;
@@ -146,11 +153,15 @@ export function buildBuffetServiceHistoryGroups(
     if (!group) {
       group = {
         key,
+        servicoId: record.servicoId,
+        dataInput: formatDateInput(record.data),
         servicoNome: record.servico.nome,
         dataLabel: formatDateDisplay(record.data),
         tipoServicoLabel: getTipoServicoLabel(record.servico.tipoServico),
         responsavelExecucao: "-",
         assinaturaResumo: "-",
+        assinaturaNutricionistaResumo: "-",
+        assinadoNutricionista: false,
         status: "PENDENTE",
         totalItens: 0,
         itensPreenchidos: 0,
@@ -182,7 +193,11 @@ export function buildBuffetServiceHistoryGroups(
       responsavelExecucao: displayValue(record.responsavelNome),
       dataHoraRegistroLabel: formatDateTimeDisplay(record.dataHoraRegistro),
       responsavelVerificacao: displayValue(record.assinaturaNome),
-      assinaturaResumo: formatSignature(record.assinaturaNome, record.assinaturaDataHora)
+      assinaturaResumo: formatSignature(record.assinaturaNome, record.assinaturaDataHora),
+      assinaturaNutricionistaResumo: formatSignature(
+        record.assinaturaNutricionistaNome,
+        record.assinaturaNutricionistaDataHora
+      )
     });
   }
 
@@ -216,6 +231,13 @@ export function buildBuffetServiceHistoryGroups(
       items.map((item) => item.assinaturaResumo),
       "Múltiplas assinaturas"
     );
+    group.assinaturaNutricionistaResumo = summarizeValues(
+      items.map((item) => item.assinaturaNutricionistaResumo),
+      "Múltiplas assinaturas da nutri"
+    );
+    group.assinadoNutricionista =
+      items.length > 0 &&
+      items.every((item) => item.assinaturaNutricionistaResumo !== "-");
     group.status = calcularStatusServico({
       totalItens: group.totalItens,
       itensAssinados,

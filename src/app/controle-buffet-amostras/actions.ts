@@ -15,6 +15,7 @@ import {
   createSignatureLog,
   ensureCanCloseMonth,
   ensureCanManageOptions,
+  ensureCanSignNutritionReview,
   ensureCanReopenMonth,
   ensureCanSignSupervisor,
   validateSignaturePassword
@@ -1080,6 +1081,90 @@ export async function signServicoItensAction(formData: FormData) {
       getErrorMessage(
         error,
         "Não foi possível concluir a assinatura. Verifique sua senha e tente novamente."
+      )
+    );
+  }
+}
+
+export async function signServicoNutricionistaAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, HISTORY_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanSignNutritionReview(actor.perfil);
+
+    const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
+    const dataInput = getInputValue(formData, "data");
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+
+    if (!servicoId) {
+      throw new Error("Serviço inválido para assinatura da nutrição.");
+    }
+
+    const data = parseDateInput(dataInput);
+    if (!data) {
+      throw new Error("Data inválida para assinatura da nutrição.");
+    }
+
+    const registros = await prisma.controleBuffetAmostraRegistro.findMany({
+      where: { data, servicoId },
+      select: {
+        id: true,
+        status: true,
+        assinaturaNutricionistaDataHora: true
+      }
+    });
+
+    if (registros.length === 0) {
+      throw new Error("Não há registros para assinar neste serviço.");
+    }
+
+    const registrosPendentes = registros.filter(
+      (registro) => registro.status === StatusItemBuffetAmostra.PENDENTE
+    );
+    if (registrosPendentes.length > 0) {
+      throw new Error("Finalize os itens pendentes antes da assinatura da nutrição.");
+    }
+
+    const registrosParaAssinar = registros.filter(
+      (registro) => !registro.assinaturaNutricionistaDataHora
+    );
+    if (registrosParaAssinar.length === 0) {
+      throw new Error("Este serviço já foi assinado pela nutrição.");
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    const now = getCurrentSystemDateTime();
+    await prisma.controleBuffetAmostraRegistro.updateMany({
+      where: {
+        id: { in: registrosParaAssinar.map((registro) => registro.id) }
+      },
+      data: {
+        assinaturaNutricionistaUsuarioId: actor.id,
+        assinaturaNutricionistaNome: actor.nomeCompleto,
+        assinaturaNutricionistaPerfil: actor.perfil,
+        assinaturaNutricionistaDataHora: now
+      }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "REVISAO_NUTRICIONISTA",
+      modulo: "controle-buffet-amostras/servico",
+      referenciaId: `${servicoId}:${dataInput}`
+    });
+
+    revalidateModulePaths(servicoId);
+    redirectWithFeedback(returnTo, "success", "Serviço assinado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(
+        error,
+        "Não foi possível assinar o serviço como revisado pela nutrição."
       )
     );
   }

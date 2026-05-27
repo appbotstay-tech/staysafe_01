@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { signServicoNutricionistaAction } from "./actions";
 import { ItemStatusBadge, ServiceStatusBadge, TemperatureStatusBadge } from "./status-badges";
 import type { BuffetServiceHistoryGroup, BuffetServiceHistoryTotals } from "./service-history";
 import { normalizeSearchText } from "./utils";
@@ -10,6 +11,8 @@ type BuffetServiceHistoryListProps = {
   groups: BuffetServiceHistoryGroup[];
   totals?: BuffetServiceHistoryTotals;
   emptyMessage: string;
+  canSignNutritionReview?: boolean;
+  returnTo?: string;
 };
 
 function OperationalStatusPill({
@@ -36,13 +39,17 @@ function OperationalStatusPill({
 export function BuffetServiceHistoryList({
   groups,
   totals,
-  emptyMessage
+  emptyMessage,
+  canSignNutritionReview = false,
+  returnTo = "/controle-buffet-amostras/historico"
 }: BuffetServiceHistoryListProps) {
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  const [signingGroupKey, setSigningGroupKey] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
 
   const selectedGroup =
     groups.find((group) => group.key === selectedGroupKey) ?? null;
+  const signingGroup = groups.find((group) => group.key === signingGroupKey) ?? null;
   const normalizedItemSearch = normalizeSearchText(itemSearch);
   const filteredItems = useMemo(() => {
     if (!selectedGroup) {
@@ -155,14 +162,33 @@ export function BuffetServiceHistoryList({
                     {group.itensPreenchidos} preenchidos | {group.itensNaoServidos} não
                     servidos | {group.itensComAcaoCorretiva} ação corretiva
                   </p>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    Revisão nutri:{" "}
+                    <strong>
+                      {group.assinadoNutricionista
+                        ? group.assinaturaNutricionistaResumo
+                        : "Pendente de assinatura da nutri"}
+                    </strong>
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn-action shrink-0"
-                  onClick={() => openGroup(group.key)}
-                >
-                  Abrir Serviço
-                </button>
+                <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                  {canSignNutritionReview && !group.assinadoNutricionista ? (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => setSigningGroupKey(group.key)}
+                    >
+                      Assinar Nutri
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn-action"
+                    onClick={() => openGroup(group.key)}
+                  >
+                    Abrir Serviço
+                  </button>
+                </div>
               </div>
             </article>
           ))}
@@ -194,6 +220,14 @@ export function BuffetServiceHistoryList({
                   </p>
                   <p>
                     Assinatura: <strong>{selectedGroup.assinaturaResumo}</strong>
+                  </p>
+                  <p className="sm:col-span-2">
+                    Revisão nutri:{" "}
+                    <strong>
+                      {selectedGroup.assinadoNutricionista
+                        ? selectedGroup.assinaturaNutricionistaResumo
+                        : "Pendente de assinatura da nutri"}
+                    </strong>
                   </p>
                 </div>
               </div>
@@ -282,6 +316,10 @@ export function BuffetServiceHistoryList({
                       <p>
                         Assinatura: <strong>{item.assinaturaResumo}</strong>
                       </p>
+                      <p>
+                        Revisão nutri:{" "}
+                        <strong>{item.assinaturaNutricionistaResumo}</strong>
+                      </p>
                       <p className="sm:col-span-2">
                         Observações: <strong>{item.observacao}</strong>
                       </p>
@@ -290,6 +328,70 @@ export function BuffetServiceHistoryList({
                 ))}
               </div>
             )}
+          </section>
+        </div>
+      ) : null}
+
+      {signingGroup ? (
+        <div
+          className="bpma-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Assinar revisão da nutri do serviço ${signingGroup.servicoNome}`}
+        >
+          <section className="bpma-modal-panel max-w-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Assinar revisão da nutri
+                </h2>
+                <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                  <p>
+                    Serviço: <strong>{signingGroup.servicoNome}</strong>
+                  </p>
+                  <p>
+                    Data: <strong>{signingGroup.dataLabel}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary shrink-0"
+                onClick={() => setSigningGroupKey(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form action={signServicoNutricionistaAction} className="mt-4 space-y-4">
+              <input type="hidden" name="servicoId" value={String(signingGroup.servicoId)} />
+              <input type="hidden" name="data" value={signingGroup.dataInput} />
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Deseja assinar este serviço como revisado pela nutrição?
+              </p>
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                Confirme sua senha *
+                <input
+                  type="password"
+                  name="senhaConfirmacao"
+                  required
+                  className="bpma-input"
+                />
+              </label>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSigningGroupKey(null)}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  Assinar
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       ) : null}

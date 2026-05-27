@@ -17,6 +17,7 @@ import {
   canResetPassword,
   canSignAsResponsible,
   canSignAsSupervisor,
+  canSignNutritionReview,
   canSignTechnical,
   canUpdateMaintenanceTicket,
   canViewResetRequests,
@@ -92,6 +93,12 @@ export function ensureCanSignSupervisor(role: UserRole) {
 export function ensureCanSignTechnical(role: UserRole) {
   if (!canSignTechnical(role)) {
     throw new Error("Seu perfil não pode assinar como nutricionista.");
+  }
+}
+
+export function ensureCanSignNutritionReview(role: UserRole) {
+  if (!canSignNutritionReview(role)) {
+    throw new Error("Apenas DEV ou NUTRICIONISTA podem assinar a revisão da nutrição.");
   }
 }
 

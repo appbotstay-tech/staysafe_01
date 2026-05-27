@@ -366,6 +366,7 @@ export default async function ControleTemperaturaEquipamentosPage({
 
   const editId = parsePositiveInt(firstParam(params.editId));
   const deleteId = parsePositiveInt(firstParam(params.deleteId));
+  const fotoId = parsePositiveInt(firstParam(params.fotoId));
   const novoRegistroSelecionado = firstParam(params.new) === "1";
   const registroEmEdicao = editId
     ? await prisma.controleTemperaturaEquipamento.findUnique({ where: { id: editId } })
@@ -548,6 +549,27 @@ export default async function ControleTemperaturaEquipamentosPage({
   const buildHrefDetalheDia = (dia: DailyClosingSummary) => {
     const query = new URLSearchParams(parametrosRetorno);
     query.set("diaFechamento", dia.key);
+    return buildPathWithParams(query);
+  };
+  const registroFotoSelecionado = fotoId
+    ? [...registros, ...registrosFechamento].find((registro) => registro.id === fotoId) ?? null
+    : null;
+  const fotoSelecionadaDataUrl = registroFotoSelecionado
+    ? getImageDataUrl(registroFotoSelecionado.fotoMimeType, registroFotoSelecionado.fotoBase64)
+    : null;
+  const hrefFecharFoto = (() => {
+    const query = new URLSearchParams(parametrosRetorno);
+    if (diaFechamentoSelecionadoKey) {
+      query.set("diaFechamento", diaFechamentoSelecionadoKey);
+    }
+    return buildPathWithParams(query);
+  })();
+  const buildHrefFoto = (id: number, manterDiaFechamento = false) => {
+    const query = new URLSearchParams(parametrosRetorno);
+    if (manterDiaFechamento && diaFechamentoSelecionadoKey) {
+      query.set("diaFechamento", diaFechamentoSelecionadoKey);
+    }
+    query.set("fotoId", String(id));
     return buildPathWithParams(query);
   };
 
@@ -867,10 +889,7 @@ export default async function ControleTemperaturaEquipamentosPage({
                     query.set("editId", String(registro.id));
                     return buildPathWithParams(query);
                   })();
-                  const fotoDataUrl = getImageDataUrl(
-                    registro.fotoMimeType,
-                    registro.fotoBase64
-                  );
+                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
                   const registroEmOperacao = isOperationalRecord(registro);
                   const observacaoRegistro = registroEmOperacao
                     ? registro.observacoes
@@ -897,18 +916,14 @@ export default async function ControleTemperaturaEquipamentosPage({
                         {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {registroEmOperacao && fotoDataUrl ? (
-                          <details>
-                            <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200">
-                              Ver Foto
-                            </summary>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={fotoDataUrl}
-                              alt={`Foto do registro ${registro.id}`}
-                              className="mt-2 h-20 w-20 rounded-md border border-slate-200 object-cover dark:border-slate-700"
-                            />
-                          </details>
+                        {registroEmOperacao && hasStoredImage ? (
+                          <Link
+                            href={buildHrefFoto(registro.id)}
+                            scroll={false}
+                            className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline dark:text-slate-200"
+                          >
+                            Ver foto
+                          </Link>
                         ) : (
                           "-"
                         )}
@@ -1073,10 +1088,7 @@ export default async function ControleTemperaturaEquipamentosPage({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {diaFechamentoSelecionado.registros.map((registro) => {
-                  const fotoDataUrl = getImageDataUrl(
-                    registro.fotoMimeType,
-                    registro.fotoBase64
-                  );
+                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
                   const registroEmOperacao = isOperationalRecord(registro);
                   const observacaoRegistro = registroEmOperacao
                     ? registro.observacoes
@@ -1105,15 +1117,14 @@ export default async function ControleTemperaturaEquipamentosPage({
                         {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {registroEmOperacao && fotoDataUrl ? (
-                          <a
-                            href={fotoDataUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                        {registroEmOperacao && hasStoredImage ? (
+                          <Link
+                            href={buildHrefFoto(registro.id, true)}
+                            scroll={false}
                             className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline dark:text-slate-200"
                           >
                             Ver foto
-                          </a>
+                          </Link>
                         ) : (
                           "-"
                         )}
@@ -1129,6 +1140,35 @@ export default async function ControleTemperaturaEquipamentosPage({
               </tbody>
             </table>
           </div>
+        </ActionModal>
+      ) : null}
+
+      {fotoId ? (
+        <ActionModal
+          title="Foto da evidência"
+          cancelHref={hrefFecharFoto}
+          maxWidthClassName="max-w-4xl"
+          description={
+            registroFotoSelecionado ? (
+              <p>
+                {registroFotoSelecionado.equipamento} em{" "}
+                {formatDateDisplay(registroFotoSelecionado.data)}.
+              </p>
+            ) : null
+          }
+        >
+          {fotoSelecionadaDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fotoSelecionadaDataUrl}
+              alt={`Foto do registro ${registroFotoSelecionado?.id ?? fotoId}`}
+              className="max-h-[75vh] w-full rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+            />
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Não foi possível carregar a imagem anexada.
+            </p>
+          )}
         </ActionModal>
       ) : null}
 
