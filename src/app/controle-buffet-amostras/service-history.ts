@@ -233,7 +233,7 @@ export function buildBuffetServiceHistoryGroups(
     );
     group.assinaturaNutricionistaResumo = summarizeValues(
       items.map((item) => item.assinaturaNutricionistaResumo),
-      "Múltiplas assinaturas da nutri"
+      "Múltiplas assinaturas do supervisor"
     );
     group.assinadoNutricionista =
       items.length > 0 &&

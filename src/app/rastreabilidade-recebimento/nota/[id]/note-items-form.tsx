@@ -10,6 +10,7 @@ import { saveNotaItemsStateAction } from "../../actions";
 import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
 import { SifInput } from "../../sif-input";
 import { ConformidadeBadge } from "../../status-badges";
+import { normalizeDateInputString } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -117,9 +118,20 @@ function getConformidadeBadgeValue(status: StatusRecebimento) {
 }
 
 const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const BR_DATE_INPUT_PATTERN = /^\d{2}[/-]\d{2}[/-]\d{4}$/;
 
 function normalizeDateInputValue(value: string): string {
-  return DATE_INPUT_PATTERN.test(value) ? value : "";
+  const trimmed = value.trim();
+  return DATE_INPUT_PATTERN.test(trimmed) || BR_DATE_INPUT_PATTERN.test(trimmed) ? trimmed : "";
+}
+
+function sanitizeDateDraftInput(value: string): string {
+  return value.replace(/[^\d/-]/g, "").slice(0, 10);
+}
+
+function normalizeDateOnBlur(value: string): string {
+  const normalized = normalizeDateInputString(value);
+  return DATE_INPUT_PATTERN.test(normalized) ? normalized : value.trim();
 }
 
 function sanitizeTemperatureInput(value: string): string {
@@ -177,6 +189,11 @@ export function NoteItemsForm({
   const [dataValidadeValues, setDataValidadeValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       rows.map((item) => [`item-${item.id}`, normalizeDateInputValue(item.dataValidade)])
+    )
+  );
+  const [dataFabricacaoValues, setDataFabricacaoValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      rows.map((item) => [`item-${item.id}`, normalizeDateInputValue(item.dataFabricacao)])
     )
   );
   const [temperaturaTipoValues, setTemperaturaTipoValues] = useState<
@@ -242,14 +259,19 @@ export function NoteItemsForm({
                 const invalid = state.invalidRowKey === rowKey;
                 const invalidLote = invalid && state.invalidField === "lote";
                 const invalidSif = invalid && state.invalidField === "sif";
+                const invalidDataFabricacao = invalid && state.invalidField === "dataFabricacao";
+                const invalidDataValidade = invalid && state.invalidField === "dataValidade";
+                const invalidTemperatura = invalid && state.invalidField === "temperatura";
                 const loteErrorId = `${rowKey}-lote-error`;
                 const validadeNaoAplicavel =
                   validadeNaoAplicavelRows[rowKey] ?? item.validadeNaoAplicavel;
                 const dataValidadeValue =
                   dataValidadeValues[rowKey] ?? normalizeDateInputValue(item.dataValidade);
+                const dataFabricacaoValue =
+                  dataFabricacaoValues[rowKey] ?? normalizeDateInputValue(item.dataFabricacao);
                 const temperaturaTipo =
                   temperaturaTipoValues[rowKey] ?? item.temperaturaTipo;
-                const temperaturaValue = temperaturaValues[rowKey] ?? item.temperatura;
+                const temperaturaValue = temperaturaValues[rowKey] ?? String(item.temperatura ?? "");
 
                 return (
                   <tr
@@ -326,29 +348,59 @@ export function NoteItemsForm({
                     <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Data de Fabricação *</span>
                       <input
-                        type="date"
+                        type="text"
                         name={`${rowKey}-dataFabricacao`}
-                        defaultValue={item.dataFabricacao}
+                        value={dataFabricacaoValue}
+                        onChange={(event) =>
+                          setDataFabricacaoValues((current) => ({
+                            ...current,
+                            [rowKey]: sanitizeDateDraftInput(event.currentTarget.value)
+                          }))
+                        }
+                        onBlur={(event) => {
+                          const value = normalizeDateOnBlur(event.currentTarget.value);
+                          setDataFabricacaoValues((current) => ({
+                            ...current,
+                            [rowKey]: value
+                          }));
+                        }}
+                        inputMode="numeric"
+                        placeholder="AAAA-MM-DD"
+                        maxLength={10}
                         required
                         disabled={readOnlyMode}
-                        className={`${inputClassName} ${DATE_INPUT_CLASS}`}
+                        className={`${inputClassName} ${DATE_INPUT_CLASS} ${
+                          invalidDataFabricacao ? FIELD_ERROR_CLASS : ""
+                        }`}
                       />
                     </td>
                     <td className={DATE_TABLE_CELL_CLASS}>
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Validade *</span>
                       <input
-                        type="date"
+                        type="text"
                         name={`${rowKey}-dataValidade`}
                         value={validadeNaoAplicavel ? "" : dataValidadeValue}
                         onChange={(event) =>
                           setDataValidadeValues((current) => ({
                             ...current,
-                            [rowKey]: normalizeDateInputValue(event.currentTarget.value)
+                            [rowKey]: sanitizeDateDraftInput(event.currentTarget.value)
                           }))
                         }
+                        onBlur={(event) => {
+                          const value = normalizeDateOnBlur(event.currentTarget.value);
+                          setDataValidadeValues((current) => ({
+                            ...current,
+                            [rowKey]: value
+                          }));
+                        }}
+                        inputMode="numeric"
+                        placeholder="AAAA-MM-DD"
+                        maxLength={10}
                         required={!validadeNaoAplicavel}
                         disabled={readOnlyMode || validadeNaoAplicavel}
-                        className={`${inputClassName} ${DATE_INPUT_CLASS}`}
+                        className={`${inputClassName} ${DATE_INPUT_CLASS} ${
+                          invalidDataValidade ? FIELD_ERROR_CLASS : ""
+                        }`}
                       />
                       <label className="mt-2 flex items-start gap-2 text-[11px] leading-4 text-slate-600 dark:text-slate-300">
                         <input
@@ -431,7 +483,9 @@ export function NoteItemsForm({
                         }}
                         required={temperaturaTipo === "NUMERICA"}
                         disabled={readOnlyMode || temperaturaTipo !== "NUMERICA"}
-                        className={inputClassName}
+                        className={`${inputClassName} ${
+                          invalidTemperatura ? FIELD_ERROR_CLASS : ""
+                        }`}
                       />
                     </td>
                     <td className={SELECT_CELL_CLASS}>

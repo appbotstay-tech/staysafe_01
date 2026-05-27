@@ -180,6 +180,15 @@ function getInvalidField(error: unknown): string | undefined {
   if (message.includes("sif")) {
     return "sif";
   }
+  if (message.includes("temperatura")) {
+    return "temperatura";
+  }
+  if (message.includes("validade")) {
+    return "dataValidade";
+  }
+  if (message.includes("fabricação") || message.includes("fabricacao")) {
+    return "dataFabricacao";
+  }
 
   return undefined;
 }

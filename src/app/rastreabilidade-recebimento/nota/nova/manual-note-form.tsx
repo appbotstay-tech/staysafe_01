@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { createManualNoteStateAction } from "../../actions";
 import { SIF_INPUT_REQUIRED_MESSAGE } from "../../sif";
 import { SifInput } from "../../sif-input";
+import { normalizeDateInputString } from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -26,8 +27,13 @@ type TemperaturaTipo = "NUMERICA" | "AMBIENTE" | "NAO_APLICAVEL";
 
 const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-function normalizeDateInputValue(value: string): string {
-  return DATE_INPUT_PATTERN.test(value) ? value : "";
+function sanitizeDateDraftInput(value: string): string {
+  return value.replace(/[^\d/-]/g, "").slice(0, 10);
+}
+
+function normalizeDateOnBlur(value: string): string {
+  const normalized = normalizeDateInputString(value);
+  return DATE_INPUT_PATTERN.test(normalized) ? normalized : value.trim();
 }
 
 function sanitizeTemperatureInput(value: string): string {
@@ -65,9 +71,11 @@ export function ManualNoteForm({
 }: ManualNoteFormProps) {
   const [state, formAction] = useActionState(createManualNoteStateAction, INITIAL_STATE);
   const [validadeNaoAplicavel, setValidadeNaoAplicavel] = useState(false);
+  const [dataFabricacao, setDataFabricacao] = useState("");
   const [dataValidade, setDataValidade] = useState("");
   const [temperaturaTipo, setTemperaturaTipo] = useState<TemperaturaTipo>("NUMERICA");
   const [temperatura, setTemperatura] = useState("");
+  const errorInputClass = `${inputClassName} border-red-400 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-500 dark:border-red-700 dark:bg-red-950 dark:text-red-200`;
 
   return (
     <form action={formAction} className="grid gap-4 md:grid-cols-2">
@@ -98,18 +106,33 @@ export function ManualNoteForm({
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Data de Fabricação *
-        <input type="date" name="dataFabricacao" required className={inputClassName} />
+        <input
+          type="text"
+          name="dataFabricacao"
+          value={dataFabricacao}
+          onChange={(event) => setDataFabricacao(sanitizeDateDraftInput(event.currentTarget.value))}
+          onBlur={(event) => setDataFabricacao(normalizeDateOnBlur(event.currentTarget.value))}
+          inputMode="numeric"
+          placeholder="AAAA-MM-DD"
+          maxLength={10}
+          required
+          className={state.invalidField === "dataFabricacao" ? errorInputClass : inputClassName}
+        />
       </label>
       <div className="text-sm text-slate-700 dark:text-slate-200">
         <p>Validade *</p>
         <input
-          type="date"
+          type="text"
           name="dataValidade"
           required={!validadeNaoAplicavel}
           disabled={validadeNaoAplicavel}
-          value={validadeNaoAplicavel ? "" : normalizeDateInputValue(dataValidade)}
-          onChange={(event) => setDataValidade(normalizeDateInputValue(event.currentTarget.value))}
-          className={inputClassName}
+          value={validadeNaoAplicavel ? "" : dataValidade}
+          onChange={(event) => setDataValidade(sanitizeDateDraftInput(event.currentTarget.value))}
+          onBlur={(event) => setDataValidade(normalizeDateOnBlur(event.currentTarget.value))}
+          inputMode="numeric"
+          placeholder="AAAA-MM-DD"
+          maxLength={10}
+          className={state.invalidField === "dataValidade" ? errorInputClass : inputClassName}
         />
         <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <input
@@ -165,7 +188,7 @@ export function ManualNoteForm({
           value={temperaturaTipo === "NUMERICA" ? temperatura : ""}
           onChange={(event) => setTemperatura(sanitizeTemperatureInput(event.currentTarget.value))}
           onBlur={(event) => setTemperatura(normalizeTemperatureOnBlur(event.currentTarget.value))}
-          className={inputClassName}
+          className={state.invalidField === "temperatura" ? errorInputClass : inputClassName}
         />
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200">

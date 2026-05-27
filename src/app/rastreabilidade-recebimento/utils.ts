@@ -14,7 +14,7 @@ export type Conformidade = "CONFORME" | "NAO_CONFORME";
 export type StatusRecebimento = "PENDENTE" | "CONFORME" | "NAO_CONFORME";
 
 export function parseDateInput(value: string): Date | null {
-  return parseAppDateInput(value);
+  return parseAppDateInput(normalizeDateInputString(value));
 }
 
 export function parseXmlDateToDatabase(value: string): Date | null {
@@ -52,10 +52,33 @@ export function parsePositiveInt(value: string): number | null {
   return parsed;
 }
 
+export function normalizeDateInputString(value: string): string {
+  const trimmed = value.trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const brDateMatch = trimmed.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  if (brDateMatch) {
+    return `${brDateMatch[3]}-${brDateMatch[2]}-${brDateMatch[1]}`;
+  }
+
+  return trimmed;
+}
+
+export function normalizeTemperatureInputString(value: string): string {
+  return value.trim().replace(",", ".");
+}
+
 export function parseTemperatureInput(value: string): number | null {
-  const normalized = value.replace(",", ".").trim();
+  const normalized = normalizeTemperatureInputString(value);
 
   if (!normalized) {
+    return null;
+  }
+
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
     return null;
   }
 

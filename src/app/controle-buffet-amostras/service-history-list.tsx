@@ -163,11 +163,11 @@ export function BuffetServiceHistoryList({
                     servidos | {group.itensComAcaoCorretiva} ação corretiva
                   </p>
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                    Revisão nutri:{" "}
+                    Assinatura do Supervisor:{" "}
                     <strong>
                       {group.assinadoNutricionista
-                        ? group.assinaturaNutricionistaResumo
-                        : "Pendente de assinatura da nutri"}
+                        ? `Assinado pelo Supervisor - ${group.assinaturaNutricionistaResumo}`
+                        : "Pendente de assinatura do supervisor"}
                     </strong>
                   </p>
                 </div>
@@ -178,7 +178,7 @@ export function BuffetServiceHistoryList({
                       className="btn-primary"
                       onClick={() => setSigningGroupKey(group.key)}
                     >
-                      Assinar Nutri
+                      Assinatura Supervisor
                     </button>
                   ) : null}
                   <button
@@ -222,11 +222,11 @@ export function BuffetServiceHistoryList({
                     Assinatura: <strong>{selectedGroup.assinaturaResumo}</strong>
                   </p>
                   <p className="sm:col-span-2">
-                    Revisão nutri:{" "}
+                    Assinatura do Supervisor:{" "}
                     <strong>
                       {selectedGroup.assinadoNutricionista
-                        ? selectedGroup.assinaturaNutricionistaResumo
-                        : "Pendente de assinatura da nutri"}
+                        ? `Assinado pelo Supervisor - ${selectedGroup.assinaturaNutricionistaResumo}`
+                        : "Pendente de assinatura do supervisor"}
                     </strong>
                   </p>
                 </div>
@@ -317,7 +317,7 @@ export function BuffetServiceHistoryList({
                         Assinatura: <strong>{item.assinaturaResumo}</strong>
                       </p>
                       <p>
-                        Revisão nutri:{" "}
+                        Assinatura do Supervisor:{" "}
                         <strong>{item.assinaturaNutricionistaResumo}</strong>
                       </p>
                       <p className="sm:col-span-2">
@@ -337,13 +337,13 @@ export function BuffetServiceHistoryList({
           className="bpma-modal-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label={`Assinar revisão da nutri do serviço ${signingGroup.servicoNome}`}
+          aria-label={`Assinar supervisão do serviço ${signingGroup.servicoNome}`}
         >
           <section className="bpma-modal-panel max-w-lg">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  Assinar revisão da nutri
+                  Assinatura do Supervisor
                 </h2>
                 <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   <p>
@@ -368,7 +368,7 @@ export function BuffetServiceHistoryList({
               <input type="hidden" name="data" value={signingGroup.dataInput} />
               <input type="hidden" name="returnTo" value={returnTo} />
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Deseja assinar este serviço como revisado pela nutrição?
+                Deseja assinar este serviço como revisado pelo supervisor?
               </p>
               <label className="block text-sm text-slate-700 dark:text-slate-200">
                 Confirme sua senha *
@@ -388,7 +388,7 @@ export function BuffetServiceHistoryList({
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary">
-                  Assinar
+                  Assinatura Supervisor
                 </button>
               </div>
             </form>

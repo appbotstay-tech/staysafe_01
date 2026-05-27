@@ -1098,12 +1098,12 @@ export async function signServicoNutricionistaAction(formData: FormData) {
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
 
     if (!servicoId) {
-      throw new Error("Serviço inválido para assinatura da nutrição.");
+      throw new Error("Serviço inválido para assinatura do supervisor.");
     }
 
     const data = parseDateInput(dataInput);
     if (!data) {
-      throw new Error("Data inválida para assinatura da nutrição.");
+      throw new Error("Data inválida para assinatura do supervisor.");
     }
 
     const registros = await prisma.controleBuffetAmostraRegistro.findMany({
@@ -1123,14 +1123,14 @@ export async function signServicoNutricionistaAction(formData: FormData) {
       (registro) => registro.status === StatusItemBuffetAmostra.PENDENTE
     );
     if (registrosPendentes.length > 0) {
-      throw new Error("Finalize os itens pendentes antes da assinatura da nutrição.");
+      throw new Error("Finalize os itens pendentes antes da assinatura do supervisor.");
     }
 
     const registrosParaAssinar = registros.filter(
       (registro) => !registro.assinaturaNutricionistaDataHora
     );
     if (registrosParaAssinar.length === 0) {
-      throw new Error("Este serviço já foi assinado pela nutrição.");
+      throw new Error("Este serviço já foi assinado pelo supervisor.");
     }
 
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
@@ -1164,7 +1164,7 @@ export async function signServicoNutricionistaAction(formData: FormData) {
       "error",
       getErrorMessage(
         error,
-        "Não foi possível assinar o serviço como revisado pela nutrição."
+        "Não foi possível assinar o serviço como revisado pelo supervisor."
       )
     );
   }
