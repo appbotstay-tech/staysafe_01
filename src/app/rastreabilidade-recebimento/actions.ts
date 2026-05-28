@@ -183,6 +183,9 @@ function getInvalidField(error: unknown): string | undefined {
   if (message.includes("temperatura")) {
     return "temperatura";
   }
+  if (message.includes("ação corretiva") || message.includes("acao corretiva")) {
+    return "acaoCorretiva";
+  }
   if (message.includes("validade")) {
     return "dataValidade";
   }
@@ -343,6 +346,48 @@ function parseRequiredTemperature(value: string): number {
   return parsed;
 }
 
+function formatTemperatureValue(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    maximumFractionDigits: 1
+  });
+}
+
+function buildCorrectiveActionReasons(params: {
+  temperatura: number | null;
+  temperaturaStatus: Conformidade;
+  categoria: CategoryItem;
+  transporteEntregador: Conformidade | null;
+  aspectoSensorial: Conformidade | null;
+  embalagem: Conformidade | null;
+}): string[] {
+  const reasons: string[] = [];
+
+  if (params.temperaturaStatus === "NAO_CONFORME" && params.temperatura !== null) {
+    reasons.push(
+      `Temperatura fora do padrão: ${formatTemperatureValue(
+        params.temperatura
+      )} °C acima do limite de ${formatTemperatureValue(
+        params.categoria.temperaturaMaxima
+      )} °C para ${params.categoria.nome}.`
+    );
+  }
+
+  if (params.transporteEntregador === "NAO_CONFORME") {
+    reasons.push("Transporte/entregador marcado como não conforme.");
+  }
+
+  if (params.aspectoSensorial === "NAO_CONFORME") {
+    reasons.push("Aspecto sensorial marcado como não conforme.");
+  }
+
+  if (params.embalagem === "NAO_CONFORME") {
+    reasons.push("Embalagem marcada como não conforme.");
+  }
+
+  return reasons;
+}
+
 function parseTemperaturaRecebimentoTipo(value: string): TipoTemperaturaRecebimento {
   if (value === TipoTemperaturaRecebimento.AMBIENTE) {
     return TipoTemperaturaRecebimento.AMBIENTE;
@@ -401,6 +446,14 @@ function validateAndBuildItemPayload(
     temperatura = parseRequiredTemperature(input.temperatura);
     temperaturaStatus = calculateTemperatureStatus(temperatura, category.temperaturaMaxima);
   }
+  const correctiveActionReasons = buildCorrectiveActionReasons({
+    temperatura,
+    temperaturaStatus,
+    categoria: category,
+    transporteEntregador,
+    aspectoSensorial,
+    embalagem
+  });
   const needsCorrectiveAction = isActionCorrectiveRequired({
     temperaturaStatus,
     transporteEntregador,
@@ -409,7 +462,10 @@ function validateAndBuildItemPayload(
   });
 
   if (needsCorrectiveAction && !input.acaoCorretiva) {
-    throw new Error("Ação corretiva é obrigatória quando houver não conformidade.");
+    throw new FieldValidationError(
+      `${correctiveActionReasons.join(" ")} Informe a ação corretiva para salvar.`,
+      "acaoCorretiva"
+    );
   }
 
   const statusGeral = calculateOverallStatus({

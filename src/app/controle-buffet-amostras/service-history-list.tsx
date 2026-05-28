@@ -162,14 +162,16 @@ export function BuffetServiceHistoryList({
                     {group.itensPreenchidos} preenchidos | {group.itensNaoServidos} não
                     servidos | {group.itensComAcaoCorretiva} ação corretiva
                   </p>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                    Assinatura do Supervisor:{" "}
-                    <strong>
-                      {group.assinadoNutricionista
-                        ? `Assinado pelo Supervisor - ${group.assinaturaNutricionistaResumo}`
-                        : "Pendente de assinatura do supervisor"}
-                    </strong>
-                  </p>
+                  {canSignNutritionReview || group.assinadoNutricionista ? (
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                      Assinatura do Supervisor:{" "}
+                      <strong>
+                        {group.assinadoNutricionista
+                          ? `Assinado pelo Supervisor - ${group.assinaturaNutricionistaResumo}`
+                          : "Pendente de assinatura do supervisor"}
+                      </strong>
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
                   {canSignNutritionReview && !group.assinadoNutricionista ? (
@@ -221,14 +223,16 @@ export function BuffetServiceHistoryList({
                   <p>
                     Assinatura: <strong>{selectedGroup.assinaturaResumo}</strong>
                   </p>
-                  <p className="sm:col-span-2">
-                    Assinatura do Supervisor:{" "}
-                    <strong>
-                      {selectedGroup.assinadoNutricionista
-                        ? `Assinado pelo Supervisor - ${selectedGroup.assinaturaNutricionistaResumo}`
-                        : "Pendente de assinatura do supervisor"}
-                    </strong>
-                  </p>
+                  {canSignNutritionReview || selectedGroup.assinadoNutricionista ? (
+                    <p className="sm:col-span-2">
+                      Assinatura do Supervisor:{" "}
+                      <strong>
+                        {selectedGroup.assinadoNutricionista
+                          ? `Assinado pelo Supervisor - ${selectedGroup.assinaturaNutricionistaResumo}`
+                          : "Pendente de assinatura do supervisor"}
+                      </strong>
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <button

@@ -252,6 +252,7 @@ export function NoteItemsForm({
                 const invalidDataFabricacao = invalid && state.invalidField === "dataFabricacao";
                 const invalidDataValidade = invalid && state.invalidField === "dataValidade";
                 const invalidTemperatura = invalid && state.invalidField === "temperatura";
+                const invalidAcaoCorretiva = invalid && state.invalidField === "acaoCorretiva";
                 const loteErrorId = `${rowKey}-lote-error`;
                 const validadeNaoAplicavel =
                   validadeNaoAplicavelRows[rowKey] ?? item.validadeNaoAplicavel;
@@ -512,7 +513,9 @@ export function NoteItemsForm({
                         name={`${rowKey}-acaoCorretiva`}
                         defaultValue={item.acaoCorretiva}
                         disabled={readOnlyMode}
-                        className={inputClassName}
+                        className={`${inputClassName} ${
+                          invalidAcaoCorretiva ? FIELD_ERROR_CLASS : ""
+                        }`}
                       />
                     </td>
                     <td className={READONLY_CELL_CLASS}>

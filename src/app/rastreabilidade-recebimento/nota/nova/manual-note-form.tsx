@@ -211,7 +211,11 @@ export function ManualNoteForm({
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Ação Corretiva
-        <input type="text" name="acaoCorretiva" className={inputClassName} />
+        <input
+          type="text"
+          name="acaoCorretiva"
+          className={state.invalidField === "acaoCorretiva" ? errorInputClass : inputClassName}
+        />
       </label>
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
         <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">

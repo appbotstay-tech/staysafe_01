@@ -100,7 +100,7 @@ export function canSignTechnical(role: UserRole): boolean {
 }
 
 export function canSignNutritionReview(role: UserRole): boolean {
-  return role === "DEV" || role === "NUTRICIONISTA";
+  return role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }
 
 export function canResetPassword(actorRole: UserRole, targetRole: UserRole): boolean {

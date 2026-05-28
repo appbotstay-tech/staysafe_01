@@ -98,7 +98,7 @@ export function ensureCanSignTechnical(role: UserRole) {
 
 export function ensureCanSignNutritionReview(role: UserRole) {
   if (!canSignNutritionReview(role)) {
-    throw new Error("Apenas DEV ou NUTRICIONISTA podem assinar a revisão da nutrição.");
+    throw new Error("Apenas DEV, GERENTE ou NUTRICIONISTA podem assinar como supervisor.");
   }
 }
 

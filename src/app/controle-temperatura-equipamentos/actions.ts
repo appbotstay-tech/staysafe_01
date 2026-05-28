@@ -658,7 +658,7 @@ export async function signRegistroNutricionistaAction(formData: FormData) {
     const id = parsePositiveInt(getInputValue(formData, "id"));
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
     if (!id) {
-      throw new Error("Registro inválido para assinatura da nutrição.");
+      throw new Error("Registro inválido para assinatura do supervisor.");
     }
 
     const registro = await prisma.controleTemperaturaEquipamento.findUnique({
@@ -674,7 +674,7 @@ export async function signRegistroNutricionistaAction(formData: FormData) {
     }
 
     if (registro.assinaturaNutricionistaDataHora) {
-      throw new Error("Este registro já foi assinado pela nutrição.");
+      throw new Error("Este registro já foi assinado pelo supervisor.");
     }
 
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
@@ -706,7 +706,7 @@ export async function signRegistroNutricionistaAction(formData: FormData) {
       "error",
       getErrorMessage(
         error,
-        "Não foi possível assinar a conferência como revisada pela nutrição."
+        "Não foi possível assinar a conferência como revisada pelo supervisor."
       )
     );
   }

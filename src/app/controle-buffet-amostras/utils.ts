@@ -214,7 +214,7 @@ export function getStatusServicoLabel(status: StatusServicoBuffet): string {
   }
 
   if (status === "CONCLUIDO") {
-    return "Concluído";
+    return "Completo";
   }
 
   return "Pendente";
@@ -282,7 +282,7 @@ export function calcularStatusServico(params: {
     return "PENDENTE";
   }
 
-  if (params.itensAssinados + (params.itensNaoServidos ?? 0) >= params.totalItens) {
+  if (params.itensIniciados >= params.totalItens) {
     return "CONCLUIDO";
   }
 

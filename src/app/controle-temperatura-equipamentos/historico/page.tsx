@@ -294,7 +294,7 @@ export default async function ControleTemperaturaHistoricoPage({
                 <th className="px-3 py-2 min-w-52">Ação Corretiva</th>
                 <th className="px-3 py-2">Foto</th>
                 <th className="px-3 py-2">Responsável</th>
-                <th className="px-3 py-2">Nutri</th>
+                <th className="px-3 py-2">Supervisor</th>
                 <th className="px-3 py-2">Observações</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
@@ -315,11 +315,11 @@ export default async function ControleTemperaturaHistoricoPage({
                     ? registro.observacoes
                     : registro.observacaoStatusOperacional;
                   const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
-                  const assinaturaNutri = registro.assinaturaNutricionistaDataHora
-                    ? `${registro.assinaturaNutricionistaNome ?? "Nutri"} em ${formatDateTimeDisplay(
+                  const assinaturaSupervisor = registro.assinaturaNutricionistaDataHora
+                    ? `${registro.assinaturaNutricionistaNome ?? "Supervisor"} em ${formatDateTimeDisplay(
                         registro.assinaturaNutricionistaDataHora
                       )}`
-                    : "Pendente";
+                    : "Pendente de assinatura do supervisor";
 
                   return (
                     <tr key={registro.id}>
@@ -356,7 +356,7 @@ export default async function ControleTemperaturaHistoricoPage({
                         )}
                       </td>
                       <td className="px-3 py-2">{registro.responsavel}</td>
-                      <td className="px-3 py-2">{assinaturaNutri}</td>
+                      <td className="px-3 py-2">{assinaturaSupervisor}</td>
                       <td className="px-3 py-2">{observacaoRegistro?.trim() || "-"}</td>
                       <td className="px-3 py-2">
                         {podeAssinarNutri && !registro.assinaturaNutricionistaDataHora ? (
@@ -365,7 +365,7 @@ export default async function ControleTemperaturaHistoricoPage({
                             scroll={false}
                             className="btn-action"
                           >
-                            Assinar Nutri
+                            Assinatura Supervisor
                           </Link>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -415,7 +415,7 @@ export default async function ControleTemperaturaHistoricoPage({
       podeAssinarNutri &&
       !registroParaAssinaturaNutri.assinaturaNutricionistaDataHora ? (
         <ActionModal
-          title="Assinar revisão da nutri"
+          title="Assinatura do Supervisor"
           cancelHref={returnTo}
           description={
             <p>
@@ -433,7 +433,7 @@ export default async function ControleTemperaturaHistoricoPage({
             <input type="hidden" name="id" value={registroParaAssinaturaNutri.id} />
             <input type="hidden" name="returnTo" value={signNutriReturnTo} />
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Deseja assinar esta conferência como revisada pela nutrição?
+              Deseja assinar esta conferência como revisada pelo supervisor?
             </p>
             <label className="block text-sm text-slate-700 dark:text-slate-200">
               Confirme sua senha *
