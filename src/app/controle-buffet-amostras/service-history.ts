@@ -142,7 +142,8 @@ function getOperationalItemStatus(
 }
 
 export function buildBuffetServiceHistoryGroups(
-  records: BuffetServiceRecord[]
+  records: BuffetServiceRecord[],
+  expectedItemCountsByServiceId = new Map<number, number>()
 ): BuffetServiceHistoryGroup[] {
   const groupsByKey = new Map<string, BuffetServiceHistoryGroup>();
 
@@ -204,6 +205,12 @@ export function buildBuffetServiceHistoryGroups(
   const groups = Array.from(groupsByKey.values());
   for (const group of groups) {
     const items = group.items;
+    const fixedItemsCount = items.filter((item) => !item.itemExtra).length;
+    const extraItemsCount = items.filter((item) => item.itemExtra).length;
+    const expectedFixedItemsCount = Math.max(
+      expectedItemCountsByServiceId.get(group.servicoId) ?? fixedItemsCount,
+      fixedItemsCount
+    );
     const itensAssinados = items.filter(
       (item) => item.status === StatusItemBuffetAmostra.ASSINADO
     ).length;
@@ -211,7 +218,7 @@ export function buildBuffetServiceHistoryGroups(
       (item) => item.status !== StatusItemBuffetAmostra.PENDENTE
     ).length;
 
-    group.totalItens = items.length;
+    group.totalItens = expectedFixedItemsCount + extraItemsCount;
     group.itensPreenchidos = items.filter(
       (item) =>
         item.status === StatusItemBuffetAmostra.PREENCHIDO ||

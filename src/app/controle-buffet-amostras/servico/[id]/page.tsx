@@ -449,7 +449,7 @@ export default async function ExecucaoServicoBuffetPage({
 
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">
-                Assinar como Supervisor
+                Assinatura Supervisor
               </button>
             </div>
           </form>

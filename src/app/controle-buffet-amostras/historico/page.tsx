@@ -110,6 +110,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
 
   const [servicos, itens] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
+      include: {
+        itens: {
+          where: {
+            item: { ativo: true }
+          },
+          select: { itemId: true }
+        }
+      },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
     prisma.controleBuffetAmostraItem.findMany({
@@ -175,7 +183,13 @@ export default async function ControleBuffetAmostrasHistoricoPage({
       { itemNome: "asc" }
     ]
   });
-  const gruposHistorico = buildBuffetServiceHistoryGroups(registros);
+  const expectedItemCountsByServiceId = new Map(
+    servicos.map((servico) => [servico.id, servico.itens.length])
+  );
+  const gruposHistorico = buildBuffetServiceHistoryGroups(
+    registros,
+    expectedItemCountsByServiceId
+  );
   const totalizadoresHistorico = buildBuffetServiceHistoryTotals(gruposHistorico);
 
   const parametrosRetorno = new URLSearchParams();

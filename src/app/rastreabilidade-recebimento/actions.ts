@@ -462,8 +462,11 @@ function validateAndBuildItemPayload(
   });
 
   if (needsCorrectiveAction && !input.acaoCorretiva) {
+    const reasonText = correctiveActionReasons.length
+      ? correctiveActionReasons.join(" ")
+      : "Há campos não conformes neste item.";
     throw new FieldValidationError(
-      `${correctiveActionReasons.join(" ")} Informe a ação corretiva para salvar.`,
+      `Este item possui não conformidade. ${reasonText} Informe a ação corretiva para salvar.`,
       "acaoCorretiva"
     );
   }

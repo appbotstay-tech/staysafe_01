@@ -316,9 +316,11 @@ export default async function ControleTemperaturaHistoricoPage({
                     : registro.observacaoStatusOperacional;
                   const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
                   const assinaturaSupervisor = registro.assinaturaNutricionistaDataHora
-                    ? `${registro.assinaturaNutricionistaNome ?? "Supervisor"} em ${formatDateTimeDisplay(
-                        registro.assinaturaNutricionistaDataHora
-                      )}`
+                    ? `Assinado pelo Supervisor - ${registro.assinaturaNutricionistaNome ?? "Supervisor"}${
+                        registro.assinaturaNutricionistaPerfil
+                          ? ` (${getRoleLabel(registro.assinaturaNutricionistaPerfil)})`
+                          : ""
+                      } em ${formatDateTimeDisplay(registro.assinaturaNutricionistaDataHora)}`
                     : "Pendente de assinatura do supervisor";
 
                   return (
@@ -449,7 +451,7 @@ export default async function ControleTemperaturaHistoricoPage({
                 Cancelar
               </Link>
               <button type="submit" className="btn-primary">
-                Assinar
+                Assinatura Supervisor
               </button>
             </ModalActions>
           </form>

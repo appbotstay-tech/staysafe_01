@@ -671,7 +671,7 @@ function buffetStatusLabel(status: StatusItemBuffetAmostra): DashboardNormalized
   }
 
   if (status === StatusItemBuffetAmostra.PREENCHIDO) {
-    return "Aguardando responsável";
+    return "Concluído";
   }
 
   return "Pendente";
@@ -1347,7 +1347,7 @@ async function buildBuffetStats(
           href
         };
 
-        if (record.status === StatusItemBuffetAmostra.ASSINADO) {
+        if (record.status !== StatusItemBuffetAmostra.PENDENTE) {
           addCompleted(stats, detail);
         } else {
           addPending(stats, detail, status);
@@ -1388,7 +1388,7 @@ async function buildBuffetStats(
       href: `${moduleInfo.href}/servico/${record.servicoId}?data=${formatDateInput(record.data)}`
     };
 
-    if (record.status === StatusItemBuffetAmostra.ASSINADO) {
+    if (record.status !== StatusItemBuffetAmostra.PENDENTE) {
       addCompleted(stats, detail);
     } else {
       addPending(stats, detail, status);

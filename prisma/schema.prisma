@@ -457,23 +457,28 @@ model ControleTemperaturaCategoriaRegra {
 }
 
 model ControleQualidadeOleoRegistro {
-  id                 Int                 @id @default(autoincrement())
-  data               DateTime            @db.Date
-  fitaOleo           String?
-  temperatura        Float?
-  status             StatusQualidadeOleo
-  orientacao         String
-  responsavel        String
-  observacao         String?
-  temperaturaCritica Boolean             @default(false)
-  semUtilizacao      Boolean             @default(false)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                            Int                 @id @default(autoincrement())
+  data                          DateTime            @db.Date
+  fitaOleo                      String?
+  temperatura                   Float?
+  status                        StatusQualidadeOleo
+  orientacao                    String
+  responsavel                   String
+  observacao                    String?
+  temperaturaCritica            Boolean             @default(false)
+  semUtilizacao                 Boolean             @default(false)
+  assinaturaSupervisorUsuarioId Int?
+  assinaturaSupervisorNome      String?
+  assinaturaSupervisorPerfil    PerfilUsuario?
+  assinaturaSupervisorEm        DateTime?
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
 
   @@index([data])
   @@index([fitaOleo])
   @@index([status])
   @@index([responsavel])
+  @@index([assinaturaSupervisorEm])
   @@map("controle_qualidade_oleo_registro")
 }
 

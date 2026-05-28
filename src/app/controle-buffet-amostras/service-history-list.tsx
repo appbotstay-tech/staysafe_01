@@ -36,6 +36,23 @@ function OperationalStatusPill({
   );
 }
 
+function canSignSupervisorReview(group: BuffetServiceHistoryGroup, canSign: boolean): boolean {
+  return canSign && group.status === "CONCLUIDO" && !group.assinadoNutricionista;
+}
+
+function shouldShowSupervisorReview(
+  group: BuffetServiceHistoryGroup,
+  canSign: boolean
+): boolean {
+  return canSign || group.assinadoNutricionista;
+}
+
+function getSupervisorReviewSummary(group: BuffetServiceHistoryGroup): string {
+  return group.assinadoNutricionista
+    ? `Assinado pelo Supervisor - ${group.assinaturaNutricionistaResumo}`
+    : "Pendente de assinatura do supervisor";
+}
+
 export function BuffetServiceHistoryList({
   groups,
   totals,
@@ -131,11 +148,23 @@ export function BuffetServiceHistoryList({
         </p>
       ) : (
         <div className="grid gap-3">
-          {groups.map((group) => (
-            <article
-              key={group.key}
-              className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
-            >
+          {groups.map((group) => {
+            const supervisorReviewVisible = shouldShowSupervisorReview(
+              group,
+              canSignNutritionReview
+            );
+            const supervisorReviewPending = canSignSupervisorReview(
+              group,
+              canSignNutritionReview
+            );
+            const hasOperationalPending =
+              canSignNutritionReview && group.status !== "CONCLUIDO";
+
+            return (
+              <article
+                key={group.key}
+                className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+              >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -162,19 +191,21 @@ export function BuffetServiceHistoryList({
                     {group.itensPreenchidos} preenchidos | {group.itensNaoServidos} não
                     servidos | {group.itensComAcaoCorretiva} ação corretiva
                   </p>
-                  {canSignNutritionReview || group.assinadoNutricionista ? (
+                  {hasOperationalPending ? (
+                    <p className="mt-2 text-sm text-amber-700 dark:text-amber-200">
+                      Pendência de preenchimento: finalize os itens pendentes antes da
+                      assinatura do supervisor.
+                    </p>
+                  ) : null}
+                  {supervisorReviewVisible ? (
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                       Assinatura do Supervisor:{" "}
-                      <strong>
-                        {group.assinadoNutricionista
-                          ? `Assinado pelo Supervisor - ${group.assinaturaNutricionistaResumo}`
-                          : "Pendente de assinatura do supervisor"}
-                      </strong>
+                      <strong>{getSupervisorReviewSummary(group)}</strong>
                     </p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-                  {canSignNutritionReview && !group.assinadoNutricionista ? (
+                  {supervisorReviewPending ? (
                     <button
                       type="button"
                       className="btn-primary"
@@ -192,8 +223,9 @@ export function BuffetServiceHistoryList({
                   </button>
                 </div>
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
 
@@ -223,14 +255,18 @@ export function BuffetServiceHistoryList({
                   <p>
                     Assinatura: <strong>{selectedGroup.assinaturaResumo}</strong>
                   </p>
-                  {canSignNutritionReview || selectedGroup.assinadoNutricionista ? (
+                  {canSignNutritionReview && selectedGroup.status !== "CONCLUIDO" ? (
+                    <p className="sm:col-span-2">
+                      Pendência de preenchimento:{" "}
+                      <strong>
+                        finalize os itens pendentes antes da assinatura do supervisor.
+                      </strong>
+                    </p>
+                  ) : null}
+                  {shouldShowSupervisorReview(selectedGroup, canSignNutritionReview) ? (
                     <p className="sm:col-span-2">
                       Assinatura do Supervisor:{" "}
-                      <strong>
-                        {selectedGroup.assinadoNutricionista
-                          ? `Assinado pelo Supervisor - ${selectedGroup.assinaturaNutricionistaResumo}`
-                          : "Pendente de assinatura do supervisor"}
-                      </strong>
+                      <strong>{getSupervisorReviewSummary(selectedGroup)}</strong>
                     </p>
                   ) : null}
                 </div>

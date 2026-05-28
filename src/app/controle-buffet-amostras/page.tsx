@@ -210,7 +210,13 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       { itemNome: "asc" }
     ]
   });
-  const gruposFechamento = buildBuffetServiceHistoryGroups(registrosFechamento);
+  const expectedItemCountsByServiceId = new Map(
+    servicos.map((servico) => [servico.id, servico.itens.length])
+  );
+  const gruposFechamento = buildBuffetServiceHistoryGroups(
+    registrosFechamento,
+    expectedItemCountsByServiceId
+  );
   const totalizadoresFechamento = buildBuffetServiceHistoryTotals(gruposFechamento);
 
   const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;

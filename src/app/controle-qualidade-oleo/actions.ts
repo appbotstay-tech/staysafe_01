@@ -15,6 +15,7 @@ import {
   ensureCanDeleteOperationalRecords,
   ensureCanManageOptions,
   ensureCanReopenMonth,
+  ensureCanSignNutritionReview,
   validateSignaturePassword
 } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -96,6 +97,7 @@ function redirectWithFeedback(
     url.searchParams.delete("editId");
     url.searchParams.delete("editOptionId");
     url.searchParams.delete("deleteId");
+    url.searchParams.delete("signSupervisorId");
   } else if (formState) {
     for (const key of REGISTRO_FORM_PARAM_KEYS) {
       url.searchParams.set(key, formState[key]);
@@ -302,6 +304,68 @@ export async function deleteRegistroAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível processar a operação.")
+    );
+  }
+}
+
+export async function signRegistroSupervisorAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanSignNutritionReview(actor.perfil);
+
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+
+    if (!id) {
+      throw new Error("Registro inválido para assinatura do supervisor.");
+    }
+
+    const registro = await prisma.controleQualidadeOleoRegistro.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        assinaturaSupervisorEm: true
+      }
+    });
+
+    if (!registro) {
+      throw new Error("Registro não encontrado.");
+    }
+
+    if (registro.assinaturaSupervisorEm) {
+      throw new Error("Este registro já foi assinado pelo supervisor.");
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    const now = getCurrentSystemDateTime();
+    await prisma.controleQualidadeOleoRegistro.update({
+      where: { id },
+      data: {
+        assinaturaSupervisorUsuarioId: actor.id,
+        assinaturaSupervisorNome: actor.nomeCompleto,
+        assinaturaSupervisorPerfil: actor.perfil,
+        assinaturaSupervisorEm: now
+      }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "SUPERVISOR",
+      modulo: "controle-qualidade-oleo/registro",
+      referenciaId: String(id)
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Registro assinado pelo supervisor com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível assinar o registro como revisado pelo supervisor.")
     );
   }
 }
