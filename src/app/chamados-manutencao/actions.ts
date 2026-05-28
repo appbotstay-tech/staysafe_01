@@ -113,7 +113,7 @@ export async function createChamadoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanOpenMaintenance(actor.perfil);
+    ensureCanOpenMaintenance(actor);
 
     const descricao = getInputValue(formData, "observacao");
     const tituloInput = getInputValue(formData, "titulo");
@@ -194,7 +194,7 @@ export async function updateChamadoStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanUpdateMaintenance(actor.perfil);
+    ensureCanUpdateMaintenance(actor);
 
     const chamadoId = parsePositiveInt(getInputValue(formData, "chamadoId"));
     if (!chamadoId) {

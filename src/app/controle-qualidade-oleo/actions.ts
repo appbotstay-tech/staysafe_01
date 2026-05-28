@@ -11,13 +11,10 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
-  ensureCanCloseMonth,
-  ensureCanDeleteOperationalRecords,
-  ensureCanManageOptions,
-  ensureCanReopenMonth,
-  ensureCanSignNutritionReview,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
+import { canEditRecordDate } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -194,6 +191,11 @@ export async function createRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "modulo.oleo.criar_registro",
+      "Seu perfil não pode criar registros de óleo."
+    );
 
     const data = getTodaySystemDate();
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
@@ -248,6 +250,9 @@ export async function updateRegistroAction(formData: FormData) {
     if (await isMonthSigned(existingPeriod.mes, existingPeriod.ano)) {
       throw new Error("O mês deste registro já foi fechado e não pode ser editado.");
     }
+    if (!canEditRecordDate(actor, "modulo.oleo", existing.data, getTodaySystemDate())) {
+      throw new Error("Seu perfil não pode editar este registro de óleo.");
+    }
 
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
 
@@ -274,7 +279,7 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanDeleteOperationalRecords(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.excluir_registro", "Seu perfil não pode excluir registros de óleo.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -313,7 +318,7 @@ export async function signRegistroSupervisorAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignNutritionReview(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.assinar_historico", "Você não tem permissão para assinar o histórico de óleo.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
@@ -375,7 +380,7 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.fechar_mes", "Seu perfil não pode assinar fechamento mensal de óleo.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -449,7 +454,7 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.reabrir_mes", "Seu perfil não pode reabrir períodos de óleo.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -494,7 +499,7 @@ export async function createFitaOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de óleo.");
 
     const rotulo = sanitizeLabel(getInputValue(formData, "rotulo"));
     const descricao = sanitizeDescription(getInputValue(formData, "descricao"));
@@ -536,7 +541,7 @@ export async function updateFitaOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de óleo.");
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {
@@ -600,7 +605,7 @@ export async function toggleFitaOptionStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.oleo.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de óleo.");
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {

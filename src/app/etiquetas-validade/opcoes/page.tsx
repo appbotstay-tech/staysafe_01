@@ -131,7 +131,7 @@ function GroupFields({
 
 export default async function EtiquetasValidadeOpcoesPage({ searchParams }: PageProps) {
   const user = await requireAuthenticatedUser();
-  if (!canAccessValidityLabels(user.perfil)) {
+  if (!canAccessValidityLabels(user)) {
     redirect("/acesso-negado");
   }
 

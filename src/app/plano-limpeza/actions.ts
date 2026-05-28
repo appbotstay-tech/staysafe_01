@@ -18,7 +18,7 @@ import {
   ensureCanManageOptions,
   ensureCanReopenMonth,
   ensureCanSignResponsible,
-  ensureCanSignSupervisor,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -306,7 +306,7 @@ export async function updateDailyRecordAction(formData: FormData) {
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
 
     if (etapaPermitida === "responsavel") {
-      ensureCanSignResponsible(actor.perfil);
+      ensureCanSignResponsible(actor);
       const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaDiarioRegistro.update({
@@ -329,7 +329,11 @@ export async function updateDailyRecordAction(formData: FormData) {
         observacao: observacaoAssinatura || null
       });
     } else {
-      ensureCanSignSupervisor(actor.perfil);
+      ensurePermission(
+        actor,
+        "modulo.limpeza_diaria.assinar_historico",
+        "Seu perfil não pode assinar a supervisão do plano diário."
+      );
       if (!existing.assinaturaResponsavel) {
         throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
       }
@@ -372,7 +376,7 @@ export async function signDailyAreaPendingItemsAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignResponsible(actor.perfil);
+    ensureCanSignResponsible(actor);
 
     const dataRaw = getInputValue(formData, "data");
     const areaNome = getInputValue(formData, "area");
@@ -516,7 +520,7 @@ export async function createDailyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const nome = getInputValue(formData, "nome");
     const detalhamentoLimpeza = getInputValue(formData, "detalhamentoLimpeza");
@@ -549,7 +553,7 @@ export async function updateDailyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
     if (!areaId) {
@@ -603,7 +607,7 @@ export async function toggleDailyAreaConfigStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
     if (!areaId) {
@@ -717,7 +721,7 @@ export async function deleteDailyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
     if (!areaId) {
@@ -833,7 +837,7 @@ export async function createDailyItemConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
     const descricao = getInputValue(formData, "descricao");
@@ -884,7 +888,7 @@ export async function updateDailyItemConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
     const areaId = parsePositiveInt(getInputValue(formData, "areaId"));
@@ -957,7 +961,7 @@ export async function toggleDailyItemConfigStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
     const ativo = getInputValue(formData, "ativo") === "true";
@@ -995,7 +999,7 @@ export async function deleteDailyItemConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "dailyItemId"));
     if (!itemId) {
@@ -1058,7 +1062,11 @@ export async function bulkSignDailyByDateAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignSupervisor(actor.perfil);
+    ensurePermission(
+      actor,
+      "modulo.limpeza_diaria.assinar_todos",
+      "Seu perfil não pode usar Assinar Todos no plano diário."
+    );
 
     const dataRaw = getInputValue(formData, "data");
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
@@ -1225,7 +1233,7 @@ export async function updateWeeklyRecordAction(formData: FormData) {
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
 
     if (etapaPermitida === "responsavel") {
-      ensureCanSignResponsible(actor.perfil);
+      ensureCanSignResponsible(actor);
       const signedAt = getCurrentSystemDateTime();
 
       await prisma.planoLimpezaSemanalExecucao.update({
@@ -1249,7 +1257,11 @@ export async function updateWeeklyRecordAction(formData: FormData) {
         observacao: observacaoAssinatura || null
       });
     } else {
-      ensureCanSignSupervisor(actor.perfil);
+      ensurePermission(
+        actor,
+        "modulo.limpeza_semanal.assinar_historico",
+        "Seu perfil não pode assinar a supervisão do plano semanal."
+      );
       if (!existing.assinaturaResponsavel.trim()) {
         throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
       }
@@ -1394,7 +1406,7 @@ export async function createWeeklyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const nome = getInputValue(formData, "nome");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
@@ -1436,7 +1448,7 @@ export async function updateWeeklyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "weeklyAreaId"));
     if (!areaId) {
@@ -1513,7 +1525,7 @@ export async function toggleWeeklyAreaConfigStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "weeklyAreaId"));
     if (!areaId) {
@@ -1552,7 +1564,7 @@ export async function deleteWeeklyAreaConfigAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const areaId = parsePositiveInt(getInputValue(formData, "weeklyAreaId"));
     if (!areaId) {
@@ -1634,7 +1646,7 @@ export async function createWeeklyConfigItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const area = await ensureWeeklyAreaName(getInputValue(formData, "area"));
     const oQueLimpar = getInputValue(formData, "oQueLimpar");
@@ -1682,7 +1694,7 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1743,7 +1755,7 @@ export async function toggleWeeklyConfigItemStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1782,7 +1794,7 @@ export async function deleteWeeklyConfigItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1845,7 +1857,7 @@ export async function moveWeeklyConfigItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1922,7 +1934,7 @@ async function closeMonthByType(params: {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensureCanCloseMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(params.formData, "mes"));
     const ano = parsePositiveInt(getInputValue(params.formData, "ano"));
@@ -1991,7 +2003,7 @@ async function reopenMonthByType(params: {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensureCanReopenMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(params.formData, "mes"));
     const ano = parsePositiveInt(getInputValue(params.formData, "ano"));

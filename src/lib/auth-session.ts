@@ -4,6 +4,7 @@ import { StatusUsuario, type PerfilUsuario } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { getDefaultPermissionCodes } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import type { UserRole } from "@/lib/rbac";
 
@@ -15,6 +16,10 @@ export type AuthenticatedUser = {
   nomeCompleto: string;
   nomeUsuario: string;
   perfil: UserRole;
+  perfilAcessoId: number | null;
+  perfilCodigo: string | null;
+  perfilNome: string | null;
+  permissoes: string[];
   status: StatusUsuario;
   obrigarTrocaSenha: boolean;
 };
@@ -91,6 +96,25 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
           nomeCompleto: true,
           nomeUsuario: true,
           perfil: true,
+          perfilAcessoId: true,
+          perfilAcesso: {
+            select: {
+              id: true,
+              nome: true,
+              codigo: true,
+              ativo: true,
+              permissoes: {
+                where: { permitido: true },
+                select: {
+                  permissao: {
+                    select: {
+                      codigo: true
+                    }
+                  }
+                }
+              }
+            }
+          },
           status: true,
           obrigarTrocaSenha: true
         }
@@ -116,11 +140,24 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     return null;
   }
 
+  const legacyRole = profileToUserRole(session.usuario.perfil);
+  const perfilAcesso = session.usuario.perfilAcesso;
+  const hasLinkedProfile = Boolean(perfilAcesso);
+  const permissoes = hasLinkedProfile
+    ? perfilAcesso!.ativo
+      ? perfilAcesso!.permissoes.map((perfilPermissao) => perfilPermissao.permissao.codigo)
+      : []
+    : getDefaultPermissionCodes(legacyRole);
+
   return {
     id: session.usuario.id,
     nomeCompleto: session.usuario.nomeCompleto,
     nomeUsuario: session.usuario.nomeUsuario,
-    perfil: profileToUserRole(session.usuario.perfil),
+    perfil: legacyRole,
+    perfilAcessoId: hasLinkedProfile ? perfilAcesso!.id : null,
+    perfilCodigo: hasLinkedProfile ? perfilAcesso!.codigo : null,
+    perfilNome: hasLinkedProfile ? perfilAcesso!.nome : null,
+    permissoes,
     status: session.usuario.status,
     obrigarTrocaSenha: session.usuario.obrigarTrocaSenha
   };

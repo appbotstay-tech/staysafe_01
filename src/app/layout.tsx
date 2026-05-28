@@ -4,8 +4,9 @@ import { logoutAction } from "@/app/auth-actions";
 import { Sidebar } from "@/components/layout/sidebar";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
-import { getModulesForRole } from "@/lib/modules";
-import { canManageUsers, canViewResetRequests, getRoleLabel } from "@/lib/rbac";
+import { getModulesForUser } from "@/lib/modules";
+import { hasPermission } from "@/lib/permissions";
+import { getRoleLabel } from "@/lib/rbac";
 
 import "./globals.css";
 
@@ -35,7 +36,7 @@ const themeInitScript = `
 export default async function RootLayout({ children }: RootLayoutProps) {
   const user = await getCurrentUser();
 
-  const modules = user ? getModulesForRole(user.perfil) : [];
+  const modules = user ? getModulesForUser(user) : [];
 
   return (
     <html lang="pt-BR" suppressHydrationWarning>
@@ -52,9 +53,9 @@ export default async function RootLayout({ children }: RootLayoutProps) {
             <Sidebar
               modules={modules}
               userName={user.nomeCompleto}
-              userRoleLabel={getRoleLabel(user.perfil)}
-              canManageUsers={canManageUsers(user.perfil)}
-              canViewResetRequests={canViewResetRequests(user.perfil)}
+              userRoleLabel={user.perfilNome ?? getRoleLabel(user.perfil)}
+              canManageUsers={hasPermission(user, "usuarios.acessar")}
+              canViewResetRequests={hasPermission(user, "usuarios.redefinir_senha")}
               onLogout={logoutAction}
             />
             <main className="flex-1 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-8">

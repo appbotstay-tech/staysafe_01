@@ -233,6 +233,8 @@ model Usuario {
   nomeUsuario                    String                        @unique
   senhaHash                      String
   perfil                         PerfilUsuario
+  perfilAcessoId                 Int?
+  perfilAcesso                   PerfilAcesso?                 @relation(fields: [perfilAcessoId], references: [id], onDelete: SetNull)
   isDevDefinitivo                Boolean                       @default(false)
   status                         StatusUsuario                 @default(ATIVO)
   dataAdmissao                   DateTime?                     @db.Date
@@ -252,8 +254,77 @@ model Usuario {
   etiquetasValidadeGeradas       EtiquetaValidadeGerada[]      @relation("EtiquetaValidadeResponsavel")
   etiquetasValidadeEmissoes      EtiquetaValidadeEmissao[]     @relation("EtiquetaValidadeEmissaoResponsavel")
 
+  @@index([perfilAcessoId])
   @@index([perfil, status, isDevDefinitivo])
   @@map("usuario")
+}
+
+model PerfilAcesso {
+  id             Int                         @id @default(autoincrement())
+  nome           String
+  codigo         String                      @unique
+  descricao      String?
+  ativo          Boolean                     @default(true)
+  sistemaPadrao  Boolean                     @default(false)
+  perfilLegado   PerfilUsuario?              @unique
+  criadoEm       DateTime                    @default(now())
+  atualizadoEm   DateTime                    @updatedAt
+  usuarios       Usuario[]
+  permissoes     PerfilPermissao[]
+  auditorias     PerfilPermissaoAuditoria[]
+
+  @@index([ativo, codigo])
+  @@map("perfil_acesso")
+}
+
+model Permissao {
+  id           Int               @id @default(autoincrement())
+  codigo       String            @unique
+  nome         String
+  descricao   String?
+  grupo        String
+  modulo       String?
+  acao         String
+  sensivel     Boolean           @default(false)
+  criadoEm     DateTime          @default(now())
+  atualizadoEm DateTime          @updatedAt
+  perfis       PerfilPermissao[]
+
+  @@index([grupo, modulo, acao])
+  @@index([sensivel])
+  @@map("permissao")
+}
+
+model PerfilPermissao {
+  id           Int          @id @default(autoincrement())
+  perfilId     Int
+  perfil       PerfilAcesso @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  permissaoId  Int
+  permissao    Permissao    @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+  permitido    Boolean      @default(true)
+  criadoEm     DateTime     @default(now())
+  atualizadoEm DateTime     @updatedAt
+
+  @@unique([perfilId, permissaoId])
+  @@index([permissaoId, permitido])
+  @@map("perfil_permissao")
+}
+
+model PerfilPermissaoAuditoria {
+  id                Int          @id @default(autoincrement())
+  perfilId          Int
+  perfil            PerfilAcesso @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  perfilCodigo      String
+  alteradoPorId     Int?
+  alteradoPorNome   String?
+  permissoesAntes   Json
+  permissoesDepois  Json
+  resumo            String?
+  criadoEm          DateTime     @default(now())
+
+  @@index([perfilId, criadoEm])
+  @@index([alteradoPorId, criadoEm])
+  @@map("perfil_permissao_auditoria")
 }
 
 model UsuarioSessao {

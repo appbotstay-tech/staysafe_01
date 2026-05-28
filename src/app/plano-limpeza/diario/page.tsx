@@ -10,6 +10,7 @@ import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   canCloseMonth,
@@ -93,10 +94,10 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
-  const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
-  const podeReabrir = authUser ? canReopenMonth(authUser.perfil) : false;
+  const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeFechar = authUser ? canCloseMonth(authUser) : false;
+  const podeReabrir = authUser ? canReopenMonth(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -424,6 +425,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
     openedSummaryPeriod !== null &&
     fechadosSet.has(periodKey(openedSummaryPeriod.mes, openedSummaryPeriod.ano));
   const podeAssinarTodos =
+    Boolean(authUser && hasPermission(authUser, "modulo.limpeza_diaria.assinar_todos")) &&
     openedSummary !== null &&
     openedSummary.totalItems > 0 &&
     openedSummary.signedItems < openedSummary.totalItems &&

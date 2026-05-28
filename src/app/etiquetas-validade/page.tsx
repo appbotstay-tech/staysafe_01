@@ -41,7 +41,7 @@ function parsePositiveInt(value: string): number | null {
 
 export default async function EtiquetasValidadePage({ searchParams }: PageProps) {
   const user = await requireAuthenticatedUser();
-  if (!canAccessValidityLabels(user.perfil)) {
+  if (!canAccessValidityLabels(user)) {
     redirect("/acesso-negado");
   }
 

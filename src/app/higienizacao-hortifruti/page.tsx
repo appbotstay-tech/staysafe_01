@@ -83,9 +83,9 @@ export default async function HigienizacaoHortifrutiPage({
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
-  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
+  const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

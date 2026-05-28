@@ -16,13 +16,9 @@ import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getImageDataUrl } from "@/lib/image-upload";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import {
-  canDeleteOperationalRecords,
-  canManageModuleOptions,
-  canViewManagementSections,
-  getRoleLabel
-} from "@/lib/rbac";
+import { getRoleLabel } from "@/lib/rbac";
 
 import {
   closeMonthAction,
@@ -260,9 +256,15 @@ export default async function ControleTemperaturaEquipamentosPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
-  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser.perfil) : false;
+  const podeGerenciarOpcoes = authUser
+    ? hasPermission(authUser, "modulo.temperatura.gerenciar_cadastros")
+    : false;
+  const podeVerGestao = authUser
+    ? hasPermission(authUser, "modulo.temperatura.acessar_historico") || podeGerenciarOpcoes
+    : false;
+  const podeExcluirRegistros = authUser
+    ? hasPermission(authUser, "modulo.temperatura.excluir_registro")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

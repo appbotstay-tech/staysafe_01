@@ -99,8 +99,8 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
+  const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const now = getAppNow();
 

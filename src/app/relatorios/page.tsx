@@ -1,4 +1,4 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import { ModuloDocumento } from "@prisma/client";
 import Link from "next/link";
@@ -138,7 +138,7 @@ function ReportResult({ report }: { report: GeneratedReport }) {
 
 export default async function RelatoriosPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
-  if (!user || !canAccessReports(user.perfil)) {
+  if (!user || !canAccessReports(user)) {
     redirect("/acesso-negado");
   }
 
@@ -148,7 +148,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const selectedModule = getReportModule(moduleParam);
   const selectedReport = getReportDefinition(selectedModule.id, reportParam);
   const generated = firstParam(params.generated) === "1";
-  const podeGerenciarOpcoes = canManageModuleOptions(user.perfil);
+  const podeGerenciarOpcoes = canManageModuleOptions(user);
   const initialFilters = buildInitialFilters(params);
   const [report, configuracaoCabecalho] = await Promise.all([
     generated

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
@@ -43,6 +44,9 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
+  const canBulkSign = authUser
+    ? hasPermission(authUser, "modulo.limpeza_diaria.assinar_todos")
+    : false;
   const now = getCurrentSystemDateTime();
 
   const { data } = await params;
@@ -201,6 +205,10 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
         {periodClosed ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
             Este dia pertence a um mês fechado e não pode ser regularizado.
+          </p>
+        ) : !canBulkSign ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Seu perfil não possui permissão para assinar registros retroativos em lote.
           </p>
         ) : !possuiPendencias ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">

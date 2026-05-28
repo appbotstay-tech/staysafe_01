@@ -13,13 +13,10 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
-  ensureCanCloseMonth,
-  ensureCanManageOptions,
-  ensureCanSignNutritionReview,
-  ensureCanReopenMonth,
-  ensureCanSignSupervisor,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
+import { canEditRecordDate } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -471,6 +468,9 @@ export async function saveRegistroItemAction(formData: FormData) {
     }
 
     await ensurePeriodIsOpen(data);
+    if (!canEditRecordDate(actor, "modulo.amostras", data, getTodaySystemDate())) {
+      throw new Error("Seu perfil não pode editar registros de amostras nesta data.");
+    }
 
     const [servico, item, vinculacao] = await Promise.all([
       prisma.controleBuffetAmostraServico.findUnique({ where: { id: servicoId } }),
@@ -572,6 +572,9 @@ export async function saveServicoItemsStateAction(
     }
 
     await ensurePeriodIsOpen(data);
+    if (!canEditRecordDate(actor, "modulo.amostras", data, getTodaySystemDate())) {
+      throw new Error("Seu perfil não pode editar registros de amostras nesta data.");
+    }
 
     const [servico, registros] = await Promise.all([
       prisma.controleBuffetAmostraServico.findUnique({
@@ -838,6 +841,9 @@ export async function createExtraItemStateAction(
     }
 
     await ensurePeriodIsOpen(data);
+    if (!canEditRecordDate(actor, "modulo.amostras", data, getTodaySystemDate())) {
+      throw new Error("Seu perfil não pode editar registros de amostras nesta data.");
+    }
 
     const servico = await prisma.controleBuffetAmostraServico.findUnique({
       where: { id: servicoId }
@@ -896,7 +902,7 @@ export async function signRegistroItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignSupervisor(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.assinar_servico", "Você não tem permissão para assinar este serviço.");
 
     const registroId = parsePositiveInt(getInputValue(formData, "registroId"));
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
@@ -965,7 +971,7 @@ export async function signServicoItensAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignSupervisor(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.assinar_servico", "Você não tem permissão para assinar este serviço.");
 
     const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
     const dataInput = getInputValue(formData, "data");
@@ -1091,7 +1097,7 @@ export async function signServicoNutricionistaAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignNutritionReview(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.assinar_historico", "Você não tem permissão para assinar o histórico de amostras.");
 
     const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
     const dataInput = getInputValue(formData, "data");
@@ -1175,7 +1181,7 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.fechar_mes", "Seu perfil não pode assinar fechamento mensal de amostras.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -1264,7 +1270,7 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.reabrir_mes", "Seu perfil não pode reabrir períodos de amostras.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -1309,7 +1315,7 @@ export async function createServicoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
@@ -1349,7 +1355,7 @@ export async function updateServicoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
     if (!servicoId) {
@@ -1403,7 +1409,7 @@ export async function toggleServicoStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const servicoId = parsePositiveInt(getInputValue(formData, "servicoId"));
     const ativo = getInputValue(formData, "ativo") === "true";
@@ -1445,7 +1451,7 @@ export async function createItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const classificacao = parseItemClassification(getInputValue(formData, "classificacao"));
@@ -1509,7 +1515,7 @@ export async function updateItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1591,7 +1597,7 @@ export async function toggleItemStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     const ativo = getInputValue(formData, "ativo") === "true";
@@ -1633,7 +1639,7 @@ export async function createAcaoCorretivaAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
@@ -1671,7 +1677,7 @@ export async function updateAcaoCorretivaAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const acaoId = parsePositiveInt(getInputValue(formData, "acaoId"));
     if (!acaoId) {
@@ -1732,7 +1738,7 @@ export async function toggleAcaoCorretivaStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.amostras.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de amostras.");
 
     const acaoId = parsePositiveInt(getInputValue(formData, "acaoId"));
     const ativo = getInputValue(formData, "ativo") === "true";

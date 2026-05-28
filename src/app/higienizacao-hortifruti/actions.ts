@@ -228,7 +228,7 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanDeleteOperationalRecords(actor.perfil);
+    ensureCanDeleteOperationalRecords(actor);
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -269,7 +269,7 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensureCanCloseMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -346,7 +346,7 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensureCanReopenMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -391,7 +391,7 @@ export async function createCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const tipo = parseOptionType(getInputValue(formData, "tipo"));
     const nome = sanitizeCatalogName(getInputValue(formData, "nome"));
@@ -430,7 +430,7 @@ export async function deleteCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {

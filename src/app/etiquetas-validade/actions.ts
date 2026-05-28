@@ -126,7 +126,7 @@ function redirectWithFeedback(
 
 async function ensureDevAction() {
   const actor = await getCurrentUserForAction();
-  ensureCanAccessValidityLabels(actor.perfil);
+  ensureCanAccessValidityLabels(actor);
   return actor;
 }
 

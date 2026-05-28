@@ -133,11 +133,11 @@ function LaudoBadge({ dataValidade }: { dataValidade: Date | null }) {
 
 export default async function DocumentosTecnicosPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
-  if (!user || !canAccessTechnicalDocuments(user.perfil)) {
+  if (!user || !canAccessTechnicalDocuments(user)) {
     redirect("/acesso-negado");
   }
 
-  const canManage = canManageTechnicalDocuments(user.perfil);
+  const canManage = canManageTechnicalDocuments(user);
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";

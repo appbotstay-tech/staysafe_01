@@ -55,7 +55,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
   }
 
-  const canManage = canManageTechnicalDocuments(user.perfil);
+  const canManage = canManageTechnicalDocuments(user);
   if (
     !canAccessDocumentoTecnico({
       role: user.perfil,

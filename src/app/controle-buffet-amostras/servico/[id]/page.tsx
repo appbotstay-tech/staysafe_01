@@ -8,8 +8,9 @@ import { notFound } from "next/navigation";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { canSignAsSupervisor, canViewManagementSections, getRoleLabel } from "@/lib/rbac";
+import { canViewManagementSections, getRoleLabel } from "@/lib/rbac";
 
 import { signServicoItensAction } from "../../actions";
 import {
@@ -79,8 +80,10 @@ export default async function ExecucaoServicoBuffetPage({
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
-  const podeAssinarSupervisor = authUser ? canSignAsSupervisor(authUser.perfil) : false;
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeAssinarSupervisor = authUser
+    ? hasPermission(authUser, "modulo.amostras.assinar_servico")
+    : false;
+  const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const now = getCurrentSystemDateTime();
 
   const routeParams = await params;

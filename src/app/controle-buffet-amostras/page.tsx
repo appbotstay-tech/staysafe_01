@@ -8,14 +8,9 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import {
-  canCloseMonth,
-  canManageModuleOptions,
-  canReopenMonth,
-  canViewManagementSections,
-  getRoleLabel
-} from "@/lib/rbac";
+import { getRoleLabel } from "@/lib/rbac";
 
 import { closeMonthAction, reopenMonthAction } from "./actions";
 import { ReopenMonthModal } from "./reopen-month-modal";
@@ -80,10 +75,14 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
-  const podeReabrir = authUser ? canReopenMonth(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
+  const podeFechar = authUser ? hasPermission(authUser, "modulo.amostras.fechar_mes") : false;
+  const podeReabrir = authUser ? hasPermission(authUser, "modulo.amostras.reabrir_mes") : false;
+  const podeGerenciarOpcoes = authUser
+    ? hasPermission(authUser, "modulo.amostras.gerenciar_cadastros")
+    : false;
+  const podeVerGestao = authUser
+    ? hasPermission(authUser, "modulo.amostras.acessar_historico") || podeGerenciarOpcoes
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

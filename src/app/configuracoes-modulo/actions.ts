@@ -68,7 +68,7 @@ export async function updateModuloCabecalhoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const modulo = parseModuloDocumento(getInputValue(formData, "modulo"));
     const limparTexto = getInputValue(formData, "limparTextoCabecalho") === "true";

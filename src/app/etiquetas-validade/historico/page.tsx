@@ -67,7 +67,7 @@ export default async function EtiquetasValidadeHistoricoPage({
   searchParams
 }: PageProps) {
   const user = await requireAuthenticatedUser();
-  if (!canAccessValidityLabels(user.perfil)) {
+  if (!canAccessValidityLabels(user)) {
     redirect("/acesso-negado");
   }
 

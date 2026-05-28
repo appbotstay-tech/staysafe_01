@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDateTime } from "@/lib/date-time";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { canViewResetRequests, getRoleLabel, type UserRole } from "@/lib/rbac";
+import { getRoleLabel, type UserRole } from "@/lib/rbac";
 
 import { handleResetRequestAction } from "../actions";
 
@@ -33,7 +34,7 @@ export default async function SolicitacoesRedefinicaoPage({
   searchParams
 }: SolicitacoesPageProps) {
   const authUser = await getCurrentUser();
-  if (!authUser || !canViewResetRequests(authUser.perfil)) {
+  if (!authUser || !hasPermission(authUser, "usuarios.redefinir_senha")) {
     redirect("/acesso-negado");
   }
 

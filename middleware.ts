@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { canAccessPath, type UserRole } from "@/lib/rbac";
+import { canAccessPathWithPermissions } from "@/lib/permissions";
+import type { UserRole } from "@/lib/rbac";
 
 const SESSION_COOKIE_NAME = "bpma_session";
 
@@ -36,6 +37,8 @@ type SessionPayload =
       authenticated: true;
       user: {
         perfil: UserRole;
+        perfilAcessoId?: number | null;
+        permissoes?: string[] | null;
         obrigarTrocaSenha: boolean;
       };
     }
@@ -122,7 +125,7 @@ async function handleMiddleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (!canAccessPath(session.user.perfil, pathname)) {
+  if (!canAccessPathWithPermissions(session.user, pathname)) {
     if (pathname !== "/acesso-negado") {
       return NextResponse.redirect(new URL("/acesso-negado", request.url));
     }

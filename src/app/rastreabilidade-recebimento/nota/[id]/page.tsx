@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth-session";
+import { canEditRecordDate, hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -13,6 +14,7 @@ import { DeleteNoteModal } from "../../delete-note-modal";
 import {
   formatDateDisplay,
   formatDateInput,
+  getTodaySystemDate,
   getMonthYear,
   parsePositiveInt
 } from "../../utils";
@@ -66,10 +68,6 @@ function getNotaStatusClass(status: StatusNotaRecebimento): string {
 }
 
 function canEditImportedXmlFields(role: string | undefined): boolean {
-  return role === "DEV" || role === "GERENTE";
-}
-
-function canDeleteRecebimentoNote(role: string | undefined): boolean {
   return role === "DEV" || role === "GERENTE";
 }
 
@@ -129,15 +127,20 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   });
   const monthSigned = fechamento?.status === "ASSINADO";
   const noteFinalizada = note.statusNota === StatusNotaRecebimento.FINALIZADA;
-  const readOnlyMode = monthSigned || noteFinalizada;
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
+  const canEditNote = authUser
+    ? canEditRecordDate(authUser, "modulo.rastreabilidade", note.data, getTodaySystemDate())
+    : false;
+  const readOnlyMode = monthSigned || noteFinalizada || !canEditNote;
   const xmlProductLocked = note.origemXml && !canEditImportedXmlFields(authUser?.perfil);
   const canDeleteNote =
-    canDeleteRecebimentoNote(authUser?.perfil) &&
+    Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
     !monthSigned &&
     note.statusNota !== StatusNotaRecebimento.FINALIZADA;
-  const canDeleteItems = canDeleteRecebimentoNote(authUser?.perfil) && !readOnlyMode;
+  const canDeleteItems =
+    Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
+    !readOnlyMode;
   const returnTo = `/rastreabilidade-recebimento/nota/${note.id}`;
 
   const query = await searchParams;

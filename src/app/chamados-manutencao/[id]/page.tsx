@@ -83,7 +83,7 @@ export default async function ChamadoManutencaoDetalhePage({
   searchParams
 }: PageProps) {
   const authUser = await getCurrentUser();
-  const canUpdate = authUser ? canUpdateMaintenanceTicket(authUser.perfil) : false;
+  const canUpdate = authUser ? canUpdateMaintenanceTicket(authUser) : false;
 
   const { id } = await params;
   const chamadoId = parsePositiveInt(id);

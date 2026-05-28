@@ -14,13 +14,10 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
-  ensureCanCloseMonth,
-  ensureCanDeleteOperationalRecords,
-  ensureCanManageOptions,
-  ensureCanSignNutritionReview,
-  ensureCanReopenMonth,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
+import { canEditRecordDate } from "@/lib/permissions";
 import { parseImageUploadFromFormData } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 
@@ -343,6 +340,11 @@ export async function createRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "modulo.temperatura.criar_registro",
+      "Seu perfil não pode criar registros de temperatura."
+    );
 
     const data = getTodaySystemDate();
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
@@ -422,6 +424,9 @@ export async function updateRegistroAction(formData: FormData) {
     if (await isMonthSigned(existingPeriod.mes, existingPeriod.ano)) {
       throw new Error("O mês deste registro já foi fechado e não pode ser editado.");
     }
+    if (!canEditRecordDate(actor, "modulo.temperatura", existing.data, getTodaySystemDate())) {
+      throw new Error("Seu perfil não pode editar este registro de temperatura.");
+    }
 
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
     await ensureUniqueTemperatureMeasurement({
@@ -487,7 +492,7 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanDeleteOperationalRecords(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.excluir_registro", "Seu perfil não pode excluir registros de temperatura.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -528,7 +533,7 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.fechar_mes", "Seu perfil não pode assinar fechamento mensal de temperatura.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -605,7 +610,7 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.reabrir_mes", "Seu perfil não pode reabrir períodos de temperatura.");
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -653,7 +658,7 @@ export async function signRegistroNutricionistaAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignNutritionReview(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.assinar_historico", "Você não tem permissão para assinar o histórico de temperatura.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
@@ -717,7 +722,7 @@ export async function createCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const tipo = parseOptionType(getInputValue(formData, "tipo"));
     const nome = sanitizeCatalogName(getInputValue(formData, "nome"));
@@ -770,7 +775,7 @@ export async function updateCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {
@@ -847,7 +852,7 @@ export async function toggleCatalogOptionStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {
@@ -890,7 +895,7 @@ export async function updateCategoryParameterAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const parameterId = parsePositiveInt(getInputValue(formData, "parameterId"));
     if (!parameterId) {
@@ -987,7 +992,7 @@ export async function createCategoryRuleAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const categoriaId = parsePositiveInt(getInputValue(formData, "categoriaId"));
     if (!categoriaId) {
@@ -1057,7 +1062,7 @@ export async function updateCategoryRuleAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const regraId = parsePositiveInt(getInputValue(formData, "regraId"));
     if (!regraId) {
@@ -1131,7 +1136,7 @@ export async function toggleCategoryRuleStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const regraId = parsePositiveInt(getInputValue(formData, "regraId"));
     if (!regraId) {
@@ -1178,7 +1183,7 @@ export async function deleteCategoryRuleAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
 
     const regraId = parsePositiveInt(getInputValue(formData, "regraId"));
     if (!regraId) {

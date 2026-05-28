@@ -19,7 +19,7 @@ function firstParam(value: string | string[] | undefined): string {
 
 export default async function RelatoriosOpcoesPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
-  if (!user || !canManageModuleOptions(user.perfil)) {
+  if (!user || !canManageModuleOptions(user)) {
     redirect("/acesso-negado");
   }
 

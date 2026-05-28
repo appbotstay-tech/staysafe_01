@@ -21,7 +21,7 @@ export default async function ChamadosManutencaoOpcoesPage({
   searchParams
 }: PageProps) {
   const user = await getCurrentUser();
-  if (!user || !canManageModuleOptions(user.perfil)) {
+  if (!user || !canManageModuleOptions(user)) {
     redirect("/acesso-negado");
   }
 

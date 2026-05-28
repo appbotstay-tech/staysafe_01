@@ -147,7 +147,7 @@ export async function createDocumentoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageTechnicalDocuments(actor.perfil);
+    ensureCanManageTechnicalDocuments(actor);
 
     const payload = getDocumentoPayload(formData);
     const arquivoPdf = await parsePdfUploadFromFormData({
@@ -189,7 +189,7 @@ export async function updateDocumentoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageTechnicalDocuments(actor.perfil);
+    ensureCanManageTechnicalDocuments(actor);
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -241,7 +241,7 @@ export async function toggleDocumentoStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageTechnicalDocuments(actor.perfil);
+    ensureCanManageTechnicalDocuments(actor);
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     const ativo = getInputValue(formData, "ativo") === "true";
@@ -275,7 +275,7 @@ export async function deleteDocumentoAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageTechnicalDocuments(actor.perfil);
+    ensureCanManageTechnicalDocuments(actor);
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {

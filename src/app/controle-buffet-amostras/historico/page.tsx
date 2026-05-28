@@ -6,8 +6,9 @@ import {
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { canSignNutritionReview, getRoleLabel } from "@/lib/rbac";
+import { getRoleLabel } from "@/lib/rbac";
 
 import {
   buildBuffetServiceHistoryGroups,
@@ -94,7 +95,9 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeAssinarNutri = authUser ? canSignNutritionReview(authUser.perfil) : false;
+  const podeAssinarNutri = authUser
+    ? hasPermission(authUser, "modulo.amostras.assinar_historico")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

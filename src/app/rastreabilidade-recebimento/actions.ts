@@ -12,14 +12,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
-import { getCurrentUserForAction } from "@/lib/auth-session";
+import { getCurrentUserForAction, type AuthenticatedUser } from "@/lib/auth-session";
 import {
   createSignatureLog,
   ensureCanCloseMonth,
   ensureCanManageOptions,
   ensureCanReopenMonth,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
+import { canEditRecordDate, hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import type { UserRole } from "@/lib/rbac";
 
@@ -62,6 +64,23 @@ function canEditImportedXmlFields(role: UserRole): boolean {
 
 function canCreateManualReceiving(role: UserRole): boolean {
   return role !== "COLABORADOR";
+}
+
+function ensureCanCreateManualReceiving(actor: AuthenticatedUser) {
+  if (
+    !hasPermission(actor, "modulo.rastreabilidade.criar_registro") &&
+    !canCreateManualReceiving(actor.perfil)
+  ) {
+    throw new Error("Seu perfil não pode criar notas manuais de recebimento.");
+  }
+}
+
+function ensureCanEditReceivingDate(actor: AuthenticatedUser, recordDate: Date) {
+  if (!canEditRecordDate(actor, "modulo.rastreabilidade", recordDate, getTodaySystemDate())) {
+    throw new Error(
+      "Seu perfil não pode editar esta nota de recebimento para a data operacional informada."
+    );
+  }
 }
 
 type FeedbackType = "success" | "error";
@@ -658,9 +677,7 @@ export async function importXmlAction(formData: FormData) {
 
 async function createManualNoteFromForm(formData: FormData): Promise<number> {
   const actor = await getCurrentUserForAction();
-  if (!canCreateManualReceiving(actor.perfil)) {
-    throw new Error("Seu perfil não possui permissão para criar recebimento manual.");
-  }
+  ensureCanCreateManualReceiving(actor);
 
   const fornecedor = getInputValue(formData, "fornecedor");
   const notaFiscal = getInputValue(formData, "notaFiscal");
@@ -780,6 +797,7 @@ export async function saveNotaItemsAction(formData: FormData) {
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
+    ensureCanEditReceivingDate(actor, note.data);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -875,6 +893,7 @@ export async function saveNotaItemsStateAction(
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
+    ensureCanEditReceivingDate(actor, note.data);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -1003,6 +1022,7 @@ export async function finalizeNotaAction(formData: FormData) {
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser finalizado.");
     }
+    ensureCanEditReceivingDate(actor, note.data);
 
     if (!note.itens.length) {
       throw new Error("A nota não possui itens para finalização.");
@@ -1076,9 +1096,11 @@ export async function deleteItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    if (!canImportXmlAsGerente(actor.perfil)) {
-      throw new Error("Seu perfil não pode excluir itens de recebimento.");
-    }
+    ensurePermission(
+      actor,
+      "modulo.rastreabilidade.excluir_registro",
+      "Seu perfil não pode excluir itens de recebimento."
+    );
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1127,9 +1149,11 @@ export async function deleteNoteAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    if (!canImportXmlAsGerente(actor.perfil)) {
-      throw new Error("Seu perfil não pode excluir notas de recebimento.");
-    }
+    ensurePermission(
+      actor,
+      "modulo.rastreabilidade.excluir_registro",
+      "Seu perfil não pode excluir notas de recebimento."
+    );
 
     const notaId = parsePositiveInt(getInputValue(formData, "notaId"));
     if (!notaId) {
@@ -1174,7 +1198,7 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor.perfil);
+    ensureCanCloseMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -1257,7 +1281,7 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor.perfil);
+    ensureCanReopenMonth(actor);
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -1301,7 +1325,7 @@ export async function createCategoryAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const nome = sanitizeCategoryName(getInputValue(formData, "nome"));
     const temperaturaMaxima = parseTemperatureInput(getInputValue(formData, "temperaturaMaxima"));
@@ -1335,7 +1359,7 @@ export async function updateCategoryAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const categoriaId = parsePositiveInt(getInputValue(formData, "categoriaId"));
     if (!categoriaId) {
@@ -1384,7 +1408,7 @@ export async function toggleCategoryStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor.perfil);
+    ensureCanManageOptions(actor);
 
     const categoriaId = parsePositiveInt(getInputValue(formData, "categoriaId"));
     if (!categoriaId) {

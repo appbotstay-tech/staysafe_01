@@ -10,12 +10,12 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   canCloseMonth,
   canManageModuleOptions,
   canReopenMonth,
-  canSignAsSupervisor,
   canViewManagementSections,
   getRoleLabel
 } from "@/lib/rbac";
@@ -153,11 +153,13 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
-  const podeAssinarSupervisor = authUser ? canSignAsSupervisor(authUser.perfil) : false;
-  const podeVerGestao = authUser ? canViewManagementSections(authUser.perfil) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser.perfil) : false;
-  const podeFechar = authUser ? canCloseMonth(authUser.perfil) : false;
-  const podeReabrir = authUser ? canReopenMonth(authUser.perfil) : false;
+  const podeAssinarSupervisor = authUser
+    ? hasPermission(authUser, "modulo.limpeza_semanal.assinar_historico")
+    : false;
+  const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
+  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeFechar = authUser ? canCloseMonth(authUser) : false;
+  const podeReabrir = authUser ? canReopenMonth(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

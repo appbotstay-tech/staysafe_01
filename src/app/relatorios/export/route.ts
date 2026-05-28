@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !canAccessReports(user.perfil)) {
+  if (!user || !canAccessReports(user)) {
     return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
   }
 

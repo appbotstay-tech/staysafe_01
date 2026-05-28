@@ -22,6 +22,8 @@ export async function GET() {
       user: {
         id: user.id,
         perfil: user.perfil,
+        perfilAcessoId: user.perfilAcessoId,
+        permissoes: user.permissoes,
         obrigarTrocaSenha: user.obrigarTrocaSenha
       }
     },

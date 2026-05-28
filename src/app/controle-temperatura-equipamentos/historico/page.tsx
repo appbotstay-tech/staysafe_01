@@ -9,8 +9,9 @@ import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getImageDataUrl } from "@/lib/image-upload";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { canSignNutritionReview, getRoleLabel } from "@/lib/rbac";
+import { getRoleLabel } from "@/lib/rbac";
 
 import { signRegistroNutricionistaAction } from "../actions";
 import { TemperatureStatusBadge } from "../temperature-status-badge";
@@ -84,7 +85,9 @@ export default async function ControleTemperaturaHistoricoPage({
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeAssinarNutri = authUser ? canSignNutritionReview(authUser.perfil) : false;
+  const podeAssinarNutri = authUser
+    ? hasPermission(authUser, "modulo.temperatura.assinar_historico")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

@@ -4,8 +4,9 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { canSignNutritionReview, getRoleLabel } from "@/lib/rbac";
+import { getRoleLabel } from "@/lib/rbac";
 
 import { signRegistroSupervisorAction } from "../actions";
 import { OilStatusBadge } from "../oil-status-badge";
@@ -67,7 +68,9 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
   const authUser = await getCurrentUser();
   const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeAssinarSupervisor = authUser ? canSignNutritionReview(authUser.perfil) : false;
+  const podeAssinarSupervisor = authUser
+    ? hasPermission(authUser, "modulo.oleo.assinar_historico")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();

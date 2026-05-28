@@ -1,21 +1,28 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type PerfilUsuario } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import { getAppNow, parseAppDateInput } from "@/lib/date-time";
 import {
-  ensureCanManageUsers,
   ensureCanResetPassword,
-  ensureCanViewResetRequests
+  ensureCanViewResetRequests,
+  ensurePermission
 } from "@/lib/authz";
 import { generateTemporaryPassword, hashPassword, validatePasswordRules } from "@/lib/password";
+import {
+  ALL_PERMISSION_CODES,
+  canGrantSensitivePermissions,
+  getDefaultPermissionCodes,
+  isSensitivePermission
+} from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import type { UserRole } from "@/lib/rbac";
 
 const USERS_PATH = "/usuarios";
+const PROFILES_PATH = "/usuarios?tab=perfis";
 const REQUESTS_PATH = "/usuarios/solicitacoes";
 
 function getInputValue(formData: FormData, key: string): string {
@@ -25,14 +32,6 @@ function getInputValue(formData: FormData, key: string): string {
 
 function parseDateOnly(value: string): Date | null {
   return parseAppDateInput(value);
-}
-
-function parseRole(value: string): UserRole | null {
-  if (value === "DEV" || value === "GERENTE" || value === "NUTRICIONISTA" || value === "COLABORADOR") {
-    return value;
-  }
-
-  return null;
 }
 
 function parseStatus(value: string): "ATIVO" | "INATIVO" | null {
@@ -49,6 +48,15 @@ function redirectWithFeedback(path: string, type: "success" | "error", feedback:
   url.searchParams.set("feedback", feedback);
 
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
+}
+
+function normalizeProfileCode(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
 }
 
 function getUsersReturnToPath(formData: FormData, fallback: string): string {
@@ -71,6 +79,7 @@ type UpdateDraft = {
   nomeCompleto: string;
   nomeUsuario: string;
   perfil: string;
+  perfilAcessoId: string;
   status: string;
   dataAdmissao: string;
   observacoesInternas: string;
@@ -84,6 +93,7 @@ function redirectWithUpdateDraftError(feedback: string, draft: UpdateDraft): nev
   url.searchParams.set("editNomeCompleto", draft.nomeCompleto);
   url.searchParams.set("editNomeUsuario", draft.nomeUsuario);
   url.searchParams.set("editPerfil", draft.perfil);
+  url.searchParams.set("editPerfilAcessoId", draft.perfilAcessoId);
   url.searchParams.set("editStatus", draft.status);
   url.searchParams.set("editDataAdmissao", draft.dataAdmissao);
   url.searchParams.set("editObservacoesInternas", draft.observacoesInternas);
@@ -100,6 +110,7 @@ async function getTargetUserForManagement(userId: number) {
       nomeCompleto: true,
       nomeUsuario: true,
       perfil: true,
+      perfilAcessoId: true,
       status: true,
       isDevDefinitivo: true
     }
@@ -115,27 +126,54 @@ function assertNotDevUser(target: {
   }
 }
 
+async function resolveProfileForUser(profileId: number) {
+  if (!Number.isInteger(profileId) || profileId <= 0) {
+    throw new Error("Selecione um perfil válido.");
+  }
+
+  const profile = await prisma.perfilAcesso.findUnique({
+    where: { id: profileId },
+    select: {
+      id: true,
+      codigo: true,
+      ativo: true,
+      perfilLegado: true
+    }
+  });
+
+  if (!profile || !profile.ativo) {
+    throw new Error("Perfil selecionado não está ativo.");
+  }
+
+  if (profile.codigo === "DEV" || profile.perfilLegado === "DEV") {
+    throw new Error("O usuário DEV deve ser criado apenas pelo bootstrap técnico.");
+  }
+
+  return {
+    perfilAcessoId: profile.id,
+    perfil: (profile.perfilLegado ?? "COLABORADOR") as PerfilUsuario
+  };
+}
+
 export async function createUserAction(formData: FormData) {
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageUsers(actor.perfil);
+    ensurePermission(actor, "usuarios.criar", "Você não tem permissão para criar usuários.");
 
     const nomeCompleto = getInputValue(formData, "nomeCompleto");
     const nomeUsuario = getInputValue(formData, "nomeUsuario");
-    const perfil = parseRole(getInputValue(formData, "perfil"));
+    const perfilAcessoId = Number(getInputValue(formData, "perfilAcessoId"));
     const status = parseStatus(getInputValue(formData, "status")) ?? "ATIVO";
     const dataAdmissao = parseDateOnly(getInputValue(formData, "dataAdmissao"));
     const observacoesInternas = getInputValue(formData, "observacoesInternas") || null;
     const senhaInicial = getInputValue(formData, "senhaInicial");
     const obrigarTrocaSenha = formData.get("obrigarTrocaSenha") === "on";
 
-    if (!nomeCompleto || !nomeUsuario || !perfil || !senhaInicial) {
+    if (!nomeCompleto || !nomeUsuario || !senhaInicial) {
       throw new Error("Preencha todos os campos obrigatórios de criação.");
     }
 
-    if (perfil === "DEV") {
-      throw new Error("O usuário DEV deve ser criado apenas pelo bootstrap técnico.");
-    }
+    const profileSelection = await resolveProfileForUser(perfilAcessoId);
 
     const passwordRuleError = validatePasswordRules(senhaInicial);
     if (passwordRuleError) {
@@ -155,7 +193,8 @@ export async function createUserAction(formData: FormData) {
         nomeCompleto,
         nomeUsuario,
         senhaHash: hashPassword(senhaInicial),
-        perfil,
+        perfil: profileSelection.perfil,
+        perfilAcessoId: profileSelection.perfilAcessoId,
         status,
         dataAdmissao,
         observacoesInternas,
@@ -178,6 +217,7 @@ export async function updateUserAction(formData: FormData) {
   const nomeCompleto = getInputValue(formData, "nomeCompleto");
   const nomeUsuario = getInputValue(formData, "nomeUsuario");
   const perfilInput = getInputValue(formData, "perfil");
+  const perfilAcessoIdInput = getInputValue(formData, "perfilAcessoId");
   const statusInput = getInputValue(formData, "status");
   const dataAdmissaoInput = getInputValue(formData, "dataAdmissao");
   const observacoesInternas = getInputValue(formData, "observacoesInternas") || "";
@@ -185,19 +225,21 @@ export async function updateUserAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageUsers(actor.perfil);
+    ensurePermission(actor, "usuarios.editar", "Você não tem permissão para editar usuários.");
 
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new Error("Usuário inválido para edição.");
     }
 
-    const perfil = parseRole(perfilInput);
+    const perfilAcessoId = Number(perfilAcessoIdInput);
     const status = parseStatus(statusInput);
     const dataAdmissao = parseDateOnly(dataAdmissaoInput);
 
-    if (!nomeCompleto || !nomeUsuario || !perfil || !status) {
+    if (!nomeCompleto || !nomeUsuario || !status) {
       throw new Error("Preencha todos os campos obrigatórios.");
     }
+
+    const profileSelection = await resolveProfileForUser(perfilAcessoId);
 
     const target = await getTargetUserForManagement(userId);
     if (!target) {
@@ -210,7 +252,7 @@ export async function updateUserAction(formData: FormData) {
       if (nomeUsuario !== target.nomeUsuario) {
         throw new Error("Não é permitido alterar o nome de usuário do DEV definitivo.");
       }
-      if (perfil !== "DEV") {
+      if (profileSelection.perfil !== "DEV") {
         throw new Error("O DEV definitivo deve manter o perfil DEV.");
       }
       if (status !== "ATIVO") {
@@ -234,7 +276,8 @@ export async function updateUserAction(formData: FormData) {
       data: {
         nomeCompleto,
         nomeUsuario,
-        perfil,
+        perfil: profileSelection.perfil,
+        perfilAcessoId: profileSelection.perfilAcessoId,
         status,
         dataAdmissao,
         observacoesInternas: observacoesInternas || null,
@@ -256,6 +299,7 @@ export async function updateUserAction(formData: FormData) {
         nomeCompleto,
         nomeUsuario,
         perfil: perfilInput,
+        perfilAcessoId: perfilAcessoIdInput,
         status: statusInput,
         dataAdmissao: dataAdmissaoInput,
         observacoesInternas,
@@ -272,7 +316,7 @@ export async function toggleUserStatusAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageUsers(actor.perfil);
+    ensurePermission(actor, "usuarios.desativar", "Você não tem permissão para ativar ou inativar usuários.");
 
     const userId = Number(getInputValue(formData, "userId"));
     const status = parseStatus(getInputValue(formData, "status"));
@@ -333,7 +377,7 @@ export async function resetUserPasswordAction(formData: FormData) {
     }
 
     assertNotDevUser(target);
-    ensureCanResetPassword(actor.perfil, target.perfil as UserRole);
+    ensureCanResetPassword(actor, target.perfil as UserRole);
 
     const senhaTemporariaInformada = getInputValue(formData, "senhaTemporaria");
     const senhaTemporaria = senhaTemporariaInformada || generateTemporaryPassword();
@@ -371,7 +415,7 @@ export async function deleteUserAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageUsers(actor.perfil);
+    ensurePermission(actor, "sistema.acesso_dev", "Apenas DEV pode remover usuários.");
 
     const userId = Number(getInputValue(formData, "userId"));
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -414,12 +458,362 @@ export async function deleteUserAction(formData: FormData) {
   }
 }
 
+function parseBaseRole(value: string): UserRole {
+  if (value === "GERENTE" || value === "NUTRICIONISTA" || value === "COLABORADOR") {
+    return value;
+  }
+
+  return "COLABORADOR";
+}
+
+function getSelectedPermissionCodes(formData: FormData): string[] {
+  const allowedCodes = new Set(ALL_PERMISSION_CODES);
+  const codes = formData
+    .getAll("permissionCodes")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => allowedCodes.has(value));
+
+  return Array.from(new Set(codes));
+}
+
+async function ensureAdministrativeAccessIsPreserved(params: {
+  profileId: number;
+  profileIsActive: boolean;
+  nextPermissionCodes: string[];
+  actorProfileId: number | null;
+}) {
+  const nextPermissions = new Set(params.nextPermissionCodes);
+
+  if (
+    params.actorProfileId === params.profileId &&
+    !nextPermissions.has("usuarios.editar_permissoes")
+  ) {
+    throw new Error("Você não pode remover sua própria permissão de editar permissões.");
+  }
+
+  const targetWillRemainAdmin =
+    params.profileIsActive &&
+    nextPermissions.has("usuarios.acessar") &&
+    nextPermissions.has("usuarios.editar_permissoes");
+
+  const otherAdminProfiles = await prisma.perfilAcesso.count({
+    where: {
+      id: { not: params.profileId },
+      ativo: true,
+      permissoes: {
+        some: {
+          permitido: true,
+          permissao: { codigo: "usuarios.editar_permissoes" }
+        }
+      },
+      AND: [
+        {
+          permissoes: {
+            some: {
+              permitido: true,
+              permissao: { codigo: "usuarios.acessar" }
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  if (!targetWillRemainAdmin && otherAdminProfiles === 0) {
+    throw new Error("A alteração deixaria o sistema sem perfil administrativo ativo.");
+  }
+}
+
+export async function createProfileAction(formData: FormData) {
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(actor, "usuarios.criar_perfil", "Você não tem permissão para criar perfis.");
+
+    const nome = getInputValue(formData, "nome");
+    const codigoInput = getInputValue(formData, "codigo") || nome;
+    const codigo = normalizeProfileCode(codigoInput);
+    const descricao = getInputValue(formData, "descricao") || null;
+    const baseRole = parseBaseRole(getInputValue(formData, "baseRole"));
+
+    if (!nome || !codigo) {
+      throw new Error("Informe nome e código do perfil.");
+    }
+
+    if (["DEV", "GERENTE", "NUTRICIONISTA", "COLABORADOR"].includes(codigo)) {
+      throw new Error("Use outro código para perfis personalizados.");
+    }
+
+    const existingProfile = await prisma.perfilAcesso.findUnique({
+      where: { codigo },
+      select: { id: true }
+    });
+    if (existingProfile) {
+      throw new Error("Já existe um perfil com este código.");
+    }
+
+    const defaultCodes = getDefaultPermissionCodes(baseRole).filter(
+      (codigoPermissao) =>
+        canGrantSensitivePermissions(actor) || !isSensitivePermission(codigoPermissao)
+    );
+
+    await prisma.$transaction(async (tx) => {
+      const profile = await tx.perfilAcesso.create({
+        data: {
+          nome,
+          codigo,
+          descricao,
+          ativo: true,
+          sistemaPadrao: false
+        },
+        select: { id: true }
+      });
+
+      const permissions = await tx.permissao.findMany({
+        where: { codigo: { in: defaultCodes } },
+        select: { id: true }
+      });
+
+      if (permissions.length > 0) {
+        await tx.perfilPermissao.createMany({
+          data: permissions.map((permission) => ({
+            perfilId: profile.id,
+            permissaoId: permission.id,
+            permitido: true
+          }))
+        });
+      }
+    });
+
+    redirectWithFeedback(PROFILES_PATH, "success", "Perfil criado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    const message =
+      error instanceof Error && error.message ? error.message : "Não foi possível criar o perfil.";
+    redirectWithFeedback(PROFILES_PATH, "error", message);
+  }
+}
+
+export async function updateProfileAction(formData: FormData) {
+  const profileId = Number(getInputValue(formData, "profileId"));
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(actor, "usuarios.editar_perfil", "Você não tem permissão para editar perfis.");
+
+    const nome = getInputValue(formData, "nome");
+    const descricao = getInputValue(formData, "descricao") || null;
+
+    if (!Number.isInteger(profileId) || profileId <= 0) {
+      throw new Error("Perfil inválido.");
+    }
+
+    if (!nome) {
+      throw new Error("Informe o nome do perfil.");
+    }
+
+    const profile = await prisma.perfilAcesso.findUnique({
+      where: { id: profileId },
+      select: { codigo: true }
+    });
+    if (!profile) {
+      throw new Error("Perfil não encontrado.");
+    }
+
+    if (profile.codigo === "DEV") {
+      throw new Error("O perfil DEV não pode ser editado por esta tela.");
+    }
+
+    await prisma.perfilAcesso.update({
+      where: { id: profileId },
+      data: { nome, descricao }
+    });
+
+    redirectWithFeedback(PROFILES_PATH, "success", "Perfil atualizado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    const message =
+      error instanceof Error && error.message ? error.message : "Não foi possível atualizar o perfil.";
+    redirectWithFeedback(
+      Number.isInteger(profileId) && profileId > 0
+        ? `${PROFILES_PATH}&profileEditId=${profileId}`
+        : PROFILES_PATH,
+      "error",
+      message
+    );
+  }
+}
+
+export async function toggleProfileStatusAction(formData: FormData) {
+  const profileId = Number(getInputValue(formData, "profileId"));
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(actor, "usuarios.desativar_perfil", "Você não tem permissão para desativar perfis.");
+
+    const ativo = getInputValue(formData, "ativo") === "1";
+
+    if (!Number.isInteger(profileId) || profileId <= 0) {
+      throw new Error("Perfil inválido.");
+    }
+
+    const profile = await prisma.perfilAcesso.findUnique({
+      where: { id: profileId },
+      include: {
+        _count: { select: { usuarios: true } }
+      }
+    });
+    if (!profile) {
+      throw new Error("Perfil não encontrado.");
+    }
+
+    if (profile.sistemaPadrao || profile.codigo === "DEV") {
+      throw new Error("Perfis padrão do sistema não podem ser desativados.");
+    }
+
+    if (!ativo && actor.perfilAcessoId === profile.id) {
+      throw new Error("Você não pode desativar o próprio perfil.");
+    }
+
+    if (!ativo && profile._count.usuarios > 0) {
+      throw new Error("Este perfil possui usuários vinculados. Reatribua os usuários antes de desativar.");
+    }
+
+    await prisma.perfilAcesso.update({
+      where: { id: profileId },
+      data: { ativo }
+    });
+
+    redirectWithFeedback(
+      PROFILES_PATH,
+      "success",
+      ativo ? "Perfil ativado com sucesso." : "Perfil desativado com sucesso."
+    );
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    const message =
+      error instanceof Error && error.message ? error.message : "Não foi possível alterar o perfil.";
+    redirectWithFeedback(PROFILES_PATH, "error", message);
+  }
+}
+
+export async function updateProfilePermissionsAction(formData: FormData) {
+  const profileId = Number(getInputValue(formData, "profileId"));
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "usuarios.editar_permissoes",
+      "Você não tem permissão para editar permissões."
+    );
+
+    if (!Number.isInteger(profileId) || profileId <= 0) {
+      throw new Error("Perfil inválido.");
+    }
+
+    const profile = await prisma.perfilAcesso.findUnique({
+      where: { id: profileId },
+      include: {
+        permissoes: {
+          where: { permitido: true },
+          include: { permissao: true }
+        }
+      }
+    });
+    if (!profile) {
+      throw new Error("Perfil não encontrado.");
+    }
+
+    const beforeCodes = profile.permissoes
+      .map((profilePermission) => profilePermission.permissao.codigo)
+      .sort();
+    const selectedCodes = profile.codigo === "DEV" ? ALL_PERMISSION_CODES : getSelectedPermissionCodes(formData);
+
+    if (!canGrantSensitivePermissions(actor)) {
+      const changedSensitivePermission = ALL_PERMISSION_CODES.some((codigo) => {
+        if (!isSensitivePermission(codigo)) {
+          return false;
+        }
+
+        const hadPermission = beforeCodes.includes(codigo);
+        const willHavePermission = selectedCodes.includes(codigo);
+        return hadPermission !== willHavePermission;
+      });
+
+      if (changedSensitivePermission) {
+        throw new Error("Você não pode conceder ou remover permissões sensíveis.");
+      }
+    }
+
+    await ensureAdministrativeAccessIsPreserved({
+      profileId,
+      profileIsActive: profile.ativo,
+      nextPermissionCodes: selectedCodes,
+      actorProfileId: actor.perfilAcessoId
+    });
+
+    const afterCodes = Array.from(new Set(selectedCodes)).sort();
+    const added = afterCodes.filter((codigo) => !beforeCodes.includes(codigo));
+    const removed = beforeCodes.filter((codigo) => !afterCodes.includes(codigo));
+    const resumo = `Adicionadas: ${added.length}; removidas: ${removed.length}.`;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.perfilPermissao.deleteMany({
+        where: { perfilId: profile.id }
+      });
+
+      const permissions = await tx.permissao.findMany({
+        where: { codigo: { in: afterCodes } },
+        select: { id: true }
+      });
+
+      if (permissions.length > 0) {
+        await tx.perfilPermissao.createMany({
+          data: permissions.map((permission) => ({
+            perfilId: profile.id,
+            permissaoId: permission.id,
+            permitido: true
+          }))
+        });
+      }
+
+      await tx.perfilPermissaoAuditoria.create({
+        data: {
+          perfilId: profile.id,
+          perfilCodigo: profile.codigo,
+          alteradoPorId: actor.id,
+          alteradoPorNome: actor.nomeCompleto,
+          permissoesAntes: beforeCodes,
+          permissoesDepois: afterCodes,
+          resumo
+        }
+      });
+    });
+
+    redirectWithFeedback(PROFILES_PATH, "success", "Permissões atualizadas com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Não foi possível atualizar permissões.";
+    redirectWithFeedback(
+      Number.isInteger(profileId) && profileId > 0
+        ? `${PROFILES_PATH}&permissionProfileId=${profileId}`
+        : PROFILES_PATH,
+      "error",
+      message
+    );
+  }
+}
+
 export async function handleResetRequestAction(formData: FormData) {
   const returnTo = getUsersReturnToPath(formData, REQUESTS_PATH);
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanViewResetRequests(actor.perfil);
+    ensureCanViewResetRequests(actor);
 
     const requestId = Number(getInputValue(formData, "requestId"));
     const senhaTemporariaInformada = getInputValue(formData, "senhaTemporaria");
@@ -465,7 +859,7 @@ export async function handleResetRequestAction(formData: FormData) {
     }
 
     assertNotDevUser(solicitacao.usuario);
-    ensureCanResetPassword(actor.perfil, solicitacao.usuario.perfil as UserRole);
+    ensureCanResetPassword(actor, solicitacao.usuario.perfil as UserRole);
 
     const senhaTemporaria = senhaTemporariaInformada || generateTemporaryPassword();
     const passwordRuleError = validatePasswordRules(senhaTemporaria);
