@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { StatusUsuario, type PerfilUsuario } from "@prisma/client";
+import { Prisma, StatusUsuario, type PerfilUsuario } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -34,6 +34,109 @@ function hashSessionToken(token: string): string {
 
 function generateSessionToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+function isMissingProfileAccessColumnError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2022" &&
+    String(error.message).includes("perfilAcessoId")
+  );
+}
+
+function buildAuthenticatedUser(params: {
+  usuario: {
+    id: number;
+    nomeCompleto: string;
+    nomeUsuario: string;
+    perfil: PerfilUsuario;
+    status: StatusUsuario;
+    obrigarTrocaSenha: boolean;
+    perfilAcesso?: {
+      id: number;
+      nome: string;
+      codigo: string;
+      ativo: boolean;
+      permissoes: Array<{ permissao: { codigo: string } }>;
+    } | null;
+  };
+}): AuthenticatedUser {
+  const legacyRole = profileToUserRole(params.usuario.perfil);
+  const perfilAcesso = params.usuario.perfilAcesso ?? null;
+  const hasLinkedProfile = Boolean(perfilAcesso);
+  const permissoes = hasLinkedProfile
+    ? perfilAcesso!.ativo
+      ? perfilAcesso!.permissoes.map((perfilPermissao) => perfilPermissao.permissao.codigo)
+      : []
+    : getDefaultPermissionCodes(legacyRole);
+
+  return {
+    id: params.usuario.id,
+    nomeCompleto: params.usuario.nomeCompleto,
+    nomeUsuario: params.usuario.nomeUsuario,
+    perfil: legacyRole,
+    perfilAcessoId: hasLinkedProfile ? perfilAcesso!.id : null,
+    perfilCodigo: hasLinkedProfile ? perfilAcesso!.codigo : null,
+    perfilNome: hasLinkedProfile ? perfilAcesso!.nome : null,
+    permissoes,
+    status: params.usuario.status,
+    obrigarTrocaSenha: params.usuario.obrigarTrocaSenha
+  };
+}
+
+async function findSessionWithProfileAccess(tokenHash: string) {
+  return prisma.usuarioSessao.findUnique({
+    where: { tokenHash },
+    include: {
+      usuario: {
+        select: {
+          id: true,
+          nomeCompleto: true,
+          nomeUsuario: true,
+          perfil: true,
+          perfilAcessoId: true,
+          perfilAcesso: {
+            select: {
+              id: true,
+              nome: true,
+              codigo: true,
+              ativo: true,
+              permissoes: {
+                where: { permitido: true },
+                select: {
+                  permissao: {
+                    select: {
+                      codigo: true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          status: true,
+          obrigarTrocaSenha: true
+        }
+      }
+    }
+  });
+}
+
+async function findLegacySession(tokenHash: string) {
+  return prisma.usuarioSessao.findUnique({
+    where: { tokenHash },
+    include: {
+      usuario: {
+        select: {
+          id: true,
+          nomeCompleto: true,
+          nomeUsuario: true,
+          perfil: true,
+          status: true,
+          obrigarTrocaSenha: true
+        }
+      }
+    }
+  });
 }
 
 export async function createSessionForUser(userId: number): Promise<void> {
@@ -87,40 +190,19 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   }
 
   const tokenHash = hashSessionToken(token);
-  const session = await prisma.usuarioSessao.findUnique({
-    where: { tokenHash },
-    include: {
-      usuario: {
-        select: {
-          id: true,
-          nomeCompleto: true,
-          nomeUsuario: true,
-          perfil: true,
-          perfilAcessoId: true,
-          perfilAcesso: {
-            select: {
-              id: true,
-              nome: true,
-              codigo: true,
-              ativo: true,
-              permissoes: {
-                where: { permitido: true },
-                select: {
-                  permissao: {
-                    select: {
-                      codigo: true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          status: true,
-          obrigarTrocaSenha: true
-        }
-      }
+  let session:
+    | Awaited<ReturnType<typeof findSessionWithProfileAccess>>
+    | Awaited<ReturnType<typeof findLegacySession>>;
+
+  try {
+    session = await findSessionWithProfileAccess(tokenHash);
+  } catch (error) {
+    if (!isMissingProfileAccessColumnError(error)) {
+      throw error;
     }
-  });
+
+    session = await findLegacySession(tokenHash);
+  }
 
   if (!session) {
     return null;
@@ -140,27 +222,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     return null;
   }
 
-  const legacyRole = profileToUserRole(session.usuario.perfil);
-  const perfilAcesso = session.usuario.perfilAcesso;
-  const hasLinkedProfile = Boolean(perfilAcesso);
-  const permissoes = hasLinkedProfile
-    ? perfilAcesso!.ativo
-      ? perfilAcesso!.permissoes.map((perfilPermissao) => perfilPermissao.permissao.codigo)
-      : []
-    : getDefaultPermissionCodes(legacyRole);
-
-  return {
-    id: session.usuario.id,
-    nomeCompleto: session.usuario.nomeCompleto,
-    nomeUsuario: session.usuario.nomeUsuario,
-    perfil: legacyRole,
-    perfilAcessoId: hasLinkedProfile ? perfilAcesso!.id : null,
-    perfilCodigo: hasLinkedProfile ? perfilAcesso!.codigo : null,
-    perfilNome: hasLinkedProfile ? perfilAcesso!.nome : null,
-    permissoes,
-    status: session.usuario.status,
-    obrigarTrocaSenha: session.usuario.obrigarTrocaSenha
-  };
+  return buildAuthenticatedUser({ usuario: session.usuario });
 }
 
 export async function requireAuthenticatedUser(): Promise<AuthenticatedUser> {
