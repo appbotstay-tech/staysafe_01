@@ -68,21 +68,61 @@ export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
     @media print {
       @page {
         size: ${config.larguraMm}mm ${config.alturaMm}mm;
-        margin: ${config.margemMm}mm;
+        margin: 0;
       }
+
+      html,
+      body {
+        width: ${config.larguraMm}mm !important;
+        height: ${config.alturaMm}mm !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+      }
+
       body * {
         visibility: hidden !important;
+        box-shadow: none !important;
       }
+
       #etiqueta-print-area,
       #etiqueta-print-area * {
         visibility: visible !important;
       }
+
       #etiqueta-print-area {
-        position: absolute;
-        inset: 0 auto auto 0;
+        position: fixed !important;
+        inset: 0 auto auto 0 !important;
+        display: block !important;
+        width: ${config.larguraMm}mm !important;
+        height: ${config.alturaMm}mm !important;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
       }
+
+      #etiqueta-print-area .staylabel-print-label {
+        width: ${config.larguraMm}mm !important;
+        height: ${config.alturaMm}mm !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        overflow: hidden !important;
+        break-after: auto !important;
+        page-break-after: auto !important;
+      }
+
+      #etiqueta-print-area .staylabel-print-label:not(:last-child) {
+        break-after: page !important;
+        page-break-after: always !important;
+      }
+
       .no-print {
         display: none !important;
       }
@@ -104,12 +144,14 @@ export function EtiquetaCard({
   return (
     <div id="etiqueta-print-area" className="overflow-x-auto">
       <article
-        className="rounded border border-slate-900 bg-white p-3 text-slate-950 shadow-sm"
+        className="staylabel-print-label rounded border border-slate-900 bg-white p-3 text-slate-950 shadow-sm"
         data-zebra-model="ZD220"
         data-zpl-ready="future"
         style={{
           width: `${config.larguraMm}mm`,
-          minHeight: `${config.alturaMm}mm`,
+          height: `${config.alturaMm}mm`,
+          boxSizing: "border-box",
+          overflow: "hidden",
           padding: `${config.margemMm}mm`,
           fontSize: `${config.tamanhoFonte}pt`,
           lineHeight: 1.18
