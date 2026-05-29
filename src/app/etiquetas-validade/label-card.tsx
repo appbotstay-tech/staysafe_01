@@ -2,6 +2,8 @@ import { formatAppDate, formatAppDateTime } from "@/lib/date-time";
 
 import type { PrintConfig } from "./constants";
 
+const MAX_PRINT_COPIES = 20;
+
 export type EtiquetaSnapshot = {
   origem?: "AUTOMATICA" | "MANUAL";
   produtoNomeSnapshot: string;
@@ -55,6 +57,14 @@ function validityRuleLabel(label: EtiquetaSnapshot): string {
   return parts.join(" + ") || "Automática";
 }
 
+function normalizePrintCopies(copias?: number): number {
+  if (!Number.isFinite(copias) || !copias || copias < 1) {
+    return 1;
+  }
+
+  return Math.min(Math.trunc(copias), MAX_PRINT_COPIES);
+}
+
 function LabelInfo({ label, value }: { label: string; value: string }) {
   return (
     <p className="leading-tight">
@@ -74,12 +84,12 @@ export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
       html,
       body {
         width: ${config.larguraMm}mm !important;
-        height: ${config.alturaMm}mm !important;
+        height: auto !important;
         min-width: 0 !important;
         min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         background: #ffffff !important;
       }
 
@@ -88,20 +98,40 @@ export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
         box-shadow: none !important;
       }
 
+      body :not(#etiqueta-print-area):not(#etiqueta-print-area *):not(:has(#etiqueta-print-area)) {
+        display: none !important;
+      }
+
+      body :has(#etiqueta-print-area) {
+        position: static !important;
+        inset: auto !important;
+        display: block !important;
+        width: ${config.larguraMm}mm !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background: transparent !important;
+      }
+
       #etiqueta-print-area,
       #etiqueta-print-area * {
         visibility: visible !important;
       }
 
       #etiqueta-print-area {
-        position: fixed !important;
-        inset: 0 auto auto 0 !important;
+        position: static !important;
         display: block !important;
         width: ${config.larguraMm}mm !important;
-        height: ${config.alturaMm}mm !important;
+        height: auto !important;
+        min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        gap: 0 !important;
+        overflow: visible !important;
         background: #ffffff !important;
       }
 
@@ -132,7 +162,7 @@ export function EtiquetaPrintStyles({ config }: { config: PrintConfig }) {
   return <style dangerouslySetInnerHTML={{ __html: printStyles }} />;
 }
 
-export function EtiquetaCard({
+function EtiquetaLabelArticle({
   etiqueta,
   config
 }: {
@@ -142,79 +172,101 @@ export function EtiquetaCard({
   const grupo = etiqueta.subgrupoNomeSnapshot || etiqueta.grupoNomeSnapshot || "-";
 
   return (
-    <div id="etiqueta-print-area" className="overflow-x-auto">
-      <article
-        className="staylabel-print-label rounded border border-slate-900 bg-white p-3 text-slate-950 shadow-sm"
-        data-zebra-model="ZD220"
-        data-zpl-ready="future"
-        style={{
-          width: `${config.larguraMm}mm`,
-          height: `${config.alturaMm}mm`,
-          boxSizing: "border-box",
-          overflow: "hidden",
-          padding: `${config.margemMm}mm`,
-          fontSize: `${config.tamanhoFonte}pt`,
-          lineHeight: 1.18
-        }}
-      >
-        <div className="flex items-start justify-between gap-2 border-b border-slate-900 pb-1">
-          <div className="min-w-0">
-            <h3 className="break-words text-base font-black uppercase leading-tight">
-              {etiqueta.produtoNomeSnapshot}
-            </h3>
-            <p className="text-[0.72em]">
-              {grupo} • {etiqueta.metodoNomeSnapshot}
-            </p>
-          </div>
-          {config.mostrarQrCode ? (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center border border-slate-900 p-1 text-center text-[0.55em] font-bold leading-tight">
-              {etiqueta.codigoEtiqueta}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-          <LabelInfo
-            label="Manipulação"
-            value={labelDate(etiqueta.dataManipulacao, etiqueta.horaManipulacao)}
-          />
-          <LabelInfo
-            label="Validade"
-            value={labelDate(etiqueta.dataValidade, etiqueta.horaValidade)}
-          />
-          <LabelInfo label="Resp." value={etiqueta.responsavelNomeSnapshot} />
-          <LabelInfo label="Qtd." value={quantityLabel(etiqueta)} />
-          <LabelInfo label="Regra" value={validityRuleLabel(etiqueta)} />
-          <LabelInfo
-            label="Temp."
-            value={optionalText(etiqueta.temperaturaReferenciaSnapshot)}
-          />
-          {config.mostrarMarcaFornecedor ? (
-            <LabelInfo label="Marca/Forn." value={optionalText(etiqueta.marcaFornecedor)} />
-          ) : null}
-          {config.mostrarSif ? (
-            <LabelInfo label="SIF" value={optionalText(etiqueta.sif)} />
-          ) : null}
-          {config.mostrarLote ? (
-            <LabelInfo label="Lote" value={optionalText(etiqueta.lote)} />
-          ) : null}
-          <LabelInfo
-            label="Val. original"
-            value={etiqueta.validadeOriginal ? formatAppDate(etiqueta.validadeOriginal) : "-"}
-          />
-          <LabelInfo label="Gerada" value={formatAppDateTime(etiqueta.criadoEm)} />
-        </div>
-
-        {etiqueta.observacao ? (
-          <p className="mt-2 border-t border-slate-300 pt-1 text-[0.8em]">
-            Obs.: {etiqueta.observacao}
+    <article
+      className="staylabel-print-label rounded border border-slate-900 bg-white p-3 text-slate-950 shadow-sm"
+      data-zebra-model="ZD220"
+      data-zpl-ready="future"
+      style={{
+        width: `${config.larguraMm}mm`,
+        height: `${config.alturaMm}mm`,
+        boxSizing: "border-box",
+        overflow: "hidden",
+        padding: `${config.margemMm}mm`,
+        fontSize: `${config.tamanhoFonte}pt`,
+        lineHeight: 1.18
+      }}
+    >
+      <div className="flex items-start justify-between gap-2 border-b border-slate-900 pb-1">
+        <div className="min-w-0">
+          <h3 className="break-words text-base font-black uppercase leading-tight">
+            {etiqueta.produtoNomeSnapshot}
+          </h3>
+          <p className="text-[0.72em]">
+            {grupo} • {etiqueta.metodoNomeSnapshot}
           </p>
+        </div>
+        {config.mostrarQrCode ? (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center border border-slate-900 p-1 text-center text-[0.55em] font-bold leading-tight">
+            {etiqueta.codigoEtiqueta}
+          </div>
         ) : null}
+      </div>
 
-        <p className="mt-2 border-t border-slate-900 pt-1 text-center text-[0.8em] font-bold">
-          Código: {etiqueta.codigoEtiqueta}
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+        <LabelInfo
+          label="Manipulação"
+          value={labelDate(etiqueta.dataManipulacao, etiqueta.horaManipulacao)}
+        />
+        <LabelInfo
+          label="Validade"
+          value={labelDate(etiqueta.dataValidade, etiqueta.horaValidade)}
+        />
+        <LabelInfo label="Resp." value={etiqueta.responsavelNomeSnapshot} />
+        <LabelInfo label="Qtd." value={quantityLabel(etiqueta)} />
+        <LabelInfo label="Regra" value={validityRuleLabel(etiqueta)} />
+        <LabelInfo
+          label="Temp."
+          value={optionalText(etiqueta.temperaturaReferenciaSnapshot)}
+        />
+        {config.mostrarMarcaFornecedor ? (
+          <LabelInfo label="Marca/Forn." value={optionalText(etiqueta.marcaFornecedor)} />
+        ) : null}
+        {config.mostrarSif ? (
+          <LabelInfo label="SIF" value={optionalText(etiqueta.sif)} />
+        ) : null}
+        {config.mostrarLote ? (
+          <LabelInfo label="Lote" value={optionalText(etiqueta.lote)} />
+        ) : null}
+        <LabelInfo
+          label="Val. original"
+          value={etiqueta.validadeOriginal ? formatAppDate(etiqueta.validadeOriginal) : "-"}
+        />
+        <LabelInfo label="Gerada" value={formatAppDateTime(etiqueta.criadoEm)} />
+      </div>
+
+      {etiqueta.observacao ? (
+        <p className="mt-2 border-t border-slate-300 pt-1 text-[0.8em]">
+          Obs.: {etiqueta.observacao}
         </p>
-      </article>
+      ) : null}
+
+      <p className="mt-2 border-t border-slate-900 pt-1 text-center text-[0.8em] font-bold">
+        Código: {etiqueta.codigoEtiqueta}
+      </p>
+    </article>
+  );
+}
+
+export function EtiquetaCard({
+  etiqueta,
+  config,
+  copias = 1
+}: {
+  etiqueta: EtiquetaSnapshot;
+  config: PrintConfig;
+  copias?: number;
+}) {
+  const totalCopias = normalizePrintCopies(copias);
+
+  return (
+    <div id="etiqueta-print-area" className="flex flex-col gap-3 overflow-x-auto">
+      {Array.from({ length: totalCopias }, (_, index) => (
+        <EtiquetaLabelArticle
+          key={`${etiqueta.codigoEtiqueta}-${index}`}
+          etiqueta={etiqueta}
+          config={config}
+        />
+      ))}
     </div>
   );
 }

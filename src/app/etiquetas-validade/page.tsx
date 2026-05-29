@@ -29,6 +29,7 @@ const APP_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   hourCycle: "h23"
 });
+const MAX_PRINT_COPIES = 20;
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -37,6 +38,15 @@ function firstParam(value: string | string[] | undefined): string {
 function parsePositiveInt(value: string): number | null {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parsePrintCopies(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 1;
+  }
+
+  return Math.min(parsed, MAX_PRINT_COPIES);
 }
 
 export default async function EtiquetasValidadePage({ searchParams }: PageProps) {
@@ -49,6 +59,7 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const etiquetaId = parsePositiveInt(firstParam(params.etiquetaId).trim());
+  const printCopies = parsePrintCopies(firstParam(params.copias).trim());
 
   const [
     grupos,
@@ -177,7 +188,11 @@ export default async function EtiquetasValidadePage({ searchParams }: PageProps)
             </div>
             <PrintButton />
           </div>
-          <EtiquetaCard etiqueta={etiquetaVisualizacao} config={configuracao} />
+          <EtiquetaCard
+            etiqueta={etiquetaVisualizacao}
+            config={configuracao}
+            copias={printCopies}
+          />
         </section>
       ) : null}
     </div>

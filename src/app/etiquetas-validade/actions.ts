@@ -29,6 +29,7 @@ const APP_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+const MAX_PRINT_COPIES = 20;
 
 function getInputValue(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -60,6 +61,15 @@ function parsePositiveNumber(value: string): number | null {
 function parseNonNegativeInt(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function parsePrintCopies(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 1;
+  }
+
+  return Math.min(parsed, MAX_PRINT_COPIES);
 }
 
 function sanitizeText(value: string, maxLength = 1000): string | null {
@@ -113,6 +123,7 @@ function redirectWithFeedback(
     url.searchParams.delete("editMetodoId");
     url.searchParams.delete("editRegraId");
     url.searchParams.delete("etiquetaId");
+    url.searchParams.delete("copias");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);
@@ -916,6 +927,7 @@ export async function generateEtiquetaAction(formData: FormData) {
     const lote = sanitizeText(getInputValue(formData, "lote"), 80);
     const observacao = sanitizeText(getInputValue(formData, "observacao"), 1000);
     const validadeOriginal = parseAppDateInput(getInputValue(formData, "validadeOriginal"));
+    const numeroCopias = parsePrintCopies(getInputValue(formData, "numeroCopias"));
 
     let produtoNomeSnapshot: string;
     let unidadeSnapshot: string;
@@ -1045,7 +1057,7 @@ export async function generateEtiquetaAction(formData: FormData) {
       returnTo,
       "success",
       `Etiqueta ${etiqueta.codigoEtiqueta} gerada com validade em ${formatAppDateInput(etiqueta.dataValidade)}.`,
-      { etiquetaId: String(etiqueta.id) }
+      { etiquetaId: String(etiqueta.id), copias: String(numeroCopias) }
     );
   } catch (error) {
     rethrowIfRedirectError(error);
