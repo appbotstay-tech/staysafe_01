@@ -1,6 +1,15 @@
 import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
+import { MonthlyClosureSection } from "@/components/historico/technical-signature";
+import { getCurrentUser } from "@/lib/auth-session";
+import {
+  formatAppDateInput,
+  getAppDate,
+  getAppMonthDateRange,
+  getAppMonthYear
+} from "@/lib/date-time";
+import { canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
 import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../../constants";
@@ -24,6 +33,7 @@ const CARD_CLASS =
   "bpma-card";
 const INPUT_CLASS =
   "bpma-input";
+const MODULE_CODE = "limpeza_semanal";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
@@ -32,6 +42,11 @@ export const dynamic = "force-dynamic";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function buildPathWithParams(params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${PAGE_PATH}?${query}` : PAGE_PATH;
 }
 
 function includesIgnoreCase(text: string, search: string): boolean {
@@ -57,6 +72,9 @@ function getWeeklyRecordStatus(record: {
 export default async function PlanoLimpezaSemanalHistoricoPage({
   searchParams
 }: PageProps) {
+  const authUser = await getCurrentUser();
+  const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+
   const params = await searchParams;
   const filtroData = firstParam(params.filtroData).trim();
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes).trim());
@@ -65,6 +83,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const filtroStatus = parseWeeklyStatus(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
+  const todayMonth = getAppMonthYear(getAppDate());
+  const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
+  const selectedYear = filtroAno ?? todayMonth.ano;
+  const selectedMonthRange = getAppMonthDateRange(selectedMonth, selectedYear);
 
   const where: Prisma.PlanoLimpezaSemanalExecucaoWhereInput = {};
   const dataFiltro = parseDateInput(filtroData);
@@ -88,9 +110,43 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const syncStart = syncRange ? formatDateInput(syncRange.start) : null;
   const syncEnd = syncRange ? formatDateInput(syncRange.end) : null;
 
-  const [rawRecords, allItems, weeklyAreas, areasHistoricas] = await Promise.all([
+  const [rawRecords, rawMonthlyRecords, allItems, weeklyAreas, areasHistoricas, fechamentoMensal] = await Promise.all([
     prisma.planoLimpezaSemanalExecucao.findMany({
       where,
+      select: {
+        id: true,
+        dataExecucao: true,
+        area: true,
+        assinaturaResponsavel: true,
+        assinaturaResponsavelDataHora: true,
+        assinaturaSupervisor: true,
+        status: true,
+        observacaoResponsavel: true,
+        observacaoSupervisor: true,
+        itemDescricao: true,
+        qualProduto: true,
+        quando: true,
+        setorResponsavel: true,
+        funcionarioResponsavel: true,
+        item: {
+          select: {
+            oQueLimpar: true,
+            qualProduto: true,
+            quando: true,
+            setorResponsavel: true,
+            quem: true
+          }
+        }
+      },
+      orderBy: [{ dataExecucao: "desc" }, { createdAt: "desc" }]
+    }),
+    prisma.planoLimpezaSemanalExecucao.findMany({
+      where: {
+        dataExecucao: {
+          gte: selectedMonthRange.start,
+          lte: selectedMonthRange.end
+        }
+      },
       select: {
         id: true,
         dataExecucao: true,
@@ -128,6 +184,15 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       select: { area: true },
       distinct: ["area"],
       orderBy: { area: "asc" }
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: MODULE_CODE,
+          ano: selectedYear,
+          mes: selectedMonth
+        }
+      }
     })
   ]);
 
@@ -139,6 +204,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   );
 
   const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawRecords);
+  const monthlySummaries = consolidateWeeklyExecutionsByAreaWeek(rawMonthlyRecords);
   const filteredByItemAreas =
     filtroItem.trim().length > 0
       ? new Set(
@@ -204,6 +270,49 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       ...areasHistoricas.map((item) => item.area)
     ])
   ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const monthlyDates = Array.from(
+    new Map(
+      rawMonthlyRecords.map((record) => [
+        formatAppDateInput(record.dataExecucao),
+        record.dataExecucao
+      ])
+    ).values()
+  );
+  const assinaturasMensais = monthlyDates.length
+    ? await prisma.assinaturaDiariaModulo.findMany({
+        where: {
+          moduloCodigo: MODULE_CODE,
+          dataReferencia: { in: monthlyDates }
+        }
+      })
+    : [];
+  const diasExecutados = new Set(
+    rawMonthlyRecords.map((record) => formatAppDateInput(record.dataExecucao))
+  );
+  const diasAssinados = new Set(
+    assinaturasMensais.map((assinatura) => formatAppDateInput(assinatura.dataReferencia))
+  );
+  const indicadoresMensais = {
+    "Mês/Ano": `${String(selectedMonth).padStart(2, "0")}/${selectedYear}`,
+    "Semanas do mês": new Set(
+      monthlySummaries.map((summary) => formatDateInput(summary.weekStart))
+    ).size,
+    "Áreas previstas": monthlySummaries.length,
+    "Áreas concluídas": monthlySummaries.filter(
+      (summary) => summary.statusGeral === "Concluído"
+    ).length,
+    "Pendências": monthlySummaries.reduce(
+      (total, summary) => total + summary.pendingItems,
+      0
+    ),
+    "Execuções realizadas": rawMonthlyRecords.length,
+    "Dias assinados": diasAssinados.size,
+    "Dias pendentes de assinatura": Math.max(diasExecutados.size - diasAssinados.size, 0)
+  };
+  const monthlyReturnParams = new URLSearchParams();
+  if (filtroMes) monthlyReturnParams.set("filtroMes", String(filtroMes));
+  if (filtroAno) monthlyReturnParams.set("filtroAno", String(filtroAno));
+  const monthlyReturnTo = buildPathWithParams(monthlyReturnParams);
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -401,6 +510,17 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
           </table>
         </div>
       </section>
+
+      <MonthlyClosureSection
+        moduleCode={MODULE_CODE}
+        month={selectedMonth}
+        year={selectedYear}
+        returnTo={monthlyReturnTo}
+        indicators={indicadoresMensais}
+        signedClosure={fechamentoMensal}
+        canSign={canSignMonthly}
+        pendingDailySignatures={indicadoresMensais["Dias pendentes de assinatura"]}
+      />
     </div>
   );
 }

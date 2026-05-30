@@ -5,7 +5,7 @@ export const OPERATIONAL_SIGNATURE_MODULES = {
     codigo: "hortifruti",
     nome: "Higienização de Hortifruti",
     permissionPrefix: "modulo.hortifruti",
-    historyPath: "/higienizacao-hortifruti"
+    historyPath: "/higienizacao-hortifruti/historico"
   },
   amostras: {
     codigo: "amostras",

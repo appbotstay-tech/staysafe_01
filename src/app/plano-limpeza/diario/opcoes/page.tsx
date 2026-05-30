@@ -157,7 +157,7 @@ export default async function PlanoLimpezaDiarioOpcoesPage({ searchParams }: Pag
               ← Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/diario/historico" className="btn-secondary">
-              Histórico Completo
+              Histórico
             </Link>
           </div>
         </div>

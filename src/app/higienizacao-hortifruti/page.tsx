@@ -6,7 +6,6 @@ import {
 } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
@@ -14,18 +13,14 @@ import { prisma } from "@/lib/prisma";
 import {
   canDeleteOperationalRecords,
   canManageModuleOptions,
-  canViewManagementSections,
-  getRoleLabel
+  canViewManagementSections
 } from "@/lib/rbac";
 
 import {
-  closeMonthAction,
   createRegistroAction,
   deleteRegistroAction,
-  reopenMonthAction,
   updateRegistroAction
 } from "./actions";
-import { ReopenMonthModal } from "./reopen-month-modal";
 import { SearchableOptionField } from "./searchable-option-field";
 import {
   formatDateDisplay,
@@ -81,7 +76,6 @@ export default async function HigienizacaoHortifrutiPage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
@@ -149,14 +143,6 @@ export default async function HigienizacaoHortifrutiPage({
     : null;
 
   const now = getCurrentSystemDateTime();
-  const currentPeriod = getMonthYear(getTodaySystemDate());
-  const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
-  const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
-  const fechamentoMes =
-    fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
-      ? fechamentoMesRaw
-      : currentPeriod.mes;
-  const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const registro of registros) {
@@ -171,11 +157,6 @@ export default async function HigienizacaoHortifrutiPage({
     const periodo = getMonthYear(registroParaExcluir.data);
     periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
   }
-  periodos.set(periodKey(fechamentoMes, fechamentoAno), {
-    mes: fechamentoMes,
-    ano: fechamentoAno
-  });
-
   const periodosAssinados = periodos.size
     ? await prisma.higienizacaoHortifrutiFechamento.findMany({
         where: {
@@ -207,10 +188,7 @@ export default async function HigienizacaoHortifrutiPage({
   if (filtroAno) parametrosRetorno.set("filtroAno", String(filtroAno));
   if (filtroHortifruti) parametrosRetorno.set("filtroHortifruti", filtroHortifruti);
   if (filtroResponsavel) parametrosRetorno.set("filtroResponsavel", filtroResponsavel);
-  parametrosRetorno.set("fechamentoMes", String(fechamentoMes));
-  parametrosRetorno.set("fechamentoAno", String(fechamentoAno));
 
-  const returnTo = buildPathWithParams(parametrosRetorno);
   const hrefNovoRegistro = (() => {
     const query = new URLSearchParams(parametrosRetorno);
     query.set("new", "1");
@@ -236,17 +214,6 @@ export default async function HigienizacaoHortifrutiPage({
     return buildPathWithParams(query);
   })();
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const registrosFechamento = await prisma.higienizacaoHortifruti.findMany({
-    where: { data: { gte: rangeFechamento.start, lte: rangeFechamento.end } },
-    orderBy: [{ data: "asc" }, { inicioProcesso: "asc" }]
-  });
-  const fechamentoAtual = await prisma.higienizacaoHortifrutiFechamento.findUnique({
-    where: { mes_ano: { mes: fechamentoMes, ano: fechamentoAno } }
-  });
-  const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoHortifruti.ASSINADO;
-  const reaberturaFormId = `reabertura-form-${fechamentoMes}-${fechamentoAno}`;
-
   return (
     <div className="space-y-6 dark:text-slate-100">
       <DocumentosModuleHeader
@@ -257,6 +224,15 @@ export default async function HigienizacaoHortifrutiPage({
         searchParams={params}
         managementHref={podeGerenciarOpcoes ? "/higienizacao-hortifruti/opcoes" : undefined}
         maintenanceHref="/chamados-manutencao?origem=HORTIFRUTI"
+        actions={
+          <>
+            {podeVerGestao ? (
+              <Link href="/higienizacao-hortifruti/historico" className="btn-secondary">
+                Histórico
+              </Link>
+            ) : null}
+          </>
+        }
       />
 
       {feedback ? (
@@ -377,8 +353,6 @@ export default async function HigienizacaoHortifrutiPage({
         </div>
         {podeVerGestao ? (
           <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-5 dark:bg-slate-800">
-            <input type="hidden" name="fechamentoMes" value={String(fechamentoMes)} />
-            <input type="hidden" name="fechamentoAno" value={String(fechamentoAno)} />
             <label className="text-sm text-slate-700 dark:text-slate-200">Data<input type="date" name="filtroData" defaultValue={filtroData} className={INPUT_CLASS} /></label>
             <label className="text-sm text-slate-700 dark:text-slate-200">Mês<select name="filtroMes" defaultValue={filtroMes ? String(filtroMes) : ""} className={INPUT_CLASS}><option value="">Todos</option>{MONTH_OPTIONS.map((month) => <option key={month.value} value={String(month.value)}>{month.label}</option>)}</select></label>
             <label className="text-sm text-slate-700 dark:text-slate-200">Ano<input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} /></label>
@@ -386,7 +360,7 @@ export default async function HigienizacaoHortifrutiPage({
             <label className="text-sm text-slate-700 dark:text-slate-200">Responsável<input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} /></label>
             <div className="btn-group md:col-span-5">
               <button type="submit" className="btn-primary">Aplicar Filtros</button>
-              <Link href={buildPathWithParams(new URLSearchParams({ fechamentoMes: String(fechamentoMes), fechamentoAno: String(fechamentoAno) }))} className="btn-secondary">Limpar</Link>
+              <Link href={MODULE_PATH} className="btn-secondary">Limpar</Link>
             </div>
           </form>
         ) : (
@@ -510,89 +484,6 @@ export default async function HigienizacaoHortifrutiPage({
           )}
         </ActionModal>
       ) : null}
-
-      {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroData" value={filtroData} />
-          <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
-          <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
-          <input type="hidden" name="filtroHortifruti" value={filtroHortifruti} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-          <label className="text-sm text-slate-700 dark:text-slate-200">Mês<select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>{MONTH_OPTIONS.map((month) => <option key={month.value} value={String(month.value)}>{month.label}</option>)}</select></label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">Ano<input type="number" name="fechamentoAno" min={2020} max={2100} defaultValue={fechamentoAno} className={INPUT_CLASS} /></label>
-          <div className="md:col-span-2 md:flex md:items-end"><button type="submit" className="btn-secondary">Carregar Período</button></div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} - {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-
-          <div className="mb-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">Hortifruti</th>
-                  <th className="px-3 py-2">Responsável</th>
-                  <th className="px-3 py-2">Duração</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {registrosFechamento.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400" colSpan={4}>
-                      Nenhum registro no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  registrosFechamento.map((registro) => (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">{registro.hortifruti}</td>
-                      <td className="px-3 py-2">{registro.responsavel}</td>
-                      <td className="px-3 py-2">{registro.duracaoMinutos} min</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.</p>
-              <p>Data da assinatura: <strong>{fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}</strong></p>
-              <form id={reaberturaFormId} action={reopenMonthAction} className="mt-4">
-                <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-              </form>
-              <ReopenMonthModal mes={fechamentoMes} ano={fechamentoAno} formId={reaberturaFormId} />
-            </div>
-          ) : (
-            <form action={closeMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2"><button type="submit" className="btn-primary">Fechar Mês</button></div>
-            </form>
-          )}
-        </div>
-      </section>
-      ) : null}
-
     </div>
   );
 }

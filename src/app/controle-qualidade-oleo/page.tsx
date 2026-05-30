@@ -308,8 +308,6 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
     return buildPathWithParams(query);
   })();
 
-  const historicoFechamentoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
-
   return (
     <div className="space-y-6 dark:text-slate-100">
       <DocumentosModuleHeader
@@ -324,7 +322,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
           <>
             {podeVerGestao ? (
               <Link href="/controle-qualidade-oleo/historico" className="btn-secondary">
-                Histórico Completo
+                Histórico
               </Link>
             ) : null}
           </>
@@ -684,25 +682,6 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
             </form>
           )}
         </ActionModal>
-      ) : null}
-
-      {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Fechamento Mensal
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              A revisão diária, assinatura do supervisor e fechamento mensal estão concentrados
-              no Histórico Completo.
-            </p>
-          </div>
-          <Link href={historicoFechamentoHref} className="btn-primary">
-            Abrir no Histórico Completo
-          </Link>
-        </div>
-      </section>
       ) : null}
     </div>
   );

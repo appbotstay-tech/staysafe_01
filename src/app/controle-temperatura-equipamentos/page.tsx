@@ -350,7 +350,6 @@ export default async function ControleTemperaturaEquipamentosPage({
     return buildPathWithParams(query);
   })();
 
-  const hrefHistoricoFechamento = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
   const registroFotoSelecionado = fotoId
     ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
@@ -378,7 +377,7 @@ export default async function ControleTemperaturaEquipamentosPage({
           <>
             {podeVerGestao ? (
               <Link href="/controle-temperatura-equipamentos/historico" className="btn-secondary">
-                Histórico Completo
+                Histórico
               </Link>
             ) : null}
           </>
@@ -642,7 +641,7 @@ export default async function ControleTemperaturaEquipamentosPage({
           {podeVerGestao ? (
             <>
               {" "}
-              Use os filtros ou o <strong>Histórico Completo</strong> para outras consultas.
+              Use os filtros ou o <strong>Histórico</strong> para outras consultas.
             </>
           ) : null}
         </p>
@@ -832,24 +831,6 @@ export default async function ControleTemperaturaEquipamentosPage({
             </p>
           )}
         </ActionModal>
-      ) : null}
-
-      {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Fechamento Mensal
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              A assinatura diária e o fechamento mensal foram movidos para o Histórico Completo.
-            </p>
-          </div>
-          <Link href={hrefHistoricoFechamento} className="btn-primary">
-            Abrir no Histórico Completo
-          </Link>
-        </div>
-      </section>
       ) : null}
     </div>
   );

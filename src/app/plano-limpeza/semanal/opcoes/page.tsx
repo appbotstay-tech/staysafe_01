@@ -296,7 +296,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
               ← Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/semanal/historico" className="btn-secondary">
-              Histórico Completo
+              Histórico
             </Link>
           </div>
         </div>

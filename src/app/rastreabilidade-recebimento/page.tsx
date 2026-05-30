@@ -303,8 +303,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
       })
     : [];
 
-  const historicoPeriodoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
-
   const paramsRetorno = new URLSearchParams();
   if (filtroDataInicial) paramsRetorno.set("filtroDataInicial", filtroDataInicial);
   if (filtroDataFinal) paramsRetorno.set("filtroDataFinal", filtroDataFinal);
@@ -348,7 +346,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           <>
             {podeVerGestao ? (
               <Link href="/rastreabilidade-recebimento/historico" className="btn-secondary">
-                Histórico Completo
+                Histórico
               </Link>
             ) : null}
           </>
@@ -723,26 +721,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
           </div>
         )}
       </section>
-
-      {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Fechamento Mensal
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              A revisão de notas, assinatura diária e fechamento mensal agora são feitos no
-              Histórico Completo.
-            </p>
-          </div>
-          <Link href={historicoPeriodoHref} className="btn-primary">
-            Abrir no Histórico Completo
-          </Link>
-        </div>
-      </section>
-      ) : null}
-
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
         <h2 className="font-semibold text-slate-900 dark:text-slate-100">Critérios de Conferência</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">

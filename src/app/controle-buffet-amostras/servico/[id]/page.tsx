@@ -282,7 +282,7 @@ export default async function ExecucaoServicoBuffetPage({
             </Link>
             {podeVerGestao ? (
               <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
-                Histórico Completo
+                Histórico
               </Link>
             ) : null}
           </div>

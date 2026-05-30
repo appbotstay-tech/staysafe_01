@@ -16,8 +16,7 @@ import {
   getTipoServicoLabel,
   getMonthYear,
   getTodaySystemDate,
-  isServicoDisponivelNaData,
-  parsePositiveInt
+  isServicoDisponivelNaData
 } from "./utils";
 
 const MODULE_PATH = "/controle-buffet-amostras";
@@ -49,14 +48,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const today = getTodaySystemDate();
   const currentPeriod = getMonthYear(today);
   const todayInput = formatDateInput(today);
-
-  const fechamentoMesRaw = parsePositiveInt(firstParam(params.fechamentoMes));
-  const fechamentoAnoRaw = parsePositiveInt(firstParam(params.fechamentoAno));
-  const fechamentoMes =
-    fechamentoMesRaw && fechamentoMesRaw >= 1 && fechamentoMesRaw <= 12
-      ? fechamentoMesRaw
-      : currentPeriod.mes;
-  const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
   const [servicos, registrosDia, fechamentoDiaAtual] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
@@ -140,8 +131,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
 
   const fechamentoDiaAssinado =
     fechamentoDiaAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
-  const historicoFechamentoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
-
   return (
     <div className="space-y-6 dark:text-slate-100">
       <DocumentosModuleHeader
@@ -156,7 +145,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
           <>
             {podeVerGestao ? (
               <Link href={`${MODULE_PATH}/historico`} className="btn-secondary">
-                Histórico Completo
+                Histórico
               </Link>
             ) : null}
           </>
@@ -244,25 +233,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
           </table>
         </div>
       </section>
-
-      {podeVerGestao ? (
-      <section className={CARD_CLASS}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Fechamento Mensal
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              O fechamento mensal e a assinatura do supervisor agora ficam no Histórico Completo,
-              com uma visão diária do período.
-            </p>
-          </div>
-          <Link href={historicoFechamentoHref} className="btn-primary">
-            Abrir no Histórico Completo
-          </Link>
-        </div>
-      </section>
-      ) : null}
     </div>
   );
 }
