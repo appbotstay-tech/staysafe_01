@@ -13,24 +13,13 @@ import { getCurrentUser } from "@/lib/auth-session";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
-  canCloseMonth,
   canManageModuleOptions,
-  canReopenMonth,
   canViewManagementSections,
   getRoleLabel
 } from "@/lib/rbac";
 
-import {
-  closeDailyMonthAction,
-  reopenDailyMonthAction,
-  signDailyAreaPendingItemsAction
-} from "../actions";
+import { signDailyAreaPendingItemsAction } from "../actions";
 import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS } from "../constants";
-import { ReopenMonthModal } from "../reopen-month-modal";
-import {
-  consolidateDailyRecordsByDay,
-  getDailyConsolidatedStatusClass
-} from "../service";
 import { StatusBadge } from "../status-badge";
 import {
   formatDateDisplay,
@@ -96,8 +85,6 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
-  const podeFechar = authUser ? canCloseMonth(authUser) : false;
-  const podeReabrir = authUser ? canReopenMonth(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -440,26 +427,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
       })()
     : returnTo;
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const [registrosFechamento, fechamentoAtual] = await Promise.all([
-    prisma.planoLimpezaDiarioRegistro.findMany({
-      where: { data: { gte: rangeFechamento.start, lte: rangeFechamento.end } },
-      orderBy: [{ data: "desc" }, { area: "asc" }, { updatedAt: "desc" }]
-    }),
-    prisma.planoLimpezaFechamento.findUnique({
-      where: {
-        tipo_mes_ano: { tipo: TipoPlanoLimpeza.DIARIO, mes: fechamentoMes, ano: fechamentoAno }
-      }
-    })
-  ]);
-
-  const resumoFechamentoCompleto = consolidateDailyRecordsByDay(
-    registrosFechamento,
-    formatDateInput
-  );
-  const resumoFechamento = resumoFechamentoCompleto.slice(0, 10);
-  const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoPlanoLimpeza.ASSINADO;
-  const reaberturaFormId = `reabertura-form-diario-${fechamentoMes}-${fechamentoAno}`;
+  const historicoFechamentoHref = `/plano-limpeza/diario/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
   const modalDailyRows = openedSummary
     ? openedSummary.items.length > 0
       ? openedSummary.items.map((item) => ({
@@ -724,194 +692,18 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
-
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroData" value={filtroData} />
-          <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
-          <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
-          <input type="hidden" name="filtroArea" value={filtroArea} />
-          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input
-              type="number"
-              name="fechamentoAno"
-              min={2020}
-              max={2100}
-              defaultValue={fechamentoAno}
-              className={INPUT_CLASS}
-            />
-          </label>
-
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} -{" "}
-            {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-          {resumoFechamentoCompleto.length > 10 ? (
-            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-              Exibindo os últimos 10 dias com registros neste período.
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Fechamento Mensal
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              A assinatura diária e o fechamento mensal agora ficam no Histórico Completo.
             </p>
-          ) : null}
-
-          <div className="mb-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">Total de Áreas</th>
-                  <th className="px-3 py-2">Concluídas</th>
-                  <th className="px-3 py-2">Aguardando Supervisor</th>
-                  <th className="px-3 py-2">Pendentes</th>
-                  <th className="px-3 py-2">Situação Geral</th>
-                  <th className="px-3 py-2">Detalhes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {resumoFechamento.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                      Nenhum registro no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  resumoFechamento.map((dia) => (
-                    <tr key={formatDateInput(dia.data)}>
-                      <td className="px-3 py-2">{formatDateDisplay(dia.data)}</td>
-                      <td className="px-3 py-2">{dia.totalAreas}</td>
-                      <td className="px-3 py-2">{dia.concluido}</td>
-                      <td className="px-3 py-2">{dia.aguardandoSupervisor}</td>
-                      <td className="px-3 py-2">{dia.pendente}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getDailyConsolidatedStatusClass(
-                            dia.situacaoGeral
-                          )}`}
-                        >
-                          {dia.situacaoGeral}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <details>
-                          <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200">
-                            Ver Áreas
-                          </summary>
-                          <div className="mt-2 overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700">
-                            <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-700">
-                              <thead className="bg-slate-50 dark:bg-slate-800">
-                                <tr>
-                                  <th className="px-2 py-1 text-left">Área</th>
-                                  <th className="px-2 py-1 text-left">Responsável</th>
-                                  <th className="px-2 py-1 text-left">Supervisor</th>
-                                  <th className="px-2 py-1 text-left">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {dia.detalhes.map((detalhe) => {
-                                  const detalhamentoLimpeza = detalhamentoPorArea.get(detalhe.area);
-
-                                  return (
-                                  <tr key={detalhe.id}>
-                                    <td className="px-2 py-1">
-                                      <p>{detalhe.area}</p>
-                                      {detalhamentoLimpeza ? (
-                                        <p className="mt-1 max-w-sm whitespace-pre-line break-words text-[11px] text-slate-500 dark:text-slate-400">
-                                          {detalhamentoLimpeza}
-                                        </p>
-                                      ) : null}
-                                    </td>
-                                    <td className="px-2 py-1">{detalhe.assinaturaResponsavel || "-"}</td>
-                                    <td className="px-2 py-1">{detalhe.assinaturaSupervisor || "-"}</td>
-                                    <td className="px-2 py-1">
-                                      <StatusBadge status={detalhe.status} />
-                                    </td>
-                                  </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </details>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura:{" "}
-                <strong>
-                  {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
-                </strong>
-              </p>
-              {podeReabrir ? (
-                <>
-                  <form id={reaberturaFormId} action={reopenDailyMonthAction} className="mt-4">
-                    <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                    <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                    <input type="hidden" name="returnTo" value={returnTo} />
-                  </form>
-                  <ReopenMonthModal
-                    mes={fechamentoMes}
-                    ano={fechamentoAno}
-                    formId={reaberturaFormId}
-                  />
-                </>
-              ) : null}
-            </div>
-          ) : podeFechar ? (
-            <form action={closeDailyMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Seu perfil não possui permissão para assinar o fechamento mensal.
-            </p>
-          )}
+          <Link href={historicoFechamentoHref} className="btn-primary">
+            Abrir no Histórico Completo
+          </Link>
         </div>
       </section>
       ) : null}

@@ -1,35 +1,19 @@
-import {
-  ModuloDocumento,
-  StatusFechamentoBuffetAmostra,
-  StatusItemBuffetAmostra
-} from "@prisma/client";
+import { ModuloDocumento, StatusFechamentoBuffetAmostra, StatusItemBuffetAmostra } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
 
-import { closeMonthAction, reopenMonthAction } from "./actions";
-import { ReopenMonthModal } from "./reopen-month-modal";
-import {
-  buildBuffetServiceHistoryGroups,
-  buildBuffetServiceHistoryTotals
-} from "./service-history";
-import { BuffetServiceHistoryList } from "./service-history-list";
 import { SporadicServiceModal } from "./sporadic-service-modal";
 import { ServiceStatusBadge } from "./status-badges";
 import {
   calcularStatusServico,
   formatDateDisplay,
   formatDateInput,
-  formatDateTimeDisplay,
-  getCurrentSystemDateTime,
   getServicoPeriodoLabel,
   getTipoServicoLabel,
-  getMonthDateRange,
   getMonthYear,
   getTodaySystemDate,
   isServicoDisponivelNaData,
@@ -39,23 +23,6 @@ import {
 const MODULE_PATH = "/controle-buffet-amostras";
 const CARD_CLASS =
   "bpma-card";
-const INPUT_CLASS =
-  "bpma-input";
-
-const MONTH_OPTIONS = [
-  { value: 1, label: "Janeiro" },
-  { value: 2, label: "Fevereiro" },
-  { value: 3, label: "Março" },
-  { value: 4, label: "Abril" },
-  { value: 5, label: "Maio" },
-  { value: 6, label: "Junho" },
-  { value: 7, label: "Julho" },
-  { value: 8, label: "Agosto" },
-  { value: 9, label: "Setembro" },
-  { value: 10, label: "Outubro" },
-  { value: 11, label: "Novembro" },
-  { value: 12, label: "Dezembro" }
-];
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
@@ -66,17 +33,8 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function buildPathWithParams(params: URLSearchParams): string {
-  const query = params.toString();
-  return query ? `${MODULE_PATH}?${query}` : MODULE_PATH;
-}
-
 export default async function ControleBuffetAmostrasPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
-  const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeFechar = authUser ? hasPermission(authUser, "modulo.amostras.fechar_mes") : false;
-  const podeReabrir = authUser ? hasPermission(authUser, "modulo.amostras.reabrir_mes") : false;
   const podeGerenciarOpcoes = authUser
     ? hasPermission(authUser, "modulo.amostras.gerenciar_cadastros")
     : false;
@@ -88,7 +46,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
 
-  const now = getCurrentSystemDateTime();
   const today = getTodaySystemDate();
   const currentPeriod = getMonthYear(today);
   const todayInput = formatDateInput(today);
@@ -101,7 +58,7 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
       : currentPeriod.mes;
   const fechamentoAno = fechamentoAnoRaw ?? currentPeriod.ano;
 
-  const [servicos, registrosDia, fechamentoAtual, fechamentoDiaAtual] = await Promise.all([
+  const [servicos, registrosDia, fechamentoDiaAtual] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
       where: { ativo: true },
       include: {
@@ -127,9 +84,6 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
         itemExtra: true,
         status: true
       }
-    }),
-    prisma.controleBuffetAmostraFechamento.findUnique({
-      where: { mes_ano: { mes: fechamentoMes, ano: fechamentoAno } }
     }),
     prisma.controleBuffetAmostraFechamento.findUnique({
       where: { mes_ano: { mes: currentPeriod.mes, ano: currentPeriod.ano } }
@@ -184,50 +138,9 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
     };
   });
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const registrosFechamento = await prisma.controleBuffetAmostraRegistro.findMany({
-    where: {
-      data: {
-        gte: rangeFechamento.start,
-        lte: rangeFechamento.end
-      }
-    },
-    include: {
-      servico: {
-        select: {
-          nome: true,
-          tipoServico: true,
-          dataInicio: true,
-          dataFim: true
-        }
-      }
-    },
-    orderBy: [
-      { data: "asc" },
-      { servico: { ordem: "asc" } },
-      { itemExtra: "asc" },
-      { itemNome: "asc" }
-    ]
-  });
-  const expectedItemCountsByServiceId = new Map(
-    servicos.map((servico) => [servico.id, servico.itens.length])
-  );
-  const gruposFechamento = buildBuffetServiceHistoryGroups(
-    registrosFechamento,
-    expectedItemCountsByServiceId
-  );
-  const totalizadoresFechamento = buildBuffetServiceHistoryTotals(gruposFechamento);
-
-  const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
   const fechamentoDiaAssinado =
     fechamentoDiaAtual?.status === StatusFechamentoBuffetAmostra.ASSINADO;
-  const reaberturaFormId = `reabertura-buffet-${fechamentoMes}-${fechamentoAno}`;
-  const returnTo = buildPathWithParams(
-    new URLSearchParams({
-      fechamentoMes: String(fechamentoMes),
-      fechamentoAno: String(fechamentoAno)
-    })
-  );
+  const historicoFechamentoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -334,103 +247,19 @@ export default async function ControleBuffetAmostrasPage({ searchParams }: PageP
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Fechamento Mensal
-        </h2>
-
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input
-              type="number"
-              name="fechamentoAno"
-              min={2020}
-              max={2100}
-              defaultValue={fechamentoAno}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} -{" "}
-            {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-
-          <BuffetServiceHistoryList
-            groups={gruposFechamento}
-            totals={totalizadoresFechamento}
-            emptyMessage="Nenhum registro no período selecionado."
-          />
-
-          {fechamentoAssinado ? (
-            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura:{" "}
-                <strong>
-                  {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
-                </strong>
-              </p>
-
-              {podeReabrir ? (
-                <>
-                  <form id={reaberturaFormId} action={reopenMonthAction} className="mt-4">
-                    <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                    <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                    <input type="hidden" name="returnTo" value={returnTo} />
-                  </form>
-                  <ReopenMonthModal mes={fechamentoMes} ano={fechamentoAno} formId={reaberturaFormId} />
-                </>
-              ) : (
-                <p className="mt-3 text-xs">
-                  Somente o perfil DEV pode reabrir meses em ambiente de testes.
-                </p>
-              )}
-            </div>
-          ) : podeFechar ? (
-            <form action={closeMonthAction} className="mt-4 grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Seu perfil não possui permissão para assinar o fechamento mensal.
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Fechamento Mensal
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              O fechamento mensal e a assinatura do supervisor agora ficam no Histórico Completo,
+              com uma visão diária do período.
             </p>
-          )}
+          </div>
+          <Link href={historicoFechamentoHref} className="btn-primary">
+            Abrir no Histórico Completo
+          </Link>
         </div>
       </section>
       ) : null}

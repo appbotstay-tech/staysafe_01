@@ -294,6 +294,12 @@ export async function deleteRegistroAction(formData: FormData) {
       throw new Error("Registro não encontrado.");
     }
 
+    if (!canEditRecordDate(actor, "modulo.oleo", existing.data, getTodaySystemDate())) {
+      throw new Error(
+        "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
+      );
+    }
+
     const { mes, ano } = getMonthYear(existing.data);
     if (await isMonthSigned(mes, ano)) {
       throw new Error("O mês deste registro já foi fechado e o item não pode ser excluído.");

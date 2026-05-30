@@ -1115,6 +1115,12 @@ export async function deleteItemAction(formData: FormData) {
       throw new Error("Item não encontrado.");
     }
 
+    if (!canEditRecordDate(actor, "modulo.rastreabilidade", item.data, getTodaySystemDate())) {
+      throw new Error(
+        "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
+      );
+    }
+
     const period = getMonthYear(item.data);
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês deste item já foi fechado e não pode ser excluído.");
@@ -1166,6 +1172,12 @@ export async function deleteNoteAction(formData: FormData) {
 
     if (!note) {
       throw new Error("Nota não encontrada.");
+    }
+
+    if (!canEditRecordDate(actor, "modulo.rastreabilidade", note.data, getTodaySystemDate())) {
+      throw new Error(
+        "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
+      );
     }
 
     const period = getMonthYear(note.data);

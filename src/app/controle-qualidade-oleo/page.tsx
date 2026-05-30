@@ -6,25 +6,20 @@ import {
 } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
 
 import {
-  closeMonthAction,
   createRegistroAction,
   deleteRegistroAction,
-  reopenMonthAction,
   updateRegistroAction
 } from "./actions";
 import { OilRegisterFields } from "./oil-register-fields";
 import { OilStatusBadge } from "./oil-status-badge";
 import { OIL_OPERATION_GUIDELINES } from "./options";
-import { ReopenMonthModal } from "./reopen-month-modal";
 import {
   formatDateDisplay,
   formatDateInput,
@@ -33,7 +28,6 @@ import {
   getCurrentSystemDateTime,
   getMonthDateRange,
   getMonthYear,
-  getStatusLabel,
   getTodaySystemDate,
   getYearDateRange,
   parseDateInput,
@@ -103,7 +97,6 @@ function parseStatusFilter(value: string): StatusQualidadeOleo | null {
 export default async function ControleQualidadeOleoPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeGerenciarOpcoes = authUser
     ? hasPermission(authUser, "modulo.oleo.gerenciar_cadastros")
     : false;
@@ -275,7 +268,6 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   parametrosRetorno.set("fechamentoMes", String(fechamentoMes));
   parametrosRetorno.set("fechamentoAno", String(fechamentoAno));
 
-  const returnTo = buildPathWithParams(parametrosRetorno);
   const hrefNovoRegistro = (() => {
     const query = new URLSearchParams(parametrosRetorno);
     query.set("new", "1");
@@ -316,19 +308,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
     return buildPathWithParams(query);
   })();
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const [registrosFechamento, fechamentoAtual] = await Promise.all([
-    prisma.controleQualidadeOleoRegistro.findMany({
-      where: { data: { gte: rangeFechamento.start, lte: rangeFechamento.end } },
-      orderBy: [{ data: "asc" }, { createdAt: "asc" }]
-    }),
-    prisma.controleQualidadeOleoFechamento.findUnique({
-      where: { mes_ano: { mes: fechamentoMes, ano: fechamentoAno } }
-    })
-  ]);
-
-  const fechamentoAssinado = fechamentoAtual?.status === StatusFechamentoQualidadeOleo.ASSINADO;
-  const reaberturaFormId = `reabertura-form-${fechamentoMes}-${fechamentoAno}`;
+  const historicoFechamentoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -597,7 +577,9 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
               ) : (
                 registros.map((registro) => {
                   const periodo = getMonthYear(registro.data);
-                  const bloqueado = assinadosSet.has(periodKey(periodo.mes, periodo.ano));
+                  const bloqueado =
+                    assinadosSet.has(periodKey(periodo.mes, periodo.ano)) ||
+                    formatDateInput(registro.data) !== todayInput;
                   const hrefEditar = (() => {
                     const query = new URLSearchParams(parametrosRetorno);
                     query.set("editId", String(registro.id));
@@ -627,9 +609,15 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
                       </td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
-                          <Link href={hrefEditar} className="btn-action">
-                            Editar
-                          </Link>
+                          {bloqueado ? (
+                            <button type="button" disabled className="btn-action">
+                              Editar
+                            </button>
+                          ) : (
+                            <Link href={hrefEditar} className="btn-action">
+                              Editar
+                            </Link>
+                          )}
                           {podeExcluirRegistros ? (
                             bloqueado ? (
                               <button type="button" disabled className="btn-danger">
@@ -700,121 +688,19 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
-
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroData" value={filtroData} />
-          <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
-          <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
-          <input type="hidden" name="filtroFita" value={filtroFita} />
-          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input
-              type="number"
-              name="fechamentoAno"
-              min={2020}
-              max={2100}
-              defaultValue={fechamentoAno}
-              className={INPUT_CLASS}
-            />
-          </label>
-
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Fechamento Mensal
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              A revisão diária, assinatura do supervisor e fechamento mensal estão concentrados
+              no Histórico Completo.
+            </p>
           </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} - {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-
-          <div className="mb-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">% da Fita</th>
-                  <th className="px-3 py-2">Temperatura</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Responsável</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {registrosFechamento.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400" colSpan={5}>
-                      Nenhum registro no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  registrosFechamento.map((registro) => (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">{registro.fitaOleo ?? "-"}</td>
-                      <td className={`px-3 py-2 ${registro.temperaturaCritica ? "text-red-600 dark:text-red-300" : ""}`}>
-                        {formatTemperatureDisplay(registro.temperatura)}
-                      </td>
-                      <td className="px-3 py-2">{getStatusLabel(registro.status)}</td>
-                      <td className="px-3 py-2">{registro.responsavel}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura: <strong>{fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}</strong>
-              </p>
-              <form id={reaberturaFormId} action={reopenMonthAction} className="mt-4">
-                <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-              </form>
-              <ReopenMonthModal mes={fechamentoMes} ano={fechamentoAno} formId={reaberturaFormId} />
-            </div>
-          ) : (
-            <form action={closeMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          )}
+          <Link href={historicoFechamentoHref} className="btn-primary">
+            Abrir no Histórico Completo
+          </Link>
         </div>
       </section>
       ) : null}

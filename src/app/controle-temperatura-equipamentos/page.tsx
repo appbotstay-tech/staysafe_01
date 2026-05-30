@@ -5,12 +5,10 @@ import {
   StatusOperacionalEquipamento,
   StatusTemperaturaEquipamento,
   TipoOpcaoTemperaturaEquipamento,
-  TurnoTemperaturaEquipamento,
-  type ControleTemperaturaEquipamento
+  TurnoTemperaturaEquipamento
 } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
@@ -18,17 +16,13 @@ import { getCurrentUser } from "@/lib/auth-session";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
 
 import {
-  closeMonthAction,
   createRegistroAction,
   deleteRegistroAction,
-  reopenMonthAction,
   updateRegistroAction
 } from "./actions";
 import { AutomaticCorrectiveActionFields } from "./automatic-corrective-action-fields";
-import { ReopenMonthModal } from "./reopen-month-modal";
 import { TemperatureStatusBadge } from "./temperature-status-badge";
 import {
   formatDateInput,
@@ -72,24 +66,6 @@ const MONTH_OPTIONS = [
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
-type DailyClosingStatus = "NORMAL" | "ALERTA" | "OCORRENCIA" | "PARCIAL";
-type DailyClosingSummary = {
-  key: string;
-  data: Date;
-  total: number;
-  normais: number;
-  alertas: number;
-  criticas: number;
-  justificados: number;
-  acoesCorretivas: number;
-  fotosAnexadas: number;
-  responsaveis: string[];
-  responsaveisResumo: string;
-  expectedTotal: number;
-  missingTotal: number;
-  situacao: DailyClosingStatus;
-  registros: ControleTemperaturaEquipamento[];
-};
 
 export const dynamic = "force-dynamic";
 
@@ -118,136 +94,10 @@ function parseStatusFilter(value: string): StatusTemperaturaEquipamento | null {
   return null;
 }
 
-function hasUsefulText(value: string | null): boolean {
-  return Boolean(value?.trim());
-}
-
-function summarizeResponsaveis(values: string[]): string {
-  const uniqueValues = Array.from(
-    new Set(values.map((value) => value.trim()).filter(Boolean))
-  );
-
-  if (uniqueValues.length === 0) {
-    return "-";
-  }
-
-  if (uniqueValues.length <= 2) {
-    return uniqueValues.join(", ");
-  }
-
-  return `${uniqueValues.slice(0, 2).join(", ")} +${uniqueValues.length - 2}`;
-}
-
-function isOperationalRecord(registro: ControleTemperaturaEquipamento): boolean {
+function isOperationalRecord(registro: {
+  statusOperacionalEquipamento: StatusOperacionalEquipamento;
+}): boolean {
   return isOperationalTemperatureStatus(registro.statusOperacionalEquipamento);
-}
-
-function getDailyClosingStatus(summary: {
-  total: number;
-  alertas: number;
-  criticas: number;
-  missingTotal: number;
-}): DailyClosingStatus {
-  if (summary.criticas > 0) {
-    return "OCORRENCIA";
-  }
-
-  if (summary.alertas > 0) {
-    return "ALERTA";
-  }
-
-  if (summary.missingTotal > 0 || summary.total === 0) {
-    return "PARCIAL";
-  }
-
-  return "NORMAL";
-}
-
-function getDailyClosingStatusLabel(status: DailyClosingStatus): string {
-  if (status === "NORMAL") {
-    return "Normal";
-  }
-
-  if (status === "ALERTA") {
-    return "Com alerta";
-  }
-
-  if (status === "OCORRENCIA") {
-    return "Com ocorrência";
-  }
-
-  return "Parcial";
-}
-
-function getDailyClosingStatusClassName(status: DailyClosingStatus): string {
-  if (status === "NORMAL") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
-  }
-
-  if (status === "ALERTA") {
-    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200";
-  }
-
-  if (status === "OCORRENCIA") {
-    return "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200";
-  }
-
-  return "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
-}
-
-function buildDailyClosingSummaries(
-  registros: ControleTemperaturaEquipamento[],
-  equipamentosAtivos: string[]
-): DailyClosingSummary[] {
-  const expectedTotal = equipamentosAtivos.length > 0 ? equipamentosAtivos.length * 2 : 0;
-  const grouped = new Map<string, ControleTemperaturaEquipamento[]>();
-
-  for (const registro of registros) {
-    const key = formatDateInput(registro.data);
-    grouped.set(key, [...(grouped.get(key) ?? []), registro]);
-  }
-
-  return Array.from(grouped.entries()).map(([key, dayRecords]) => {
-    const total = dayRecords.length;
-    const operationalRecords = dayRecords.filter(isOperationalRecord);
-    const justificados = total - operationalRecords.length;
-    const normais = operationalRecords.filter(
-      (registro) => registro.status === StatusTemperaturaEquipamento.CONFORME
-    ).length;
-    const alertas = operationalRecords.filter(
-      (registro) => registro.status === StatusTemperaturaEquipamento.ALERTA
-    ).length;
-    const criticas = operationalRecords.filter(
-      (registro) => registro.status === StatusTemperaturaEquipamento.CRITICO
-    ).length;
-    const acoesCorretivas = operationalRecords.filter((registro) =>
-      hasUsefulText(registro.acaoCorretiva)
-    ).length;
-    const fotosAnexadas = operationalRecords.filter(
-      (registro) => registro.fotoMimeType && registro.fotoBase64
-    ).length;
-    const responsaveis = dayRecords.map((registro) => registro.responsavel);
-    const missingTotal = expectedTotal > total ? expectedTotal - total : 0;
-    const statusBase = { total, alertas, criticas, missingTotal };
-
-    return {
-      key,
-      data: dayRecords[0]?.data ?? parseDateInput(key) ?? new Date(),
-      total,
-      normais,
-      alertas,
-      criticas,
-      justificados,
-      acoesCorretivas,
-      fotosAnexadas,
-      responsaveis,
-      responsaveisResumo: summarizeResponsaveis(responsaveis),
-      expectedTotal,
-      missingTotal,
-      situacao: getDailyClosingStatus(statusBase),
-      registros: dayRecords
-    };
-  });
 }
 
 export default async function ControleTemperaturaEquipamentosPage({
@@ -255,7 +105,6 @@ export default async function ControleTemperaturaEquipamentosPage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeGerenciarOpcoes = authUser
     ? hasPermission(authUser, "modulo.temperatura.gerenciar_cadastros")
     : false;
@@ -445,7 +294,6 @@ export default async function ControleTemperaturaEquipamentosPage({
   parametrosRetorno.set("fechamentoMes", String(fechamentoMes));
   parametrosRetorno.set("fechamentoAno", String(fechamentoAno));
 
-  const returnTo = buildPathWithParams(parametrosRetorno);
   const hrefNovoRegistro = (() => {
     const query = new URLSearchParams(parametrosRetorno);
     query.set("new", "1");
@@ -502,75 +350,16 @@ export default async function ControleTemperaturaEquipamentosPage({
     return buildPathWithParams(query);
   })();
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const [registrosFechamento, fechamentoAtual] = await Promise.all([
-    prisma.controleTemperaturaEquipamento.findMany({
-      where: { data: { gte: rangeFechamento.start, lte: rangeFechamento.end } },
-      orderBy: [{ data: "asc" }, { createdAt: "asc" }]
-    }),
-    prisma.controleTemperaturaEquipamentoFechamento.findUnique({
-      where: { mes_ano: { mes: fechamentoMes, ano: fechamentoAno } }
-    })
-  ]);
-
-  const fechamentoAssinado =
-    fechamentoAtual?.status === StatusFechamentoTemperaturaEquipamento.ASSINADO;
-  const reaberturaFormId = `reabertura-form-${fechamentoMes}-${fechamentoAno}`;
-  const resumoDiarioFechamento = buildDailyClosingSummaries(
-    registrosFechamento,
-    equipamentoOptionsAtivas
-  );
-  const resumoConsolidadoFechamento = resumoDiarioFechamento.reduce(
-    (summary, dia) => ({
-      total: summary.total + dia.total,
-      normais: summary.normais + dia.normais,
-      alertas: summary.alertas + dia.alertas,
-      criticas: summary.criticas + dia.criticas,
-      justificados: summary.justificados + dia.justificados,
-      acoesCorretivas: summary.acoesCorretivas + dia.acoesCorretivas,
-      fotosAnexadas: summary.fotosAnexadas + dia.fotosAnexadas
-    }),
-    {
-      total: 0,
-      normais: 0,
-      alertas: 0,
-      criticas: 0,
-      justificados: 0,
-      acoesCorretivas: 0,
-      fotosAnexadas: 0
-    }
-  );
-  const diaFechamentoSelecionadoKey = (() => {
-    const parsed = parseDateInput(firstParam(params.diaFechamento).trim());
-    return parsed ? formatDateInput(parsed) : "";
-  })();
-  const diaFechamentoSelecionado =
-    resumoDiarioFechamento.find((dia) => dia.key === diaFechamentoSelecionadoKey) ?? null;
-  const hrefFecharDetalheDia = buildPathWithParams(parametrosRetorno);
-  const hrefHistoricoFechamento = `/controle-temperatura-equipamentos/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}`;
-  const buildHrefDetalheDia = (dia: DailyClosingSummary) => {
-    const query = new URLSearchParams(parametrosRetorno);
-    query.set("diaFechamento", dia.key);
-    return buildPathWithParams(query);
-  };
+  const hrefHistoricoFechamento = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
   const registroFotoSelecionado = fotoId
-    ? [...registros, ...registrosFechamento].find((registro) => registro.id === fotoId) ?? null
+    ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
   const fotoSelecionadaDataUrl = registroFotoSelecionado
     ? getImageDataUrl(registroFotoSelecionado.fotoMimeType, registroFotoSelecionado.fotoBase64)
     : null;
-  const hrefFecharFoto = (() => {
+  const hrefFecharFoto = buildPathWithParams(parametrosRetorno);
+  const buildHrefFoto = (id: number) => {
     const query = new URLSearchParams(parametrosRetorno);
-    if (diaFechamentoSelecionadoKey) {
-      query.set("diaFechamento", diaFechamentoSelecionadoKey);
-    }
-    return buildPathWithParams(query);
-  })();
-  const buildHrefFoto = (id: number, manterDiaFechamento = false) => {
-    const query = new URLSearchParams(parametrosRetorno);
-    if (manterDiaFechamento && diaFechamentoSelecionadoKey) {
-      query.set("diaFechamento", diaFechamentoSelecionadoKey);
-    }
     query.set("fotoId", String(id));
     return buildPathWithParams(query);
   };
@@ -885,7 +674,9 @@ export default async function ControleTemperaturaEquipamentosPage({
               ) : (
                 registros.map((registro) => {
                   const periodo = getMonthYear(registro.data);
-                  const bloqueado = assinadosSet.has(periodKey(periodo.mes, periodo.ano));
+                  const bloqueado =
+                    assinadosSet.has(periodKey(periodo.mes, periodo.ano)) ||
+                    formatDateInput(registro.data) !== todayDateInput;
                   const hrefEditar = (() => {
                     const query = new URLSearchParams(parametrosRetorno);
                     query.set("editId", String(registro.id));
@@ -936,9 +727,15 @@ export default async function ControleTemperaturaEquipamentosPage({
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
-                          <Link href={hrefEditar} className="btn-action">
-                            Editar
-                          </Link>
+                          {bloqueado ? (
+                            <button type="button" disabled className="btn-action">
+                              Editar
+                            </button>
+                          ) : (
+                            <Link href={hrefEditar} className="btn-action">
+                              Editar
+                            </Link>
+                          )}
                           {podeExcluirRegistros ? (
                             bloqueado ? (
                               <button type="button" disabled className="btn-danger">
@@ -1008,143 +805,6 @@ export default async function ControleTemperaturaEquipamentosPage({
         </ActionModal>
       ) : null}
 
-      {podeVerGestao && diaFechamentoSelecionado ? (
-        <ActionModal
-          title={`Detalhes do dia ${formatDateDisplay(diaFechamentoSelecionado.data)}`}
-          cancelHref={hrefFecharDetalheDia}
-          description={
-            <p>
-              {diaFechamentoSelecionado.total} aferição(ões) no dia, situação{" "}
-              <strong>{getDailyClosingStatusLabel(diaFechamentoSelecionado.situacao)}</strong>.
-              {diaFechamentoSelecionado.expectedTotal > 0 ? (
-                <>
-                  {" "}
-                  Esperadas: <strong>{diaFechamentoSelecionado.expectedTotal}</strong>;
-                  pendentes: <strong>{diaFechamentoSelecionado.missingTotal}</strong>.
-                </>
-              ) : null}
-            </p>
-          }
-          maxWidthClassName="max-w-6xl"
-        >
-          <dl className="grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-7">
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Total</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.total}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Justificados</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.justificados}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Normais</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.normais}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Alertas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.alertas}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Críticas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.criticas}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Ações corretivas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.acoesCorretivas}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Fotos anexadas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {diaFechamentoSelecionado.fotosAnexadas}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Equipamento</th>
-                  <th className="px-3 py-2">Turno</th>
-                  <th className="px-3 py-2">Status operacional</th>
-                  <th className="px-3 py-2">Temperatura</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 min-w-52">Ação corretiva</th>
-                  <th className="px-3 py-2">Foto/evidência</th>
-                  <th className="px-3 py-2 min-w-44">Observação</th>
-                  <th className="px-3 py-2">Responsável</th>
-                  <th className="px-3 py-2">Aferição</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {diaFechamentoSelecionado.registros.map((registro) => {
-                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
-                  const registroEmOperacao = isOperationalRecord(registro);
-                  const observacaoRegistro = registroEmOperacao
-                    ? registro.observacoes
-                    : registro.observacaoStatusOperacional;
-
-                  return (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{registro.equipamento}</td>
-                      <td className="px-3 py-2">{getShiftLabel(registro.turno)}</td>
-                      <td className="px-3 py-2">
-                        {getOperationalStatusLabel(registro.statusOperacionalEquipamento)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatTemperatureDisplay(registro.temperaturaAferida)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {registroEmOperacao ? (
-                          <TemperatureStatusBadge status={registro.status} />
-                        ) : (
-                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            Não aplicável
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                        {registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {registroEmOperacao && hasStoredImage ? (
-                          <Link
-                            href={buildHrefFoto(registro.id, true)}
-                            scroll={false}
-                            className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline dark:text-slate-200"
-                          >
-                            Ver foto
-                          </Link>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">
-                        {observacaoRegistro?.trim() || "-"}
-                      </td>
-                      <td className="px-3 py-2">{registro.responsavel}</td>
-                      <td className="px-3 py-2">{formatDateTimeDisplay(registro.createdAt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </ActionModal>
-      ) : null}
-
       {fotoId ? (
         <ActionModal
           title="Foto da evidência"
@@ -1176,190 +836,18 @@ export default async function ControleTemperaturaEquipamentosPage({
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Fechamento Mensal</h2>
-
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroData" value={filtroData} />
-          <input type="hidden" name="filtroMes" value={filtroMes ? String(filtroMes) : ""} />
-          <input type="hidden" name="filtroAno" value={filtroAno ? String(filtroAno) : ""} />
-          <input type="hidden" name="filtroEquipamento" value={filtroEquipamento} />
-          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input
-              type="number"
-              name="fechamentoAno"
-              min={2020}
-              max={2100}
-              defaultValue={fechamentoAno}
-              className={INPUT_CLASS}
-            />
-          </label>
-
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Fechamento Mensal
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              A assinatura diária e o fechamento mensal foram movidos para o Histórico Completo.
+            </p>
           </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno} - {fechamentoAssinado ? "Assinado" : "Aberto"}
-          </p>
-
-          <dl className="mb-4 grid gap-x-4 gap-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-7">
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Dias com aferição</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoDiarioFechamento.length}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Total de aferições</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.total}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Justificados</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.justificados}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Normais</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.normais}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Alertas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.alertas}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Críticas</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.criticas}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Ações/Fotos</dt>
-              <dd className="font-semibold text-slate-900 dark:text-slate-100">
-                {resumoConsolidadoFechamento.acoesCorretivas}/{resumoConsolidadoFechamento.fotosAnexadas}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="mb-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                <tr>
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">Total</th>
-                  <th className="px-3 py-2">Justificados</th>
-                  <th className="px-3 py-2">Normais</th>
-                  <th className="px-3 py-2">Alertas</th>
-                  <th className="px-3 py-2">Críticas</th>
-                  <th className="px-3 py-2">Ações corretivas</th>
-                  <th className="px-3 py-2">Fotos anexadas</th>
-                  <th className="px-3 py-2">Responsáveis</th>
-                  <th className="px-3 py-2">Situação do dia</th>
-                  <th className="px-3 py-2">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {resumoDiarioFechamento.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400" colSpan={11}>
-                      Nenhum registro no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  resumoDiarioFechamento.map((dia) => (
-                    <tr key={dia.key}>
-                      <td className="px-3 py-2">{formatDateDisplay(dia.data)}</td>
-                      <td className="px-3 py-2">{dia.total}</td>
-                      <td className="px-3 py-2">{dia.justificados}</td>
-                      <td className="px-3 py-2">{dia.normais}</td>
-                      <td className="px-3 py-2">{dia.alertas}</td>
-                      <td className="px-3 py-2">{dia.criticas}</td>
-                      <td className="px-3 py-2">{dia.acoesCorretivas}</td>
-                      <td className="px-3 py-2">{dia.fotosAnexadas}</td>
-                      <td className="px-3 py-2">{dia.responsaveisResumo}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getDailyClosingStatusClassName(dia.situacao)}`}>
-                          {getDailyClosingStatusLabel(dia.situacao)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <Link href={buildHrefDetalheDia(dia)} scroll={false} className="btn-secondary">
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Link href={hrefHistoricoFechamento} className="btn-secondary">
-              Ver Histórico Completo
-            </Link>
-          </div>
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura: <strong>{fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}</strong>
-              </p>
-              <form id={reaberturaFormId} action={reopenMonthAction} className="mt-4">
-                <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-              </form>
-              <ReopenMonthModal mes={fechamentoMes} ano={fechamentoAno} formId={reaberturaFormId} />
-            </div>
-          ) : (
-            <form action={closeMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          )}
+          <Link href={hrefHistoricoFechamento} className="btn-primary">
+            Abrir no Histórico Completo
+          </Link>
         </div>
       </section>
       ) : null}

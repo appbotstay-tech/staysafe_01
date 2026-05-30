@@ -381,6 +381,43 @@ model LogAssinatura {
   @@map("log_assinatura")
 }
 
+model AssinaturaDiariaModulo {
+  id                    Int           @id @default(autoincrement())
+  moduloCodigo          String
+  dataReferencia        DateTime      @db.Date
+  usuarioId             Int?
+  usuarioNomeSnapshot   String
+  usuarioPerfilSnapshot PerfilUsuario
+  responsavelTecnico    Boolean       @default(true)
+  assinadoEm            DateTime      @default(now())
+  observacao            String?       @db.Text
+  criadoEm              DateTime      @default(now())
+
+  @@unique([moduloCodigo, dataReferencia])
+  @@index([moduloCodigo, assinadoEm])
+  @@index([usuarioId])
+  @@map("assinatura_diaria_modulo")
+}
+
+model FechamentoMensalModulo {
+  id                    Int           @id @default(autoincrement())
+  moduloCodigo          String
+  ano                   Int
+  mes                   Int
+  usuarioId             Int?
+  usuarioNomeSnapshot   String
+  usuarioPerfilSnapshot PerfilUsuario
+  assinadoEm            DateTime      @default(now())
+  indicadoresSnapshot   Json?
+  observacao            String?       @db.Text
+  criadoEm              DateTime      @default(now())
+
+  @@unique([moduloCodigo, ano, mes])
+  @@index([moduloCodigo, ano, mes])
+  @@index([usuarioId])
+  @@map("fechamento_mensal_modulo")
+}
+
 model HigienizacaoHortifruti {
   id               Int      @id @default(autoincrement())
   data             DateTime @db.Date

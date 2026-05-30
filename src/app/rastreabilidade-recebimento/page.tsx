@@ -1,34 +1,25 @@
 import {
   ModuloDocumento,
   Prisma,
-  StatusFechamentoRastreabilidadeRecebimento,
   StatusNotaRecebimento,
   StatusRecebimento
 } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
 
-import {
-  closeMonthAction,
-  deleteNoteAction,
-  reopenMonthAction
-} from "./actions";
+import { deleteNoteAction } from "./actions";
 import { DeleteNoteModal } from "./delete-note-modal";
 import { RECEBIMENTO_ORIENTACOES } from "./options";
-import { ReopenMonthModal } from "./reopen-month-modal";
 import { XmlImportForm } from "./xml-import-form";
 import {
   formatDateDisplay,
-  formatDateTimeDisplay,
+  formatDateInput,
   getCurrentSystemDateTime,
-  getMonthDateRange,
   getMonthYear,
   parseDateInput,
   parsePositiveInt
@@ -41,20 +32,6 @@ const CARD_CLASS =
 const INPUT_CLASS =
   "bpma-input";
 
-const MONTH_OPTIONS = [
-  { value: 1, label: "Janeiro" },
-  { value: 2, label: "Fevereiro" },
-  { value: 3, label: "Março" },
-  { value: 4, label: "Abril" },
-  { value: 5, label: "Maio" },
-  { value: 6, label: "Junho" },
-  { value: 7, label: "Julho" },
-  { value: 8, label: "Agosto" },
-  { value: 9, label: "Setembro" },
-  { value: 10, label: "Outubro" },
-  { value: 11, label: "Novembro" },
-  { value: 12, label: "Dezembro" }
-];
 const PENDING_NOTE_STATUSES = [
   StatusNotaRecebimento.PENDENTE,
   StatusNotaRecebimento.IMPORTADA,
@@ -138,8 +115,6 @@ function parsePendingStatusFilter(value: string): StatusNotaRecebimento | null {
 
 export default async function RastreabilidadeRecebimentoPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
-  const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const permitirImportacao = canImportXml(authUser?.perfil ?? null);
   const podeGerenciarOpcoes = authUser
@@ -151,10 +126,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const podeExcluirNotas = authUser
     ? hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")
     : false;
-  const podeFechar = authUser ? hasPermission(authUser, "modulo.rastreabilidade.fechar_mes") : false;
-  const podeReabrir = authUser
-    ? hasPermission(authUser, "modulo.rastreabilidade.reabrir_mes")
-    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -163,6 +134,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const now = getCurrentSystemDateTime();
+  const todayInput = formatDateInput(now);
 
   const filtroDataInicial = firstParam(params.filtroDataInicial).trim();
   const filtroDataFinal = firstParam(params.filtroDataFinal).trim();
@@ -222,57 +194,17 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     };
   }
 
-  const rangeFechamento = getMonthDateRange(fechamentoMes, fechamentoAno);
-  const [notasPendentesConferencia, notasFechamento, itensFechamento, fechamentoAtual] =
-    await Promise.all([
-      prisma.rastreabilidadeRecebimentoNota.findMany({
-        where: whereNotasPendentes,
-        include: {
-          _count: {
-            select: {
-              itens: true
-            }
-          }
-        },
-        orderBy: [{ data: "asc" }, { createdAt: "asc" }]
-      }),
-      prisma.rastreabilidadeRecebimentoNota.findMany({
-        where: {
-          data: {
-            gte: rangeFechamento.start,
-            lte: rangeFechamento.end
-          }
-        },
+  const notasPendentesConferencia = await prisma.rastreabilidadeRecebimentoNota.findMany({
+    where: whereNotasPendentes,
+    include: {
+      _count: {
         select: {
-          statusNota: true,
-          _count: {
-            select: {
-              itens: true
-            }
-          }
+          itens: true
         }
-      }),
-      prisma.rastreabilidadeRecebimentoRegistro.findMany({
-        where: {
-          data: {
-            gte: rangeFechamento.start,
-            lte: rangeFechamento.end
-          }
-        },
-        select: {
-          statusGeral: true,
-          acaoCorretiva: true
-        }
-      }),
-      prisma.rastreabilidadeRecebimentoFechamento.findUnique({
-        where: {
-          mes_ano: {
-            mes: fechamentoMes,
-            ano: fechamentoAno
-          }
-        }
-      })
-    ]);
+      }
+    },
+    orderBy: [{ data: "asc" }, { createdAt: "asc" }]
+  });
 
   const itemSearchDate = parseDateInput(buscaItemRecebido);
   const dataFabricacaoFiltro = parseDateInput(filtroDataFabricacao);
@@ -371,32 +303,7 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
       })
     : [];
 
-  const fechamentoAssinado =
-    fechamentoAtual?.status === StatusFechamentoRastreabilidadeRecebimento.ASSINADO;
-  const totalNotasFechamento = notasFechamento.length;
-  const totalNotasFinalizadas = notasFechamento.filter(
-    (nota) => nota.statusNota === StatusNotaRecebimento.FINALIZADA
-  ).length;
-  const totalNotasPendentesFechamento = totalNotasFechamento - totalNotasFinalizadas;
-  const totalItensFechamento = notasFechamento.reduce(
-    (total, nota) => total + nota._count.itens,
-    0
-  );
-  const totalItensNaoConformes = itensFechamento.filter(
-    (item) => item.statusGeral === StatusRecebimento.NAO_CONFORME
-  ).length;
-  const totalAcoesCorretivas = itensFechamento.filter(
-    (item) => item.acaoCorretiva?.trim()
-  ).length;
-  const historicoPeriodoHref = `/rastreabilidade-recebimento/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}`;
-  const fechamentoResumoCards = [
-    { label: "Notas importadas", value: totalNotasFechamento },
-    { label: "Notas finalizadas", value: totalNotasFinalizadas },
-    { label: "Notas pendentes", value: totalNotasPendentesFechamento },
-    { label: "Itens recebidos", value: totalItensFechamento },
-    { label: "Não conformidades", value: totalItensNaoConformes },
-    { label: "Ações corretivas", value: totalAcoesCorretivas }
-  ];
+  const historicoPeriodoHref = `${MODULE_PATH}/historico?filtroMes=${fechamentoMes}&filtroAno=${fechamentoAno}#fechamento-mensal`;
 
   const paramsRetorno = new URLSearchParams();
   if (filtroDataInicial) paramsRetorno.set("filtroDataInicial", filtroDataInicial);
@@ -427,8 +334,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     })
   );
   const limparBuscaItensHref = `${limparFiltrosHref}#${ITEM_SEARCH_ANCHOR}`;
-  const reaberturaFormId = `reabertura-form-${fechamentoMes}-${fechamentoAno}`;
-
   return (
     <div className="space-y-6 dark:text-slate-100">
       <DocumentosModuleHeader
@@ -621,54 +526,58 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                   </td>
                 </tr>
               ) : (
-                notasPendentesConferencia.map((nota) => (
-                  <tr key={nota.id}>
-                    <td className="px-3 py-2">{formatDateDisplay(nota.data)}</td>
-                    <td className="px-3 py-2">{nota.fornecedor}</td>
-                    <td className="px-3 py-2">
-                      <Link
-                        href={`/rastreabilidade-recebimento/nota/${nota.id}`}
-                        className="font-medium text-slate-900 underline-offset-2 hover:underline dark:text-slate-100"
-                      >
-                        {nota.notaFiscal}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{nota._count.itens}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getNotaStatusClass(
-                          nota.statusNota
-                        )}`}
-                      >
-                        {getNotaStatusLabel(nota.statusNota)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">{nota.responsavelGeral ?? "-"}</td>
-                    <td className="px-3 py-2">
-                      <div className="btn-group">
+                notasPendentesConferencia.map((nota) => {
+                  const registroDoDiaAtual = formatDateInput(nota.data) === todayInput;
+
+                  return (
+                    <tr key={nota.id}>
+                      <td className="px-3 py-2">{formatDateDisplay(nota.data)}</td>
+                      <td className="px-3 py-2">{nota.fornecedor}</td>
+                      <td className="px-3 py-2">
                         <Link
                           href={`/rastreabilidade-recebimento/nota/${nota.id}`}
-                          className="btn-action"
+                          className="font-medium text-slate-900 underline-offset-2 hover:underline dark:text-slate-100"
                         >
-                          Conferir Nota
+                          {nota.notaFiscal}
                         </Link>
-                        {podeExcluirNotas ? (
-                          <DeleteNoteModal formId={`delete-note-day-${nota.id}`} />
-                        ) : null}
-                      </div>
-                      {podeExcluirNotas ? (
-                        <form
-                          id={`delete-note-day-${nota.id}`}
-                          action={deleteNoteAction}
-                          className="hidden"
+                      </td>
+                      <td className="px-3 py-2">{nota._count.itens}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getNotaStatusClass(
+                            nota.statusNota
+                          )}`}
                         >
-                          <input type="hidden" name="notaId" value={String(nota.id)} />
-                          <input type="hidden" name="returnTo" value={returnTo} />
-                        </form>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))
+                          {getNotaStatusLabel(nota.statusNota)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{nota.responsavelGeral ?? "-"}</td>
+                      <td className="px-3 py-2">
+                        <div className="btn-group">
+                          <Link
+                            href={`/rastreabilidade-recebimento/nota/${nota.id}`}
+                            className="btn-action"
+                          >
+                            {registroDoDiaAtual ? "Conferir Nota" : "Abrir Nota"}
+                          </Link>
+                          {podeExcluirNotas && registroDoDiaAtual ? (
+                            <DeleteNoteModal formId={`delete-note-day-${nota.id}`} />
+                          ) : null}
+                        </div>
+                        {podeExcluirNotas && registroDoDiaAtual ? (
+                          <form
+                            id={`delete-note-day-${nota.id}`}
+                            action={deleteNoteAction}
+                            className="hidden"
+                          >
+                            <input type="hidden" name="notaId" value={String(nota.id)} />
+                            <input type="hidden" name="returnTo" value={returnTo} />
+                          </form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -817,153 +726,19 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
 
       {podeVerGestao ? (
       <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Fechamento Mensal
-        </h2>
-
-        <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-4 dark:bg-slate-800">
-          <input type="hidden" name="filtroDataInicial" value={filtroDataInicial} />
-          <input type="hidden" name="filtroDataFinal" value={filtroDataFinal} />
-          <input type="hidden" name="filtroFornecedor" value={filtroFornecedor} />
-          <input type="hidden" name="filtroNotaFiscal" value={filtroNotaFiscal} />
-          <input type="hidden" name="filtroResponsavel" value={filtroResponsavel} />
-          <input type="hidden" name="filtroStatus" value={filtroStatus ?? ""} />
-
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Mês
-            <select name="fechamentoMes" defaultValue={String(fechamentoMes)} className={INPUT_CLASS}>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month.value} value={String(month.value)}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Ano
-            <input
-              type="number"
-              name="fechamentoAno"
-              min={2020}
-              max={2100}
-              defaultValue={fechamentoAno}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <div className="md:col-span-2 md:flex md:items-end">
-            <button type="submit" className="btn-secondary">
-              Carregar Período
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Período: {String(fechamentoMes).padStart(2, "0")}/{fechamentoAno}
-              </p>
-              <span
-                className={`mt-2 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-                  fechamentoAssinado
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
-                }`}
-              >
-                {fechamentoAssinado ? "Fechado" : "Aberto"}
-              </span>
-            </div>
-            <Link href={historicoPeriodoHref} className="btn-secondary">
-              Ver Histórico Completo
-            </Link>
-          </div>
-
-          <div className="my-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {fechamentoResumoCards.map((item) => (
-              <div
-                key={item.label}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800"
-              >
-                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {item.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {totalNotasPendentesFechamento > 0 ? (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              <p>
-                Existem {totalNotasPendentesFechamento} notas pendentes de finalização neste
-                período.
-              </p>
-              <p className="mt-1">
-                Acesse o Histórico Completo para revisar antes de fechar.
-              </p>
-              <Link href={historicoPeriodoHref} className="btn-secondary mt-3">
-                Ver notas no histórico
-              </Link>
-            </div>
-          ) : totalNotasFechamento === 0 ? (
-            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              Nenhuma nota foi importada no período selecionado.
-            </div>
-          ) : null}
-
-          {fechamentoAssinado ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-              <p>
-                Mês assinado por <strong>{fechamentoAtual?.responsavelTecnico}</strong>.
-              </p>
-              <p>
-                Data da assinatura:{" "}
-                <strong>
-                  {fechamentoAtual ? formatDateTimeDisplay(fechamentoAtual.dataAssinatura) : "-"}
-                </strong>
-              </p>
-              {podeReabrir ? (
-                <>
-                  <form id={reaberturaFormId} action={reopenMonthAction} className="mt-4">
-                    <input type="hidden" name="mes" value={String(fechamentoMes)} />
-                    <input type="hidden" name="ano" value={String(fechamentoAno)} />
-                    <input type="hidden" name="returnTo" value={returnTo} />
-                  </form>
-                  <ReopenMonthModal
-                    mes={fechamentoMes}
-                    ano={fechamentoAno}
-                    formId={reaberturaFormId}
-                  />
-                </>
-              ) : null}
-            </div>
-          ) : podeFechar && totalNotasFechamento > 0 && totalNotasPendentesFechamento === 0 ? (
-            <form action={closeMonthAction} className="grid gap-3 md:grid-cols-2">
-              <input type="hidden" name="mes" value={String(fechamentoMes)} />
-              <input type="hidden" name="ano" value={String(fechamentoAno)} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <label className="text-sm text-slate-700 dark:text-slate-200">
-                Confirme sua Senha *
-                <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-              </label>
-              <SignatureContextCard
-                nomeUsuario={responsavelLogado}
-                perfil={perfilLogado}
-                dataHora={formatDateTimeDisplay(now)}
-              />
-              <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Fechar Mês
-                </button>
-              </div>
-            </form>
-          ) : !podeFechar ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Seu perfil não possui permissão para assinar o fechamento mensal.
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Fechamento Mensal
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              A revisão de notas, assinatura diária e fechamento mensal agora são feitos no
+              Histórico Completo.
             </p>
-          ) : null}
+          </div>
+          <Link href={historicoPeriodoHref} className="btn-primary">
+            Abrir no Histórico Completo
+          </Link>
         </div>
       </section>
       ) : null}

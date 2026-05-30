@@ -1,18 +1,16 @@
 import { Prisma, StatusQualidadeOleo } from "@prisma/client";
 import Link from "next/link";
 
-import { SignatureContextCard } from "@/components/auth/signature-context-card";
-import { ActionModal, ModalActions } from "@/components/ui/action-modal";
+import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
+import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
-import { hasPermission } from "@/lib/permissions";
+import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
+import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel } from "@/lib/rbac";
 
-import { signRegistroSupervisorAction } from "../actions";
 import { OilStatusBadge } from "../oil-status-badge";
 import {
   formatDateDisplay,
-  formatDateTimeDisplay,
   formatTemperatureDisplay,
   getMonthDateRange,
   getYearDateRange,
@@ -21,10 +19,9 @@ import {
 } from "../utils";
 
 const PAGE_PATH = "/controle-qualidade-oleo/historico";
-const CARD_CLASS =
-  "bpma-card";
-const INPUT_CLASS =
-  "bpma-input";
+const CARD_CLASS = "bpma-card";
+const INPUT_CLASS = "bpma-input";
+const MODULE_CODE = "oleo";
 
 const MONTH_OPTIONS = [
   { value: 1, label: "Janeiro" },
@@ -64,25 +61,35 @@ function parseStatusFilter(value: string): StatusQualidadeOleo | null {
   return null;
 }
 
+function isOilAlert(registro: { status: StatusQualidadeOleo; temperaturaCritica: boolean }): boolean {
+  return (
+    registro.temperaturaCritica ||
+    registro.status === StatusQualidadeOleo.ATENCAO ||
+    registro.status === StatusQualidadeOleo.ULTIMA_UTILIZACAO ||
+    registro.status === StatusQualidadeOleo.DESCARTAR
+  );
+}
+
 export default async function ControleQualidadeOleoHistoricoPage({ searchParams }: PageProps) {
   const authUser = await getCurrentUser();
-  const usuarioLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
-  const podeAssinarSupervisor = authUser
-    ? hasPermission(authUser, "modulo.oleo.assinar_historico")
-    : false;
+  const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
+  const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
-
   const filtroData = firstParam(params.filtroData).trim();
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes));
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno));
   const filtroFita = firstParam(params.filtroFita).trim();
   const filtroStatus = parseStatusFilter(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
-  const signSupervisorId = parsePositiveInt(firstParam(params.signSupervisorId));
+  const diaAberto = firstParam(params.dia).trim();
+
+  const todayMonth = getAppMonthYear(getAppDate());
+  const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
+  const selectedYear = filtroAno ?? todayMonth.ano;
+  const selectedMonthRange = getAppMonthDateRange(selectedMonth, selectedYear);
 
   const where: Prisma.ControleQualidadeOleoRegistroWhereInput = {};
   const dataFiltro = parseDateInput(filtroData);
@@ -109,15 +116,63 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
     where.responsavel = { contains: filtroResponsavel, mode: "insensitive" };
   }
 
-  const [registros, fitaOptions] = await Promise.all([
+  const [registros, registrosMensais, fitaOptions, fechamentoMensal] = await Promise.all([
     prisma.controleQualidadeOleoRegistro.findMany({
       where,
       orderBy: [{ data: "desc" }, { createdAt: "desc" }]
     }),
+    prisma.controleQualidadeOleoRegistro.findMany({
+      where: { data: { gte: selectedMonthRange.start, lte: selectedMonthRange.end } },
+      orderBy: [{ data: "desc" }, { createdAt: "desc" }]
+    }),
     prisma.controleQualidadeOleoOpcaoFita.findMany({
       orderBy: [{ ativo: "desc" }, { ordem: "asc" }, { rotulo: "asc" }]
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: MODULE_CODE,
+          ano: selectedYear,
+          mes: selectedMonth
+        }
+      }
     })
   ]);
+
+  const gruposPorDia = new Map<string, { data: Date; registros: typeof registros }>();
+  for (const registro of registros) {
+    const key = formatAppDateInput(registro.data);
+    const group = gruposPorDia.get(key) ?? { data: registro.data, registros: [] };
+    group.registros.push(registro);
+    gruposPorDia.set(key, group);
+  }
+  const grupos = Array.from(gruposPorDia.values()).sort(
+    (a, b) => b.data.getTime() - a.data.getTime()
+  );
+
+  const datasHistorico = grupos.map((grupo) => grupo.data);
+  const datasMensais = Array.from(
+    new Map(registrosMensais.map((registro) => [formatAppDateInput(registro.data), registro.data])).values()
+  );
+  const [assinaturasHistorico, assinaturasMensais] = await Promise.all([
+    datasHistorico.length
+      ? prisma.assinaturaDiariaModulo.findMany({
+          where: { moduloCodigo: MODULE_CODE, dataReferencia: { in: datasHistorico } }
+        })
+      : Promise.resolve([]),
+    datasMensais.length
+      ? prisma.assinaturaDiariaModulo.findMany({
+          where: { moduloCodigo: MODULE_CODE, dataReferencia: { in: datasMensais } }
+        })
+      : Promise.resolve([])
+  ]);
+  const assinaturasPorData = new Map(
+    assinaturasHistorico.map((assinatura) => [formatAppDateInput(assinatura.dataReferencia), assinatura])
+  );
+  const assinaturasMensaisPorData = new Set(
+    assinaturasMensais.map((assinatura) => formatAppDateInput(assinatura.dataReferencia))
+  );
+
   const parametrosRetorno = new URLSearchParams();
   if (filtroData) parametrosRetorno.set("filtroData", filtroData);
   if (filtroMes) parametrosRetorno.set("filtroMes", String(filtroMes));
@@ -125,23 +180,32 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
   if (filtroFita) parametrosRetorno.set("filtroFita", filtroFita);
   if (filtroStatus) parametrosRetorno.set("filtroStatus", filtroStatus);
   if (filtroResponsavel) parametrosRetorno.set("filtroResponsavel", filtroResponsavel);
-
   const returnTo = buildPathWithParams(parametrosRetorno);
-  const registroParaAssinaturaSupervisor = signSupervisorId
-    ? registros.find((registro) => registro.id === signSupervisorId) ??
-      (await prisma.controleQualidadeOleoRegistro.findUnique({ where: { id: signSupervisorId } }))
-    : null;
-  const signSupervisorReturnTo = (() => {
+
+  const grupoSelecionado = diaAberto ? grupos.find((grupo) => formatAppDateInput(grupo.data) === diaAberto) : null;
+  const buildOpenDayHref = (dateInput: string): string => {
     const query = new URLSearchParams(parametrosRetorno);
-    if (registroParaAssinaturaSupervisor) {
-      query.set("signSupervisorId", String(registroParaAssinaturaSupervisor.id));
-    }
+    query.set("dia", dateInput);
     return buildPathWithParams(query);
-  })();
-  const buildSignSupervisorHref = (id: number): string => {
-    const query = new URLSearchParams(parametrosRetorno);
-    query.set("signSupervisorId", String(id));
-    return buildPathWithParams(query);
+  };
+
+  const totalAlertasMensais = registrosMensais.filter(isOilAlert).length;
+  const trocaRecomendada = registrosMensais.filter(
+    (registro) => registro.status === StatusQualidadeOleo.DESCARTAR
+  ).length;
+  const diasComRegistro = new Set(registrosMensais.map((registro) => formatAppDateInput(registro.data)));
+  const indicadoresMensais = {
+    "Mês/Ano": `${String(selectedMonth).padStart(2, "0")}/${selectedYear}`,
+    "Medições realizadas": registrosMensais.length,
+    "Medições conformes": registrosMensais.filter(
+      (registro) => registro.status === StatusQualidadeOleo.ADEQUADO
+    ).length,
+    "Medições não conformes": totalAlertasMensais,
+    "Trocas recomendadas": trocaRecomendada,
+    "Ações corretivas": registrosMensais.filter((registro) => registro.observacao?.trim()).length,
+    "Dias com registro": diasComRegistro.size,
+    "Dias assinados": assinaturasMensaisPorData.size,
+    "Dias pendentes de assinatura": Math.max(diasComRegistro.size - assinaturasMensaisPorData.size, 0)
   };
 
   return (
@@ -153,15 +217,12 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
               Histórico Completo
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Consulta de todos os registros de qualidade do óleo.
-            </p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Usuário logado: {usuarioLogado} ({perfilLogado})
+              Consulta por dia, revisão do supervisor e fechamento mensal da qualidade do óleo.
             </p>
           </div>
           <div className="btn-group">
             <Link href="/controle-qualidade-oleo" className="btn-secondary">
-              ← Voltar ao Módulo
+              Voltar ao Módulo
             </Link>
           </div>
         </div>
@@ -238,7 +299,7 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Registros ({registros.length})
+          Dias no Histórico ({grupos.length})
         </h2>
 
         <div className="overflow-x-auto">
@@ -246,73 +307,39 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Data</th>
-                <th className="px-3 py-2">% da Fita</th>
-                <th className="px-3 py-2">Temperatura</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Responsável</th>
-                <th className="px-3 py-2">Supervisor</th>
-                <th className="px-3 py-2 min-w-52">Observação</th>
-                <th className="px-3 py-2">Ações</th>
+                <th className="px-3 py-2">Registros</th>
+                <th className="px-3 py-2">Status operacional</th>
+                <th className="px-3 py-2">Alertas</th>
+                <th className="px-3 py-2">Assinatura</th>
+                <th className="px-3 py-2">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {registros.length === 0 ? (
+              {grupos.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={8}>
+                  <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={6}>
                     Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
-                registros.map((registro) => {
-                  const supervisorAssinado = Boolean(registro.assinaturaSupervisorEm);
-                  const assinaturaSupervisor = supervisorAssinado ? (
-                    <div className="space-y-1">
-                      <p className="font-medium text-emerald-700 dark:text-emerald-200">
-                        Assinado pelo Supervisor
-                      </p>
-                      <p>
-                        {registro.assinaturaSupervisorNome ?? "Supervisor"}
-                        {registro.assinaturaSupervisorPerfil
-                          ? ` (${getRoleLabel(registro.assinaturaSupervisorPerfil)})`
-                          : ""}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {registro.assinaturaSupervisorEm
-                          ? formatDateTimeDisplay(registro.assinaturaSupervisorEm)
-                          : "-"}
-                      </p>
-                    </div>
-                  ) : (
-                    "Pendente de assinatura do supervisor"
-                  );
+                grupos.map((grupo) => {
+                  const key = formatAppDateInput(grupo.data);
+                  const alertas = grupo.registros.filter(isOilAlert).length;
+                  const assinatura = assinaturasPorData.get(key) ?? null;
 
                   return (
-                    <tr key={registro.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(registro.data)}</td>
-                      <td className="px-3 py-2">{registro.fitaOleo ?? "-"}</td>
-                      <td className={`px-3 py-2 ${registro.temperaturaCritica ? "text-red-600 dark:text-red-300" : ""}`}>
-                        {formatTemperatureDisplay(registro.temperatura)}
+                    <tr key={key}>
+                      <td className="px-3 py-2">{formatDateDisplay(grupo.data)}</td>
+                      <td className="px-3 py-2">{grupo.registros.length}</td>
+                      <td className="px-3 py-2">{alertas > 0 ? "Com alerta" : "Completo"}</td>
+                      <td className="px-3 py-2">{alertas}</td>
+                      <td className="px-3 py-2">
+                        <SupervisorSignatureStatus signature={assinatura} />
                       </td>
                       <td className="px-3 py-2">
-                        <OilStatusBadge status={registro.status} temperaturaCritica={registro.temperaturaCritica} />
-                      </td>
-                      <td className="px-3 py-2">{registro.responsavel}</td>
-                      <td className="px-3 py-2">{assinaturaSupervisor}</td>
-                      <td className="px-3 py-2 max-w-64 whitespace-normal break-words">{registro.observacao ?? "-"}</td>
-                      <td className="px-3 py-2">
-                        {podeAssinarSupervisor && !supervisorAssinado ? (
-                          <Link
-                            href={buildSignSupervisorHref(registro.id)}
-                            scroll={false}
-                            className="btn-action"
-                          >
-                            Assinatura Supervisor
-                          </Link>
-                        ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Sem ação
-                          </span>
-                        )}
+                        <Link href={buildOpenDayHref(key)} scroll={false} className="btn-action">
+                          Abrir
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -323,47 +350,71 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
         </div>
       </section>
 
-      {registroParaAssinaturaSupervisor &&
-      podeAssinarSupervisor &&
-      !registroParaAssinaturaSupervisor.assinaturaSupervisorEm ? (
+      <MonthlyClosureSection
+        moduleCode={MODULE_CODE}
+        month={selectedMonth}
+        year={selectedYear}
+        returnTo={returnTo}
+        indicators={indicadoresMensais}
+        signedClosure={fechamentoMensal}
+        canSign={canSignMonthly}
+        pendingDailySignatures={indicadoresMensais["Dias pendentes de assinatura"]}
+      />
+
+      {grupoSelecionado ? (
         <ActionModal
-          title="Assinatura do Supervisor"
+          title={`Registros de ${formatAppDate(grupoSelecionado.data)}`}
           cancelHref={returnTo}
+          maxWidthClassName="max-w-5xl"
           description={
             <p>
-              Registro de óleo de {formatDateDisplay(registroParaAssinaturaSupervisor.data)}.
+              Esta assinatura valida a revisão de todos os registros deste dia.
             </p>
           }
         >
-          {feedback && feedbackType === "error" ? (
-            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-              {feedback}
-            </p>
-          ) : null}
-          <form action={signRegistroSupervisorAction} className="space-y-4">
-            <input type="hidden" name="id" value={registroParaAssinaturaSupervisor.id} />
-            <input type="hidden" name="returnTo" value={signSupervisorReturnTo} />
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Deseja assinar este registro como revisado pelo supervisor?
-            </p>
-            <label className="block text-sm text-slate-700 dark:text-slate-200">
-              Confirme sua senha *
-              <input type="password" name="senhaConfirmacao" required className={INPUT_CLASS} />
-            </label>
-            <SignatureContextCard
-              nomeUsuario={usuarioLogado}
-              perfil={perfilLogado}
-              dataHora={formatDateTimeDisplay(new Date())}
+          <div className="mb-4">
+            <SupervisorSignatureStatus
+              signature={assinaturasPorData.get(formatAppDateInput(grupoSelecionado.data)) ?? null}
             />
-            <ModalActions>
-              <Link href={returnTo} className="btn-secondary text-center">
-                Cancelar
-              </Link>
-              <button type="submit" className="btn-primary">
-                Assinatura Supervisor
-              </button>
-            </ModalActions>
-          </form>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <tr>
+                  <th className="px-3 py-2">% da Fita</th>
+                  <th className="px-3 py-2">Temperatura</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Responsável</th>
+                  <th className="px-3 py-2">Observação / ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {grupoSelecionado.registros.map((registro) => (
+                  <tr key={registro.id}>
+                    <td className="px-3 py-2">{registro.fitaOleo ?? "-"}</td>
+                    <td className={`px-3 py-2 ${registro.temperaturaCritica ? "text-red-600 dark:text-red-300" : ""}`}>
+                      {formatTemperatureDisplay(registro.temperatura)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <OilStatusBadge status={registro.status} temperaturaCritica={registro.temperaturaCritica} />
+                    </td>
+                    <td className="px-3 py-2">{registro.responsavel}</td>
+                    <td className="px-3 py-2 max-w-80 whitespace-normal break-words">
+                      {registro.observacao ?? registro.orientacao}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <SignDayForm
+            moduleCode={MODULE_CODE}
+            dateInput={formatAppDateInput(grupoSelecionado.data)}
+            returnTo={buildOpenDayHref(formatAppDateInput(grupoSelecionado.data))}
+            canSign={canSignDay}
+            alreadySigned={Boolean(assinaturasPorData.get(formatAppDateInput(grupoSelecionado.data)))}
+            hasOperationalWarnings={grupoSelecionado.registros.some(isOilAlert)}
+          />
         </ActionModal>
       ) : null}
     </div>

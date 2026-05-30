@@ -1,6 +1,11 @@
 import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
+import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
+import { ActionModal } from "@/components/ui/action-modal";
+import { getCurrentUser } from "@/lib/auth-session";
+import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
+import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
 import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS, TURNO_OPTIONS } from "../../constants";
@@ -20,10 +25,9 @@ import {
 } from "../../utils";
 
 const PAGE_PATH = "/plano-limpeza/diario/historico";
-const CARD_CLASS =
-  "bpma-card";
-const INPUT_CLASS =
-  "bpma-input";
+const CARD_CLASS = "bpma-card";
+const INPUT_CLASS = "bpma-input";
+const MODULE_CODE = "limpeza_diaria";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
@@ -34,7 +38,22 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function buildPathWithParams(params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${PAGE_PATH}?${query}` : PAGE_PATH;
+}
+
+function statusLabel(status: StatusPlanoLimpeza): string {
+  if (status === StatusPlanoLimpeza.CONCLUIDO) return "Concluído";
+  if (status === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) return "Aguardando supervisor";
+  return "Pendente";
+}
+
 export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: PageProps) {
+  const authUser = await getCurrentUser();
+  const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
+  const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+
   const params = await searchParams;
   const filtroData = firstParam(params.filtroData).trim();
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes).trim());
@@ -43,6 +62,14 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
   const filtroTurno = parseTurno(firstParam(params.filtroTurno).trim());
   const filtroStatus = parseDailyStatus(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
+  const feedback = firstParam(params.feedback).trim();
+  const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
+  const diaAberto = firstParam(params.dia).trim();
+
+  const todayMonth = getAppMonthYear(getAppDate());
+  const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
+  const selectedYear = filtroAno ?? todayMonth.ano;
+  const selectedMonthRange = getAppMonthDateRange(selectedMonth, selectedYear);
 
   const where: Prisma.PlanoLimpezaDiarioRegistroWhereInput = {};
   const dataFiltro = parseDateInput(filtroData);
@@ -56,15 +83,9 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
     where.data = { gte: range.start, lte: range.end };
   }
 
-  if (filtroArea) {
-    where.area = filtroArea;
-  }
-  if (filtroTurno) {
-    where.turno = filtroTurno;
-  }
-  if (filtroStatus) {
-    where.status = filtroStatus;
-  }
+  if (filtroArea) where.area = filtroArea;
+  if (filtroTurno) where.turno = filtroTurno;
+  if (filtroStatus) where.status = filtroStatus;
   if (filtroResponsavel) {
     where.assinaturaResponsavel = { contains: filtroResponsavel, mode: "insensitive" };
   }
@@ -87,9 +108,18 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
     AND: [where, realExecutionWhere]
   };
 
-  const [registros, areaConfigs, areasHistoricas] = await Promise.all([
+  const [registros, registrosMensais, areaConfigs, areasHistoricas, fechamentoMensal] = await Promise.all([
     prisma.planoLimpezaDiarioRegistro.findMany({
       where: registrosWhere,
+      orderBy: [{ data: "desc" }, { turno: "asc" }, { area: "asc" }]
+    }),
+    prisma.planoLimpezaDiarioRegistro.findMany({
+      where: {
+        AND: [
+          { data: { gte: selectedMonthRange.start, lte: selectedMonthRange.end } },
+          realExecutionWhere
+        ]
+      },
       orderBy: [{ data: "desc" }, { turno: "asc" }, { area: "asc" }]
     }),
     prisma.planoLimpezaDiarioArea.findMany({
@@ -99,6 +129,15 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
       select: { area: true },
       distinct: ["area"],
       orderBy: { area: "asc" }
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: MODULE_CODE,
+          ano: selectedYear,
+          mes: selectedMonth
+        }
+      }
     })
   ]);
 
@@ -107,6 +146,63 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
   ).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   const resumo = consolidateDailyRecordsByDay(registros, formatDateInput);
+  const resumoMensal = consolidateDailyRecordsByDay(registrosMensais, formatDateInput);
+  const datasHistorico = resumo.map((dia) => dia.data);
+  const datasMensais = resumoMensal.map((dia) => dia.data);
+  const [assinaturasHistorico, assinaturasMensais] = await Promise.all([
+    datasHistorico.length
+      ? prisma.assinaturaDiariaModulo.findMany({
+          where: { moduloCodigo: MODULE_CODE, dataReferencia: { in: datasHistorico } }
+        })
+      : Promise.resolve([]),
+    datasMensais.length
+      ? prisma.assinaturaDiariaModulo.findMany({
+          where: { moduloCodigo: MODULE_CODE, dataReferencia: { in: datasMensais } }
+        })
+      : Promise.resolve([])
+  ]);
+  const assinaturasPorData = new Map(
+    assinaturasHistorico.map((assinatura) => [formatAppDateInput(assinatura.dataReferencia), assinatura])
+  );
+  const assinaturasMensaisPorData = new Set(
+    assinaturasMensais.map((assinatura) => formatAppDateInput(assinatura.dataReferencia))
+  );
+
+  const parametrosRetorno = new URLSearchParams();
+  if (filtroData) parametrosRetorno.set("filtroData", filtroData);
+  if (filtroMes) parametrosRetorno.set("filtroMes", String(filtroMes));
+  if (filtroAno) parametrosRetorno.set("filtroAno", String(filtroAno));
+  if (filtroArea) parametrosRetorno.set("filtroArea", filtroArea);
+  if (filtroTurno) parametrosRetorno.set("filtroTurno", filtroTurno);
+  if (filtroStatus) parametrosRetorno.set("filtroStatus", filtroStatus);
+  if (filtroResponsavel) parametrosRetorno.set("filtroResponsavel", filtroResponsavel);
+  const returnTo = buildPathWithParams(parametrosRetorno);
+  const buildOpenDayHref = (dateInput: string): string => {
+    const query = new URLSearchParams(parametrosRetorno);
+    query.set("dia", dateInput);
+    return buildPathWithParams(query);
+  };
+  const diaSelecionado = diaAberto
+    ? resumo.find((dia) => formatDateInput(dia.data) === diaAberto)
+    : null;
+  const registrosDiaSelecionado = diaSelecionado
+    ? registros.filter((registro) => formatDateInput(registro.data) === formatDateInput(diaSelecionado.data))
+    : [];
+
+  const totalAreasCompletas = resumoMensal.reduce((total, dia) => total + dia.concluido, 0);
+  const totalAreasParciais = resumoMensal.reduce((total, dia) => total + dia.aguardandoSupervisor, 0);
+  const totalPendencias = resumoMensal.reduce((total, dia) => total + dia.pendente, 0);
+  const indicadoresMensais = {
+    "Mês/Ano": `${String(selectedMonth).padStart(2, "0")}/${selectedYear}`,
+    "Dias previstos": selectedMonthRange.end.getUTCDate(),
+    "Dias executados": resumoMensal.length,
+    "Áreas completas": totalAreasCompletas,
+    "Áreas parciais": totalAreasParciais,
+    "Itens/locais executados": registrosMensais.filter((registro) => registro.status !== StatusPlanoLimpeza.PENDENTE).length,
+    "Pendências": totalPendencias,
+    "Dias assinados": assinaturasMensaisPorData.size,
+    "Dias pendentes de assinatura": Math.max(resumoMensal.length - assinaturasMensaisPorData.size, 0)
+  };
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -114,15 +210,15 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Histórico do Plano Diário
+              Histórico Completo - Plano Diário
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Visão principal por dia com acesso limpo ao detalhamento.
+              Visão por dia com revisão do supervisor e fechamento mensal.
             </p>
           </div>
           <div className="btn-group">
             <Link href="/plano-limpeza/diario" className="btn-secondary">
-              ← Voltar ao Módulo
+              Voltar ao Módulo
             </Link>
             <Link href="/plano-limpeza/diario/opcoes" className="btn-secondary">
               Gerenciar Plano Diário
@@ -130,6 +226,18 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
           </div>
         </div>
       </section>
+
+      {feedback ? (
+        <section
+          className={`rounded-xl border p-4 text-sm ${
+            feedbackType === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          }`}
+        >
+          {feedback}
+        </section>
+      ) : null}
 
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Filtros</h2>
@@ -151,23 +259,14 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Ano
-            <input
-              type="number"
-              name="filtroAno"
-              min={2020}
-              max={2100}
-              defaultValue={filtroAno ?? ""}
-              className={INPUT_CLASS}
-            />
+            <input type="number" name="filtroAno" min={2020} max={2100} defaultValue={filtroAno ?? ""} className={INPUT_CLASS} />
           </label>
           <label className="text-sm text-slate-700 dark:text-slate-200">
             Área
             <select name="filtroArea" defaultValue={filtroArea} className={INPUT_CLASS}>
               <option value="">Todas</option>
               {areaOptions.map((area) => (
-                <option key={area} value={area}>
-                  {area}
-                </option>
+                <option key={area} value={area}>{area}</option>
               ))}
             </select>
           </label>
@@ -176,9 +275,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
             <select name="filtroTurno" defaultValue={filtroTurno ?? ""} className={INPUT_CLASS}>
               <option value="">Todos</option>
               {TURNO_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
+                <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>
           </label>
@@ -187,30 +284,17 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
             <select name="filtroStatus" defaultValue={filtroStatus ?? ""} className={INPUT_CLASS}>
               <option value="">Todos</option>
               {DAILY_STATUS_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
+                <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>
           </label>
-
           <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-3">
             Responsável pela Limpeza
-            <input
-              type="text"
-              name="filtroResponsavel"
-              defaultValue={filtroResponsavel}
-              className={INPUT_CLASS}
-            />
+            <input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
           </label>
-
           <div className="btn-group md:col-span-6">
-            <button type="submit" className="btn-primary">
-              Aplicar Filtros
-            </button>
-            <Link href={PAGE_PATH} className="btn-secondary">
-              Limpar
-            </Link>
+            <button type="submit" className="btn-primary">Aplicar Filtros</button>
+            <Link href={PAGE_PATH} className="btn-secondary">Limpar</Link>
           </div>
         </form>
       </section>
@@ -229,41 +313,38 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
                 <th className="px-3 py-2">Aguardando Supervisor</th>
                 <th className="px-3 py-2">Pendentes</th>
                 <th className="px-3 py-2">Situação Geral</th>
+                <th className="px-3 py-2">Assinatura</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {resumo.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
                 resumo.map((dia) => {
-                  const hrefDia = `/plano-limpeza/diario/historico/dia/${encodeURIComponent(
-                    formatDateInput(dia.data)
-                  )}`;
-
+                  const dateInput = formatDateInput(dia.data);
                   return (
-                    <tr key={formatDateInput(dia.data)}>
+                    <tr key={dateInput}>
                       <td className="px-3 py-2">{formatDateDisplay(dia.data)}</td>
                       <td className="px-3 py-2">{dia.totalAreas}</td>
                       <td className="px-3 py-2">{dia.concluido}</td>
                       <td className="px-3 py-2">{dia.aguardandoSupervisor}</td>
                       <td className="px-3 py-2">{dia.pendente}</td>
                       <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getDailyConsolidatedStatusClass(
-                            dia.situacaoGeral
-                          )}`}
-                        >
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getDailyConsolidatedStatusClass(dia.situacaoGeral)}`}>
                           {dia.situacaoGeral}
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <Link href={hrefDia} className="btn-action">
-                          Abrir Dia
+                        <SupervisorSignatureStatus signature={assinaturasPorData.get(dateInput) ?? null} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link href={buildOpenDayHref(dateInput)} scroll={false} className="btn-action">
+                          Abrir
                         </Link>
                       </td>
                     </tr>
@@ -274,6 +355,70 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
           </table>
         </div>
       </section>
+
+      <MonthlyClosureSection
+        moduleCode={MODULE_CODE}
+        month={selectedMonth}
+        year={selectedYear}
+        returnTo={returnTo}
+        indicators={indicadoresMensais}
+        signedClosure={fechamentoMensal}
+        canSign={canSignMonthly}
+        pendingDailySignatures={indicadoresMensais["Dias pendentes de assinatura"]}
+      />
+
+      {diaSelecionado ? (
+        <ActionModal
+          title={`Plano Diário de ${formatAppDate(diaSelecionado.data)}`}
+          cancelHref={returnTo}
+          maxWidthClassName="max-w-6xl"
+          description={<p>Esta assinatura valida a revisão de todos os registros deste dia.</p>}
+        >
+          <div className="mb-4">
+            <SupervisorSignatureStatus
+              signature={assinaturasPorData.get(formatAppDateInput(diaSelecionado.data)) ?? null}
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <tr>
+                  <th className="px-3 py-2">Área</th>
+                  <th className="px-3 py-2">Item/local</th>
+                  <th className="px-3 py-2">Turno</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Responsável</th>
+                  <th className="px-3 py-2">Supervisor</th>
+                  <th className="px-3 py-2">Observações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {registrosDiaSelecionado.map((registro) => (
+                  <tr key={registro.id}>
+                    <td className="px-3 py-2">{registro.area}</td>
+                    <td className="px-3 py-2">{registro.itemDescricao ?? "-"}</td>
+                    <td className="px-3 py-2">{registro.turno}</td>
+                    <td className="px-3 py-2">{statusLabel(registro.status)}</td>
+                    <td className="px-3 py-2">{registro.assinaturaResponsavel || "-"}</td>
+                    <td className="px-3 py-2">{registro.assinaturaSupervisor || "-"}</td>
+                    <td className="px-3 py-2 max-w-80 whitespace-normal break-words">
+                      {registro.observacaoSupervisor ?? registro.observacaoResponsavel ?? registro.observacao ?? "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <SignDayForm
+            moduleCode={MODULE_CODE}
+            dateInput={formatAppDateInput(diaSelecionado.data)}
+            returnTo={buildOpenDayHref(formatAppDateInput(diaSelecionado.data))}
+            canSign={canSignDay}
+            alreadySigned={Boolean(assinaturasPorData.get(formatAppDateInput(diaSelecionado.data)))}
+            hasOperationalWarnings={diaSelecionado.pendente > 0 || diaSelecionado.aguardandoSupervisor > 0}
+          />
+        </ActionModal>
+      ) : null}
     </div>
   );
 }
