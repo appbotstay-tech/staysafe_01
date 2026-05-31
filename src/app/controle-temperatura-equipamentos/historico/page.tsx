@@ -9,6 +9,7 @@ import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
+import { getImageDataUrl } from "@/lib/image-upload";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
@@ -100,6 +101,7 @@ export default async function ControleTemperaturaHistoricoPage({
   const filtroStatus = parseStatusFilter(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const diaAberto = firstParam(params.dia).trim();
+  const fotoId = parsePositiveInt(firstParam(params.fotoId));
 
   const todayMonth = getAppMonthYear(getAppDate());
   const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
@@ -201,6 +203,23 @@ export default async function ControleTemperaturaHistoricoPage({
     query.set("dia", dateInput);
     return buildPathWithParams(query);
   };
+  const buildOpenPhotoHref = (registroId: number): string => {
+    const query = new URLSearchParams(parametrosRetorno);
+    if (grupoSelecionado) {
+      query.set("dia", formatAppDateInput(grupoSelecionado.data));
+    }
+    query.set("fotoId", String(registroId));
+    return buildPathWithParams(query);
+  };
+  const closePhotoHref = grupoSelecionado
+    ? buildOpenDayHref(formatAppDateInput(grupoSelecionado.data))
+    : returnTo;
+  const registroFotoSelecionado = fotoId
+    ? registros.find((registro) => registro.id === fotoId) ?? null
+    : null;
+  const fotoSelecionadaDataUrl = registroFotoSelecionado
+    ? getImageDataUrl(registroFotoSelecionado.fotoMimeType, registroFotoSelecionado.fotoBase64)
+    : null;
 
   const diasComRegistro = new Set(registrosMensais.map((registro) => formatAppDateInput(registro.data)));
   const equipamentosMonitorados = new Set(registrosMensais.map((registro) => registro.equipamento));
@@ -398,6 +417,7 @@ export default async function ControleTemperaturaHistoricoPage({
                   const observacaoRegistro = registroEmOperacao
                     ? registro.observacoes
                     : registro.observacaoStatusOperacional;
+                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
 
                   return (
                     <tr key={registro.id}>
@@ -415,7 +435,19 @@ export default async function ControleTemperaturaHistoricoPage({
                         )}
                       </td>
                       <td className="px-3 py-2">{registroEmOperacao ? registro.acaoCorretiva ?? "-" : "-"}</td>
-                      <td className="px-3 py-2">{registro.fotoMimeType && registro.fotoBase64 ? "Sim" : "-"}</td>
+                      <td className="px-3 py-2">
+                        {hasStoredImage ? (
+                          <Link
+                            href={buildOpenPhotoHref(registro.id)}
+                            scroll={false}
+                            className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline dark:text-slate-200"
+                          >
+                            Ver foto
+                          </Link>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2 max-w-80 whitespace-normal break-words">{observacaoRegistro?.trim() || "-"}</td>
                     </tr>
@@ -432,6 +464,35 @@ export default async function ControleTemperaturaHistoricoPage({
             alreadySigned={Boolean(assinaturasPorData.get(formatAppDateInput(grupoSelecionado.data)))}
             hasOperationalWarnings={grupoSelecionado.registros.some(isTemperatureAlert)}
           />
+        </ActionModal>
+      ) : null}
+
+      {fotoId ? (
+        <ActionModal
+          title="Foto da evidência"
+          cancelHref={closePhotoHref}
+          maxWidthClassName="max-w-4xl"
+          description={
+            registroFotoSelecionado ? (
+              <p>
+                {registroFotoSelecionado.equipamento} em{" "}
+                {formatDateDisplay(registroFotoSelecionado.data)}.
+              </p>
+            ) : null
+          }
+        >
+          {fotoSelecionadaDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fotoSelecionadaDataUrl}
+              alt={`Foto do registro ${registroFotoSelecionado?.id ?? fotoId}`}
+              className="max-h-[75vh] w-full rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+            />
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Não foi possível carregar a imagem anexada.
+            </p>
+          )}
         </ActionModal>
       ) : null}
     </div>

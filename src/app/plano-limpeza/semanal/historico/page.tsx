@@ -2,6 +2,7 @@ import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
 import { MonthlyClosureSection } from "@/components/historico/technical-signature";
+import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   formatAppDateInput,
@@ -10,14 +11,18 @@ import {
   getAppMonthYear
 } from "@/lib/date-time";
 import { canSignModuleMonthlyClosure } from "@/lib/module-signatures";
+import { hasAnyPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRoleLabel, type UserRole } from "@/lib/rbac";
 
+import { signWeeklyAreaSupervisorAction } from "../../actions";
 import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../../constants";
 import { consolidateWeeklyExecutionsByAreaWeek } from "../../service";
 import { StatusBadge } from "../../status-badge";
 import {
   formatDateDisplay,
   formatDateInput,
+  formatDateTimeDisplay,
   formatWeeklyExecutionQuando,
   getWeekDateRangeForDate,
   getMonthDateRange,
@@ -53,20 +58,12 @@ function includesIgnoreCase(text: string, search: string): boolean {
   return text.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"));
 }
 
-function getWeeklyRecordStatus(record: {
-  status: StatusPlanoLimpeza;
-  assinaturaResponsavel: string;
-  assinaturaSupervisor: string;
-}): StatusPlanoLimpeza {
-  if (record.assinaturaResponsavel.trim() && record.assinaturaSupervisor.trim()) {
-    return StatusPlanoLimpeza.CONCLUIDO;
-  }
+function buildAreaWeekKey(area: string, weekStart: Date): string {
+  return `${area}|${formatDateInput(weekStart)}`;
+}
 
-  if (record.assinaturaResponsavel.trim()) {
-    return StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR;
-  }
-
-  return record.status;
+function getOperationalStatusFromSummary(statusGeral: "Pendente" | "Parcial" | "Concluído"): StatusPlanoLimpeza {
+  return statusGeral === "Concluído" ? StatusPlanoLimpeza.CONCLUIDO : StatusPlanoLimpeza.PENDENTE;
 }
 
 export default async function PlanoLimpezaSemanalHistoricoPage({
@@ -74,8 +71,16 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const canSignWeeklySupervisor = authUser
+    ? hasAnyPermission(authUser, [
+        "modulo.limpeza_semanal.assinar_todos",
+        "modulo.limpeza_semanal.assinar_historico"
+      ])
+    : false;
 
   const params = await searchParams;
+  const feedback = firstParam(params.feedback).trim();
+  const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const filtroData = firstParam(params.filtroData).trim();
   const filtroMes = parsePositiveInt(firstParam(params.filtroMes).trim());
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno).trim());
@@ -83,10 +88,21 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const filtroStatus = parseWeeklyStatus(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
+  const areaAberta = firstParam(params.areaAberta).trim();
+  const semanaInicioAberta = firstParam(params.semanaInicio).trim();
   const todayMonth = getAppMonthYear(getAppDate());
   const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
   const selectedYear = filtroAno ?? todayMonth.ano;
   const selectedMonthRange = getAppMonthDateRange(selectedMonth, selectedYear);
+  const returnParams = new URLSearchParams();
+  if (filtroData) returnParams.set("filtroData", filtroData);
+  if (filtroMes) returnParams.set("filtroMes", String(filtroMes));
+  if (filtroAno) returnParams.set("filtroAno", String(filtroAno));
+  if (filtroArea) returnParams.set("filtroArea", filtroArea);
+  if (filtroStatus) returnParams.set("filtroStatus", filtroStatus);
+  if (filtroResponsavel) returnParams.set("filtroResponsavel", filtroResponsavel);
+  if (filtroItem) returnParams.set("filtroItem", filtroItem);
+  const filteredReturnTo = buildPathWithParams(returnParams);
 
   const where: Prisma.PlanoLimpezaSemanalExecucaoWhereInput = {};
   const dataFiltro = parseDateInput(filtroData);
@@ -120,6 +136,9 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         assinaturaResponsavel: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
+        assinaturaSupervisorNomeUsuario: true,
+        assinaturaSupervisorPerfil: true,
+        assinaturaSupervisorDataHora: true,
         status: true,
         observacaoResponsavel: true,
         observacaoSupervisor: true,
@@ -154,6 +173,9 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         assinaturaResponsavel: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
+        assinaturaSupervisorNomeUsuario: true,
+        assinaturaSupervisorPerfil: true,
+        assinaturaSupervisorDataHora: true,
         status: true,
         observacaoResponsavel: true,
         observacaoSupervisor: true,
@@ -205,6 +227,49 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 
   const summariesAll = consolidateWeeklyExecutionsByAreaWeek(rawRecords);
   const monthlySummaries = consolidateWeeklyExecutionsByAreaWeek(rawMonthlyRecords);
+  const recordsByAreaWeek = new Map<string, typeof rawRecords>();
+  for (const record of rawRecords) {
+    const weekRange = getWeekDateRangeForDate(record.dataExecucao);
+    const key = buildAreaWeekKey(record.area, weekRange.start);
+    const records = recordsByAreaWeek.get(key);
+    if (records) {
+      records.push(record);
+    } else {
+      recordsByAreaWeek.set(key, [record]);
+    }
+  }
+
+  const supervisorSignatureByAreaWeek = new Map<
+    string,
+    {
+      signedCount: number;
+      totalCount: number;
+      isFullySigned: boolean;
+      supervisorLabel: string;
+      firstSignedRecord: (typeof rawRecords)[number] | null;
+    }
+  >();
+  for (const [key, records] of recordsByAreaWeek.entries()) {
+    const signedRecords = records.filter(
+      (record) => record.assinaturaSupervisor.trim().length > 0
+    );
+    const supervisorNames = Array.from(
+      new Set(signedRecords.map((record) => record.assinaturaSupervisor.trim()))
+    ).filter(Boolean);
+    supervisorSignatureByAreaWeek.set(key, {
+      signedCount: signedRecords.length,
+      totalCount: records.length,
+      isFullySigned: records.length > 0 && signedRecords.length === records.length,
+      supervisorLabel:
+        supervisorNames.length === 0
+          ? "-"
+          : supervisorNames.length === 1
+            ? supervisorNames[0]
+            : "Múltiplos",
+      firstSignedRecord: signedRecords[0] ?? null
+    });
+  }
+
   const filteredByItemAreas =
     filtroItem.trim().length > 0
       ? new Set(
@@ -215,10 +280,20 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       : null;
 
   const summaries = summariesAll.filter((summary) => {
+    const signature = supervisorSignatureByAreaWeek.get(
+      buildAreaWeekKey(summary.area, summary.weekStart)
+    );
     if (filtroArea && summary.area !== filtroArea) {
       return false;
     }
-    if (filtroStatus && summary.status !== filtroStatus) {
+    if (filtroStatus === StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR) {
+      if (summary.pendingItems > 0 || signature?.isFullySigned) {
+        return false;
+      }
+    } else if (
+      filtroStatus &&
+      getOperationalStatusFromSummary(summary.statusGeral) !== filtroStatus
+    ) {
       return false;
     }
     if (filtroResponsavel && !includesIgnoreCase(summary.assinaturaResponsavel, filtroResponsavel)) {
@@ -231,22 +306,45 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
     return true;
   });
 
-  const filteredRecords = rawRecords.filter((record) => {
-    const itemNome = record.itemDescricao ?? record.item.oQueLimpar;
-    if (filtroArea && record.area !== filtroArea) {
-      return false;
-    }
-    if (filtroStatus && getWeeklyRecordStatus(record) !== filtroStatus) {
-      return false;
-    }
-    if (filtroResponsavel && !includesIgnoreCase(record.assinaturaResponsavel, filtroResponsavel)) {
-      return false;
-    }
-    if (filtroItem && !includesIgnoreCase(itemNome, filtroItem)) {
-      return false;
-    }
-    return true;
-  });
+  const buildOpenSummaryHref = (summary: (typeof summaries)[number]) => {
+    const openParams = new URLSearchParams(returnParams);
+    openParams.set("areaAberta", summary.area);
+    openParams.set("semanaInicio", formatDateInput(summary.weekStart));
+    return buildPathWithParams(openParams);
+  };
+
+  const selectedSummary =
+    areaAberta && semanaInicioAberta
+      ? summaries.find(
+          (summary) =>
+            summary.area === areaAberta &&
+            formatDateInput(summary.weekStart) === semanaInicioAberta
+        )
+      : null;
+  const selectedSummaryKey = selectedSummary
+    ? buildAreaWeekKey(selectedSummary.area, selectedSummary.weekStart)
+    : "";
+  const selectedRecords = selectedSummary
+    ? [...(recordsByAreaWeek.get(selectedSummaryKey) ?? [])].sort((a, b) => {
+        const areaDiff = a.area.localeCompare(b.area, "pt-BR");
+        if (areaDiff !== 0) {
+          return areaDiff;
+        }
+
+        return (a.itemDescricao ?? a.item.oQueLimpar).localeCompare(
+          b.itemDescricao ?? b.item.oQueLimpar,
+          "pt-BR"
+        );
+      })
+    : [];
+  const selectedSignature = selectedSummary
+    ? supervisorSignatureByAreaWeek.get(selectedSummaryKey) ?? null
+    : null;
+  const canShowWeeklyAreaSignatureForm =
+    Boolean(selectedSummary) &&
+    canSignWeeklySupervisor &&
+    selectedSummary!.pendingItems === 0 &&
+    !selectedSignature?.isFullySigned;
 
   const observacoesPorAreaSemana = new Map<string, number>();
   for (const record of rawRecords) {
@@ -340,6 +438,18 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         </div>
       </section>
 
+      {feedback ? (
+        <section
+          className={`rounded-xl border p-4 text-sm ${
+            feedbackType === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          }`}
+        >
+          {feedback}
+        </section>
+      ) : null}
+
       <section className={CARD_CLASS}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Filtros</h2>
         <form method="get" className="grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-6 dark:bg-slate-800">
@@ -410,106 +520,300 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
           Execuções por Área ({summaries.length})
         </h2>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+          <table className="min-w-[1120px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <tr>
                 <th className="px-3 py-2">Semana</th>
                 <th className="px-3 py-2">Área</th>
                 <th className="px-3 py-2">Itens Configurados</th>
-                <th className="px-3 py-2">Responsável</th>
+                <th className="px-3 py-2">Itens Executados</th>
+                <th className="px-3 py-2">Pendentes</th>
+                <th className="px-3 py-2">Status Operacional</th>
+                <th className="px-3 py-2">Assinatura</th>
                 <th className="px-3 py-2">Supervisor</th>
                 <th className="px-3 py-2">Observações</th>
-                <th className="px-3 py-2">Status Geral</th>
+                <th className="px-3 py-2">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {summaries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={10} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhuma execução encontrada.
                   </td>
                 </tr>
               ) : (
-                summaries.map((summary) => (
-                  <tr key={`${summary.area}-${formatDateInput(summary.weekStart)}`}>
-                    <td className="px-3 py-2">
-                      {formatDateDisplay(summary.weekStart)} até {formatDateDisplay(summary.weekEnd)}
-                    </td>
-                    <td className="px-3 py-2">{summary.area}</td>
-                    <td className="px-3 py-2">{summary.totalRegistrosOriginais}</td>
-                    <td className="px-3 py-2">{summary.assinaturaResponsavel || "-"}</td>
-                    <td className="px-3 py-2">{summary.assinaturaSupervisor || "-"}</td>
-                    <td className="px-3 py-2">
-                      {(observacoesPorAreaSemana.get(
-                        `${summary.area}|${formatDateInput(summary.weekStart)}`
-                      ) ?? 0) || "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={summary.statusGeral} />
-                    </td>
-                  </tr>
-                ))
+                summaries.map((summary) => {
+                  const key = buildAreaWeekKey(summary.area, summary.weekStart);
+                  const signature = supervisorSignatureByAreaWeek.get(key);
+                  const assinaturaCompleta = Boolean(signature?.isFullySigned);
+                  return (
+                    <tr key={key}>
+                      <td className="px-3 py-2">
+                        {formatDateDisplay(summary.weekStart)} até{" "}
+                        {formatDateDisplay(summary.weekEnd)}
+                      </td>
+                      <td className="px-3 py-2">{summary.area}</td>
+                      <td className="px-3 py-2">{summary.totalRegistrosOriginais}</td>
+                      <td className="px-3 py-2">{summary.completedItems}</td>
+                      <td className="px-3 py-2">{summary.pendingItems}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={summary.statusGeral} />
+                      </td>
+                      <td className="px-3 py-2">
+                        {assinaturaCompleta ? (
+                          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                            Assinado pelo Supervisor
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                            Pendente de assinatura do supervisor
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {assinaturaCompleta ? signature?.supervisorLabel : "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {(observacoesPorAreaSemana.get(key) ?? 0) || "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link href={buildOpenSummaryHref(summary)} className="btn-secondary">
+                          Abrir
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </section>
 
-      <section className={CARD_CLASS}>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Itens/Locais Executados ({filteredRecords.length})
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1180px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <tr>
-                <th className="px-3 py-2">Semana</th>
-                <th className="px-3 py-2">Área</th>
-                <th className="px-3 py-2">O que limpar</th>
-                <th className="px-3 py-2">Produto</th>
-                <th className="px-3 py-2">Quando</th>
-                <th className="px-3 py-2">Setor</th>
-                <th className="px-3 py-2">Funcionário</th>
-                <th className="px-3 py-2">Responsável</th>
-                <th className="px-3 py-2">Supervisor</th>
-                <th className="px-3 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="px-3 py-3 text-slate-500 dark:text-slate-400">
-                    Nenhum item/local encontrado.
-                  </td>
-                </tr>
-              ) : (
-                filteredRecords.map((record) => (
-                    <tr key={record.id}>
-                      <td className="px-3 py-2">{formatDateDisplay(record.dataExecucao)}</td>
-                      <td className="px-3 py-2">{record.area}</td>
-                      <td className="px-3 py-2">{record.itemDescricao ?? record.item.oQueLimpar}</td>
-                      <td className="px-3 py-2">{record.qualProduto ?? record.item.qualProduto}</td>
-                      <td className="px-3 py-2">
-                        {formatWeeklyExecutionQuando({
-                          assinaturaResponsavel: record.assinaturaResponsavel,
-                          assinaturaResponsavelDataHora: record.assinaturaResponsavelDataHora,
-                          quando: record.quando
-                        })}
-                      </td>
-                      <td className="px-3 py-2">{record.setorResponsavel ?? record.item.setorResponsavel ?? "-"}</td>
-                      <td className="px-3 py-2">{record.funcionarioResponsavel ?? record.item.quem}</td>
-                      <td className="px-3 py-2">{record.assinaturaResponsavel || "-"}</td>
-                      <td className="px-3 py-2">{record.assinaturaSupervisor || "-"}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={getWeeklyRecordStatus(record)} />
+      {selectedSummary ? (
+        <ActionModal
+          title="Detalhes da Área na Semana"
+          cancelHref={filteredReturnTo}
+          maxWidthClassName="max-w-6xl"
+          description={
+            <>
+              {selectedSummary.area} · {formatDateDisplay(selectedSummary.weekStart)} até{" "}
+              {formatDateDisplay(selectedSummary.weekEnd)}
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
+                  Status operacional
+                </p>
+                <div className="mt-2">
+                  <StatusBadge status={selectedSummary.statusGeral} />
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
+                  Itens configurados
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedSummary.totalRegistrosOriginais}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
+                  Itens executados
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedSummary.completedItems}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
+                  Pendentes
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedSummary.pendingItems}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    Assinatura do Supervisor
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    A assinatura valida a revisão da área inteira nesta semana.
+                  </p>
+                </div>
+                {selectedSignature?.isFullySigned ? (
+                  <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    Assinado pelo Supervisor
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    Pendente de assinatura do supervisor
+                  </span>
+                )}
+              </div>
+
+              {selectedSignature?.isFullySigned && selectedSignature.firstSignedRecord ? (
+                <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                  <div>
+                    <dt className="font-medium text-slate-500 dark:text-slate-400">Nome</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">
+                      {selectedSignature.supervisorLabel}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500 dark:text-slate-400">Perfil</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">
+                      {selectedSignature.firstSignedRecord.assinaturaSupervisorPerfil
+                        ? getRoleLabel(
+                            selectedSignature.firstSignedRecord
+                              .assinaturaSupervisorPerfil as UserRole
+                          )
+                        : "-"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500 dark:text-slate-400">
+                      Data e hora
+                    </dt>
+                    <dd className="text-slate-900 dark:text-slate-100">
+                      {selectedSignature.firstSignedRecord.assinaturaSupervisorDataHora
+                        ? formatDateTimeDisplay(
+                            selectedSignature.firstSignedRecord.assinaturaSupervisorDataHora
+                          )
+                        : "-"}
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+
+              {!selectedSignature?.isFullySigned && selectedSummary.pendingItems > 0 ? (
+                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  A assinatura do supervisor fica disponível quando todos os itens da área
+                  estiverem executados.
+                </p>
+              ) : null}
+
+              {canShowWeeklyAreaSignatureForm ? (
+                <form action={signWeeklyAreaSupervisorAction} className="mt-4 grid gap-3 md:grid-cols-2">
+                  <input type="hidden" name="area" value={selectedSummary.area} />
+                  <input
+                    type="hidden"
+                    name="weekStart"
+                    value={formatDateInput(selectedSummary.weekStart)}
+                  />
+                  <input
+                    type="hidden"
+                    name="returnTo"
+                    value={buildOpenSummaryHref(selectedSummary)}
+                  />
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Senha para confirmar
+                    <input
+                      type="password"
+                      name="senhaConfirmacao"
+                      required
+                      autoComplete="current-password"
+                      className={INPUT_CLASS}
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Observação
+                    <input
+                      type="text"
+                      name="observacaoAssinatura"
+                      className={INPUT_CLASS}
+                      placeholder="Opcional"
+                    />
+                  </label>
+                  <div className="md:col-span-2">
+                    <button type="submit" className="btn-primary">
+                      Assinatura Supervisor
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[1040px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2">O que limpar</th>
+                    <th className="px-3 py-2">Produto</th>
+                    <th className="px-3 py-2">Quando</th>
+                    <th className="px-3 py-2">Setor</th>
+                    <th className="px-3 py-2">Funcionário</th>
+                    <th className="px-3 py-2">Status do item</th>
+                    <th className="px-3 py-2">Responsável</th>
+                    <th className="px-3 py-2">Observações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {selectedRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                        Nenhum item/local encontrado para esta área e semana.
                       </td>
                     </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                  ) : (
+                    selectedRecords.map((record) => {
+                      const statusItem = record.assinaturaResponsavel.trim()
+                        ? "Concluído"
+                        : "Pendente";
+                      const observacoes = [
+                        record.observacaoResponsavel,
+                        record.observacaoSupervisor
+                      ]
+                        .filter(Boolean)
+                        .join(" | ");
+
+                      return (
+                        <tr key={record.id}>
+                          <td className="px-3 py-2">
+                            {record.itemDescricao ?? record.item.oQueLimpar}
+                          </td>
+                          <td className="px-3 py-2">
+                            {record.qualProduto ?? record.item.qualProduto}
+                          </td>
+                          <td className="px-3 py-2">
+                            {formatWeeklyExecutionQuando({
+                              assinaturaResponsavel: record.assinaturaResponsavel,
+                              assinaturaResponsavelDataHora:
+                                record.assinaturaResponsavelDataHora,
+                              quando: record.quando
+                            })}
+                          </td>
+                          <td className="px-3 py-2">
+                            {record.setorResponsavel ?? record.item.setorResponsavel ?? "-"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {record.funcionarioResponsavel ?? record.item.quem}
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={statusItem} />
+                          </td>
+                          <td className="px-3 py-2">
+                            {record.assinaturaResponsavel || "-"}
+                          </td>
+                          <td className="px-3 py-2">{observacoes || "-"}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </ActionModal>
+      ) : null}
 
       <MonthlyClosureSection
         moduleCode={MODULE_CODE}

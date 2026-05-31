@@ -18,6 +18,7 @@ import {
   ensureCanManageOptions,
   ensureCanReopenMonth,
   ensureCanSignResponsible,
+  ensureAnyPermission,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -31,6 +32,8 @@ import {
 } from "./service";
 import {
   getCurrentSystemDateTime,
+  getWeekDateRangeForDate,
+  formatDateInput,
   getMonthDateRange,
   getMonthYear,
   parseDateInput,
@@ -1293,6 +1296,121 @@ export async function updateWeeklyRecordAction(formData: FormData) {
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Checklist Semanal Assinado com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function signWeeklyAreaSupervisorAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, SEMANAL_HISTORY_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureAnyPermission(
+      actor,
+      [
+        "modulo.limpeza_semanal.assinar_todos",
+        "modulo.limpeza_semanal.assinar_historico"
+      ],
+      "Seu perfil não pode assinar a supervisão do plano semanal."
+    );
+
+    const area = getInputValue(formData, "area");
+    ensureNonEmpty(area, "Área");
+
+    const weekStartRaw = getInputValue(formData, "weekStart");
+    const weekStart = parseDateInput(weekStartRaw);
+    if (!weekStart) {
+      throw new Error("Semana inválida para assinatura.");
+    }
+
+    const weekRange = getWeekDateRangeForDate(weekStart);
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+    const observacaoAssinatura = getInputValue(formData, "observacaoAssinatura");
+
+    const records = await prisma.planoLimpezaSemanalExecucao.findMany({
+      where: {
+        area,
+        dataExecucao: {
+          gte: weekRange.start,
+          lte: weekRange.end
+        }
+      },
+      select: {
+        id: true,
+        dataExecucao: true,
+        assinaturaResponsavel: true,
+        assinaturaResponsavelUsuarioId: true,
+        assinaturaSupervisor: true
+      }
+    });
+
+    if (records.length === 0) {
+      throw new Error("Não há registros para esta área e semana.");
+    }
+
+    const periods = new Map(
+      records.map((record) => {
+        const period = getMonthYear(record.dataExecucao);
+        return [`${period.ano}-${period.mes}`, period];
+      })
+    );
+    for (const period of periods.values()) {
+      if (await isMonthSigned(TipoPlanoLimpeza.SEMANAL, period.mes, period.ano)) {
+        throw new Error("Esta área/semana pertence a um período fechado e não pode ser alterada.");
+      }
+    }
+
+    const pendingResponsibleRecords = records.filter(
+      (record) => record.assinaturaResponsavel.trim().length === 0
+    );
+    if (pendingResponsibleRecords.length > 0) {
+      throw new Error(
+        "A assinatura do supervisor só fica disponível quando todos os itens da área estiverem executados."
+      );
+    }
+
+    const pendingSupervisorRecords = records.filter(
+      (record) => record.assinaturaSupervisor.trim().length === 0
+    );
+    if (pendingSupervisorRecords.length === 0) {
+      throw new Error("Esta área/semana já foi assinada pelo supervisor.");
+    }
+
+    if (pendingSupervisorRecords.some((record) => isSameResponsibleUser(record, actor))) {
+      throw new Error(SELF_SUPERVISION_MESSAGE);
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+    const signedAt = getCurrentSystemDateTime();
+    const updateData: Prisma.PlanoLimpezaSemanalExecucaoUpdateManyMutationInput = {
+      assinaturaSupervisor: actor.nomeCompleto,
+      assinaturaSupervisorUsuarioId: actor.id,
+      assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
+      assinaturaSupervisorPerfil: actor.perfil,
+      assinaturaSupervisorDataHora: signedAt,
+      status: StatusPlanoLimpeza.CONCLUIDO
+    };
+    if (observacaoAssinatura) {
+      updateData.observacaoSupervisor = observacaoAssinatura;
+    }
+
+    await prisma.planoLimpezaSemanalExecucao.updateMany({
+      where: { id: { in: pendingSupervisorRecords.map((record) => record.id) } },
+      data: updateData
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "SUPERVISOR",
+      modulo: "plano-limpeza/semanal",
+      referenciaId: `${area}|${formatDateInput(weekRange.start)}`,
+      observacao: observacaoAssinatura || null
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Área da Semana Assinada pelo Supervisor.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
