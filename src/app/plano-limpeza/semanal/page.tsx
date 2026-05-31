@@ -73,17 +73,13 @@ type WeeklyExecutionPageRecord = {
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
   itemDescricao: string | null;
-  qualProduto: string | null;
   quando: string | null;
-  setorResponsavel: string | null;
   funcionarioResponsavel: string | null;
   item: {
     id: number;
     ordem: number;
     oQueLimpar: string;
-    qualProduto: string;
     quando: string | null;
-    setorResponsavel: string | null;
     quem: string;
   };
 };
@@ -162,7 +158,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const filtroAnoRaw = firstParam(params.filtroAno).trim();
   const filtroArea = firstParam(params.filtroArea).trim();
   const filtroStatusRaw = firstParam(params.filtroStatus).trim();
-  const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
 
   const hasManualFilters =
@@ -173,7 +168,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         filtroAnoRaw ||
         filtroArea ||
         filtroStatusRaw ||
-        filtroResponsavel ||
         filtroItem
     );
 
@@ -217,9 +211,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         dataExecucao: true,
         area: true,
         itemDescricao: true,
-        qualProduto: true,
         quando: true,
-        setorResponsavel: true,
         funcionarioResponsavel: true,
         assinaturaResponsavel: true,
         assinaturaResponsavelUsuarioId: true,
@@ -231,9 +223,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             id: true,
             ordem: true,
             oQueLimpar: true,
-            qualProduto: true,
             quando: true,
-            setorResponsavel: true,
             quem: true
           }
         }
@@ -277,9 +267,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
     if (!summaryMatchesStatus(summary, recordsById, filtroStatus)) {
       return false;
     }
-    if (filtroResponsavel && !includesIgnoreCase(summary.assinaturaResponsavel, filtroResponsavel)) {
-      return false;
-    }
     if (filteredByItemNames && !summary.recordIds.some((id) => filteredByItemNames.has(id))) {
       return false;
     }
@@ -307,9 +294,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         select: {
           id: true,
           itemDescricao: true,
-          qualProduto: true,
           quando: true,
-          setorResponsavel: true,
           funcionarioResponsavel: true,
           status: true,
           assinaturaResponsavel: true,
@@ -323,9 +308,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               id: true,
               ordem: true,
               oQueLimpar: true,
-              qualProduto: true,
               quando: true,
-              setorResponsavel: true,
               quem: true
             }
           }
@@ -372,7 +355,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   if (filtroAno) paramsRetorno.set("filtroAno", String(filtroAno));
   if (filtroArea) paramsRetorno.set("filtroArea", filtroArea);
   if (filtroStatus) paramsRetorno.set("filtroStatus", filtroStatus);
-  if (filtroResponsavel) paramsRetorno.set("filtroResponsavel", filtroResponsavel);
   if (filtroItem) paramsRetorno.set("filtroItem", filtroItem);
   const returnTo = buildPathWithParams(paramsRetorno);
 
@@ -488,11 +470,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                 ))}
               </select>
             </label>
-            <label className="text-sm text-slate-700 dark:text-slate-200">
-              Responsável
-              <input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
-            </label>
-
             <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-3">
               Item
               <input type="text" name="filtroItem" defaultValue={filtroItem} className={INPUT_CLASS} />
@@ -570,14 +547,13 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                 <th className="px-3 py-2">Área</th>
                 <th className="px-3 py-2">Itens</th>
                 <th className="px-3 py-2">Status da Área</th>
-                <th className="px-3 py-2">Responsável</th>
                 <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {summaries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                     Nenhuma área semanal encontrada.
                   </td>
                 </tr>
@@ -606,7 +582,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
                       <td className="px-3 py-2">
                         <StatusBadge status={summary.statusGeral} />
                       </td>
-                      <td className="px-3 py-2">{summary.assinaturaResponsavel || "-"}</td>
                       <td className="px-3 py-2">
                         {bloqueado ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">Bloqueado</span>
@@ -650,9 +625,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
               id: executionItem.item.id,
               ordem: executionItem.item.ordem,
               oQueLimpar: executionItem.itemDescricao ?? executionItem.item.oQueLimpar,
-              qualProduto: executionItem.qualProduto ?? executionItem.item.qualProduto,
-              setorResponsavel: executionItem.setorResponsavel ?? executionItem.item.setorResponsavel,
-              quem: executionItem.funcionarioResponsavel ?? executionItem.item.quem
+              quem:
+                executionItem.assinaturaResponsavel ||
+                executionItem.funcionarioResponsavel ||
+                executionItem.item.quem
             }
           }))}
         />

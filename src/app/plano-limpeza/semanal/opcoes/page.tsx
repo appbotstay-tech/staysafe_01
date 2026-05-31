@@ -110,10 +110,7 @@ function WeeklyItemFields(props: {
     area: string;
     ordem: number;
     oQueLimpar: string;
-    qualProduto: string;
     quando?: string | null;
-    setorResponsavel: string;
-    quem: string;
     ativo: boolean;
   };
 }) {
@@ -121,10 +118,7 @@ function WeeklyItemFields(props: {
     area: "",
     ordem: 1,
     oQueLimpar: "",
-    qualProduto: "",
     quando: null,
-    setorResponsavel: "",
-    quem: "",
     ativo: true
   };
 
@@ -169,38 +163,6 @@ function WeeklyItemFields(props: {
         />
       </label>
       <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
-        Qual produto usar? *
-        <input
-          type="text"
-          name="qualProduto"
-          required
-          defaultValue={getDraftValue(props.params, "qualProduto", defaults.qualProduto)}
-          className={INPUT_CLASS}
-          placeholder="Ex.: Oasis Pro Peroxide + Álcool A&B"
-        />
-      </label>
-      <label className="text-sm text-slate-700 dark:text-slate-200">
-        Qual setor responsável?
-        <input
-          type="text"
-          name="setorResponsavel"
-          defaultValue={getDraftValue(props.params, "setorResponsavel", defaults.setorResponsavel)}
-          className={INPUT_CLASS}
-          placeholder="Ex.: A&B, Cozinha, Almoxarifado"
-        />
-      </label>
-      <label className="text-sm text-slate-700 dark:text-slate-200">
-        Funcionário responsável? *
-        <input
-          type="text"
-          name="quem"
-          required
-          defaultValue={getDraftValue(props.params, "quem", defaults.quem)}
-          className={INPUT_CLASS}
-          placeholder="Nome ou equipe responsável"
-        />
-      </label>
-      <label className="text-sm text-slate-700 dark:text-slate-200">
         Status
         <select
           name="ativo"
@@ -395,10 +357,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
               area: "",
               ordem: 1,
               oQueLimpar: "",
-              qualProduto: "",
               quando: null,
-              setorResponsavel: "",
-              quem: "",
               ativo: true
             }}
           />
@@ -439,20 +398,6 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           Ordem {item.ordem} • {item.oQueLimpar}
                         </p>
-                        <dl className="mt-2 grid gap-1 text-sm text-slate-700 dark:text-slate-200 md:grid-cols-2">
-                          <div>
-                            <dt className="font-medium">Produto</dt>
-                            <dd>{item.qualProduto}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium">Setor responsável</dt>
-                            <dd>{item.setorResponsavel || "-"}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium">Funcionário responsável</dt>
-                            <dd>{item.quem}</dd>
-                          </div>
-                        </dl>
                         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                           {item.ativo ? "Ativo" : "Inativo"}
                         </p>
@@ -558,7 +503,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                   Editar Item do Plano Semanal
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Ajuste área, produto, frequência, setor e responsável do item.
+                  Ajuste área, ordem, item/local e status do item.
                 </p>
               </div>
               <Link href={PAGE_PATH} className="btn-secondary shrink-0" scroll={false}>
@@ -581,10 +526,7 @@ export default async function PlanoLimpezaSemanalOpcoesPage({ searchParams }: Pa
                   area: itemEmEdicao.area,
                   ordem: itemEmEdicao.ordem,
                   oQueLimpar: itemEmEdicao.oQueLimpar,
-                  qualProduto: itemEmEdicao.qualProduto,
                   quando: itemEmEdicao.quando,
-                  setorResponsavel: itemEmEdicao.setorResponsavel ?? "",
-                  quem: itemEmEdicao.quem,
                   ativo: itemEmEdicao.ativo
                 }}
               />

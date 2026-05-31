@@ -185,9 +185,6 @@ function buildWeeklyConfigItemErrorReturnTo(returnTo: string, formData: FormData
     "area",
     "ordem",
     "oQueLimpar",
-    "qualProduto",
-    "setorResponsavel",
-    "quem",
     "ativo"
   ]) {
     url.searchParams.set(key, getInputValue(formData, key));
@@ -1768,25 +1765,20 @@ export async function createWeeklyConfigItemAction(formData: FormData) {
 
     const area = await ensureWeeklyAreaName(getInputValue(formData, "area"));
     const oQueLimpar = getInputValue(formData, "oQueLimpar");
-    const qualProduto = getInputValue(formData, "qualProduto");
-    const setorResponsavel = getInputValue(formData, "setorResponsavel");
-    const quem = getInputValue(formData, "quem");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
     const ativo = getInputValue(formData, "ativo") !== "false";
 
     ensureNonEmpty(oQueLimpar, "Item/local específico");
-    ensureNonEmpty(qualProduto, "Qual produto usar");
-    ensureNonEmpty(quem, "Funcionário responsável");
 
     await prisma.$transaction(async (tx) => {
       await tx.planoLimpezaSemanalItem.create({
         data: {
           area,
           oQueLimpar,
-          qualProduto,
+          qualProduto: "",
           quando: null,
-          setorResponsavel: setorResponsavel || null,
-          quem,
+          setorResponsavel: null,
+          quem: "",
           ordem,
           ativo
         }
@@ -1829,15 +1821,10 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
 
     const area = await ensureWeeklyAreaName(getInputValue(formData, "area"));
     const oQueLimpar = getInputValue(formData, "oQueLimpar");
-    const qualProduto = getInputValue(formData, "qualProduto");
-    const setorResponsavel = getInputValue(formData, "setorResponsavel");
-    const quem = getInputValue(formData, "quem");
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
 
     ensureNonEmpty(oQueLimpar, "Item/local específico");
-    ensureNonEmpty(qualProduto, "Qual produto usar");
-    ensureNonEmpty(quem, "Funcionário responsável");
 
     await prisma.$transaction(async (tx) => {
       await tx.planoLimpezaSemanalItem.update({
@@ -1845,9 +1832,6 @@ export async function updateWeeklyConfigItemAction(formData: FormData) {
         data: {
           area,
           oQueLimpar,
-          qualProduto,
-          setorResponsavel: setorResponsavel || null,
-          quem,
           ordem,
           ativo
         }

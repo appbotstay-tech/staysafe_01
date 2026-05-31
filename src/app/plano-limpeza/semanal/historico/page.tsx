@@ -86,7 +86,6 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const filtroAno = parsePositiveInt(firstParam(params.filtroAno).trim());
   const filtroArea = firstParam(params.filtroArea).trim();
   const filtroStatus = parseWeeklyStatus(firstParam(params.filtroStatus).trim());
-  const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
   const areaAberta = firstParam(params.areaAberta).trim();
   const semanaInicioAberta = firstParam(params.semanaInicio).trim();
@@ -100,7 +99,6 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   if (filtroAno) returnParams.set("filtroAno", String(filtroAno));
   if (filtroArea) returnParams.set("filtroArea", filtroArea);
   if (filtroStatus) returnParams.set("filtroStatus", filtroStatus);
-  if (filtroResponsavel) returnParams.set("filtroResponsavel", filtroResponsavel);
   if (filtroItem) returnParams.set("filtroItem", filtroItem);
   const filteredReturnTo = buildPathWithParams(returnParams);
 
@@ -143,16 +141,12 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         observacaoResponsavel: true,
         observacaoSupervisor: true,
         itemDescricao: true,
-        qualProduto: true,
         quando: true,
-        setorResponsavel: true,
         funcionarioResponsavel: true,
         item: {
           select: {
             oQueLimpar: true,
-            qualProduto: true,
             quando: true,
-            setorResponsavel: true,
             quem: true
           }
         }
@@ -180,16 +174,12 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         observacaoResponsavel: true,
         observacaoSupervisor: true,
         itemDescricao: true,
-        qualProduto: true,
         quando: true,
-        setorResponsavel: true,
         funcionarioResponsavel: true,
         item: {
           select: {
             oQueLimpar: true,
-            qualProduto: true,
             quando: true,
-            setorResponsavel: true,
             quem: true
           }
         }
@@ -294,9 +284,6 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       filtroStatus &&
       getOperationalStatusFromSummary(summary.statusGeral) !== filtroStatus
     ) {
-      return false;
-    }
-    if (filtroResponsavel && !includesIgnoreCase(summary.assinaturaResponsavel, filtroResponsavel)) {
       return false;
     }
     if (filteredByItemAreas && !filteredByItemAreas.has(summary.area)) {
@@ -494,11 +481,6 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
               ))}
             </select>
           </label>
-          <label className="text-sm text-slate-700 dark:text-slate-200">
-            Responsável
-            <input type="text" name="filtroResponsavel" defaultValue={filtroResponsavel} className={INPUT_CLASS} />
-          </label>
-
           <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-3">
             Item
             <input type="text" name="filtroItem" defaultValue={filtroItem} className={INPUT_CLASS} />
@@ -743,23 +725,20 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[1040px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <table className="min-w-[760px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
                 <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   <tr>
                     <th className="px-3 py-2">O que limpar</th>
-                    <th className="px-3 py-2">Produto</th>
                     <th className="px-3 py-2">Quando</th>
-                    <th className="px-3 py-2">Setor</th>
                     <th className="px-3 py-2">Funcionário</th>
                     <th className="px-3 py-2">Status do item</th>
-                    <th className="px-3 py-2">Responsável</th>
                     <th className="px-3 py-2">Observações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {selectedRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                      <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                         Nenhum item/local encontrado para esta área e semana.
                       </td>
                     </tr>
@@ -774,14 +753,16 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                       ]
                         .filter(Boolean)
                         .join(" | ");
+                      const funcionario =
+                        record.assinaturaResponsavel.trim() ||
+                        record.funcionarioResponsavel?.trim() ||
+                        record.item.quem.trim() ||
+                        "-";
 
                       return (
                         <tr key={record.id}>
                           <td className="px-3 py-2">
                             {record.itemDescricao ?? record.item.oQueLimpar}
-                          </td>
-                          <td className="px-3 py-2">
-                            {record.qualProduto ?? record.item.qualProduto}
                           </td>
                           <td className="px-3 py-2">
                             {formatWeeklyExecutionQuando({
@@ -791,17 +772,9 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                               quando: record.quando
                             })}
                           </td>
-                          <td className="px-3 py-2">
-                            {record.setorResponsavel ?? record.item.setorResponsavel ?? "-"}
-                          </td>
-                          <td className="px-3 py-2">
-                            {record.funcionarioResponsavel ?? record.item.quem}
-                          </td>
+                          <td className="px-3 py-2">{funcionario}</td>
                           <td className="px-3 py-2">
                             <StatusBadge status={statusItem} />
-                          </td>
-                          <td className="px-3 py-2">
-                            {record.assinaturaResponsavel || "-"}
                           </td>
                           <td className="px-3 py-2">{observacoes || "-"}</td>
                         </tr>
