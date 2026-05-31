@@ -73,8 +73,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
   const canSignWeeklySupervisor = authUser
     ? hasAnyPermission(authUser, [
+        "usuarios.responsavel_tecnico",
         "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico"
+        "modulo.limpeza_semanal.assinar_historico",
+        "modulo.limpeza_semanal.assinar_dia"
       ])
     : false;
 
@@ -628,7 +630,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                     Assinatura do Supervisor
                   </h3>
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                    A assinatura valida a revisão da área inteira nesta semana.
+                    Esta assinatura valida a revisão de todos os itens desta área nesta semana.
                   </p>
                 </div>
                 {selectedSignature?.isFullySigned ? (
@@ -717,7 +719,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                   </label>
                   <div className="md:col-span-2">
                     <button type="submit" className="btn-primary">
-                      Assinatura Supervisor
+                      Assinar área da semana
                     </button>
                   </div>
                 </form>

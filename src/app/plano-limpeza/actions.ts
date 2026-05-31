@@ -1307,8 +1307,10 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
     ensureAnyPermission(
       actor,
       [
+        "usuarios.responsavel_tecnico",
         "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico"
+        "modulo.limpeza_semanal.assinar_historico",
+        "modulo.limpeza_semanal.assinar_dia"
       ],
       "Seu perfil não pode assinar a supervisão do plano semanal."
     );
