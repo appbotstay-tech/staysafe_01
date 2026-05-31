@@ -1,15 +1,14 @@
 import { StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
-import { updateWeeklyRecordAction } from "../actions";
+import { signWeeklyAreaSupervisorAction, updateWeeklyRecordAction } from "../actions";
 import { StatusBadge } from "../status-badge";
-import { formatDateDisplay } from "../utils";
+import { formatDateDisplay, formatDateInput } from "../utils";
 
 type WeeklySignChecklistModalProps = {
   closeHref: string;
   returnTo: string;
   usuarioAssinando: string;
-  usuarioAssinandoId: number | null;
   podeAssinarSupervisor: boolean;
   dataHoraAtual: string;
   execution: {
@@ -31,17 +30,13 @@ type WeeklySignChecklistModalProps = {
     id: number;
     status: StatusPlanoLimpeza;
     assinaturaResponsavel: string;
-    assinaturaResponsavelUsuarioId: number | null;
-    assinaturaSupervisor: string;
     observacaoResponsavel: string | null;
-    observacaoSupervisor: string | null;
     etapa: "responsavel" | "supervisor" | null;
     quandoAssinado: string;
     item: {
       id: number;
       ordem: number;
       oQueLimpar: string;
-      quem: string;
     };
   }>;
 };
@@ -50,7 +45,6 @@ export function WeeklySignChecklistModal({
   closeHref,
   returnTo,
   usuarioAssinando,
-  usuarioAssinandoId,
   podeAssinarSupervisor,
   dataHoraAtual,
   execution,
@@ -84,12 +78,6 @@ export function WeeklySignChecklistModal({
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Funcionário/execução</p>
-            <p className="font-medium text-slate-800 dark:text-slate-100">
-              {execution.assinaturaResponsavel || "-"}
-            </p>
-          </div>
-          <div>
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Supervisor (área)</p>
             <p className="font-medium text-slate-800 dark:text-slate-100">
               {execution.assinaturaSupervisor || "-"}
@@ -112,63 +100,105 @@ export function WeeklySignChecklistModal({
           </div>
         </div>
 
+        <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Assinatura do Supervisor
+              </h4>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Esta assinatura valida a revisão de todos os itens desta área nesta semana.
+              </p>
+            </div>
+            {execution.assinaturaSupervisor.trim() ? (
+              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                Assinado pelo Supervisor
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                Pendente de assinatura do supervisor
+              </span>
+            )}
+          </div>
+
+          {!execution.assinaturaSupervisor.trim() && execution.pendingItems > 0 ? (
+            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              A assinatura do supervisor fica disponível quando todos os itens da área
+              estiverem executados.
+            </p>
+          ) : null}
+
+          {!execution.assinaturaSupervisor.trim() &&
+          execution.pendingItems === 0 &&
+          podeAssinarSupervisor ? (
+            <form action={signWeeklyAreaSupervisorAction} className="mt-4 grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="area" value={execution.area} />
+              <input type="hidden" name="weekStart" value={formatDateInput(execution.weekStart)} />
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Senha para confirmar
+                <input
+                  type="password"
+                  name="senhaConfirmacao"
+                  required
+                  autoComplete="current-password"
+                  className="bpma-input"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Observação
+                <input
+                  type="text"
+                  name="observacaoAssinatura"
+                  className="bpma-input"
+                  placeholder="Opcional"
+                />
+              </label>
+              <div className="md:col-span-2">
+                <button type="submit" className="btn-primary">
+                  Assinar área da semana
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="border-b border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
             Itens/Locais da Área ({items.length})
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
+            <table className="min-w-[820px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
               <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <tr>
-                  <th className="px-3 py-2">Ordem</th>
                   <th className="px-3 py-2">O que limpar</th>
                   <th className="px-3 py-2">Quando</th>
-                  <th className="px-3 py-2">Funcionário</th>
-                  <th className="px-3 py-2">Executor</th>
-                  <th className="px-3 py-2">Assinatura do Supervisor</th>
+                  <th className="px-3 py-2">Responsável pela limpeza</th>
+                  <th className="px-3 py-2">Status do item</th>
                   <th className="px-3 py-2">Observações</th>
-                  <th className="px-3 py-2">Obs. Supervisor</th>
-                  <th className="px-3 py-2">Status do Item</th>
                   <th className="px-3 py-2">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                    <td colSpan={6} className="px-3 py-2 text-slate-500 dark:text-slate-400">
                       Nenhum item encontrado para esta execução semanal.
                     </td>
                   </tr>
                 ) : (
-                  items.map((executionItem) => {
-                    const supervisorMesmoExecutor =
-                      executionItem.etapa === "supervisor" &&
-                      ((usuarioAssinandoId !== null &&
-                        executionItem.assinaturaResponsavelUsuarioId === usuarioAssinandoId) ||
-                        (!executionItem.assinaturaResponsavelUsuarioId &&
-                          executionItem.assinaturaResponsavel.trim() ===
-                            usuarioAssinando.trim()));
-
-                    return (
+                  items.map((executionItem) => (
                     <tr key={executionItem.id}>
-                      <td className="px-3 py-2">{executionItem.item.ordem}</td>
                       <td className="px-3 py-2">{executionItem.item.oQueLimpar}</td>
                       <td className="px-3 py-2">{executionItem.quandoAssinado}</td>
-                      <td className="px-3 py-2">{executionItem.item.quem || "-"}</td>
                       <td className="px-3 py-2">
                         {executionItem.assinaturaResponsavel || "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {executionItem.assinaturaSupervisor || "-"}
+                        <StatusBadge status={executionItem.status} />
                       </td>
                       <td className="px-3 py-2">
                         {executionItem.observacaoResponsavel || "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {executionItem.observacaoSupervisor || "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={executionItem.status} />
                       </td>
                       <td className="px-3 py-2">
                         {executionItem.etapa === "responsavel" ? (
@@ -194,37 +224,9 @@ export function WeeklySignChecklistModal({
                             </button>
                           </form>
                         ) : executionItem.etapa === "supervisor" ? (
-                          supervisorMesmoExecutor ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              Outro supervisor
-                            </span>
-                          ) : !podeAssinarSupervisor ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              Sem permissão
-                            </span>
-                          ) : (
-                          <form action={updateWeeklyRecordAction} className="grid min-w-[320px] gap-2">
-                            <input type="hidden" name="id" value={String(executionItem.id)} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <input type="hidden" name="etapa" value="supervisor" />
-                            <input
-                              type="password"
-                              name="senhaConfirmacao"
-                              required
-                              placeholder="Confirme sua senha"
-                              className="bpma-input text-xs"
-                            />
-                            <input
-                              type="text"
-                              name="observacaoAssinatura"
-                              placeholder="Observação (Opcional)"
-                              className="bpma-input text-xs"
-                            />
-                            <button type="submit" className="btn-primary whitespace-nowrap">
-                              Assinar
-                            </button>
-                          </form>
-                          )
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Aguardando supervisão
+                          </span>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             Item Concluído
@@ -232,8 +234,7 @@ export function WeeklySignChecklistModal({
                         )}
                       </td>
                     </tr>
-                    );
-                  })
+                  ))
                 )}
               </tbody>
             </table>

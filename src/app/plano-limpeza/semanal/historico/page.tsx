@@ -144,12 +144,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         observacaoSupervisor: true,
         itemDescricao: true,
         quando: true,
-        funcionarioResponsavel: true,
         item: {
           select: {
             oQueLimpar: true,
-            quando: true,
-            quem: true
+            quando: true
           }
         }
       },
@@ -177,12 +175,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         observacaoSupervisor: true,
         itemDescricao: true,
         quando: true,
-        funcionarioResponsavel: true,
         item: {
           select: {
             oQueLimpar: true,
-            quando: true,
-            quem: true
+            quando: true
           }
         }
       },
@@ -732,7 +728,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                   <tr>
                     <th className="px-3 py-2">O que limpar</th>
                     <th className="px-3 py-2">Quando</th>
-                    <th className="px-3 py-2">Funcionário</th>
+                    <th className="px-3 py-2">Responsável pela limpeza</th>
                     <th className="px-3 py-2">Status do item</th>
                     <th className="px-3 py-2">Observações</th>
                   </tr>
@@ -755,11 +751,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                       ]
                         .filter(Boolean)
                         .join(" | ");
-                      const funcionario =
-                        record.assinaturaResponsavel.trim() ||
-                        record.funcionarioResponsavel?.trim() ||
-                        record.item.quem.trim() ||
-                        "-";
+                      const responsavelLimpeza = record.assinaturaResponsavel.trim() || "-";
 
                       return (
                         <tr key={record.id}>
@@ -774,7 +766,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                               quando: record.quando
                             })}
                           </td>
-                          <td className="px-3 py-2">{funcionario}</td>
+                          <td className="px-3 py-2">{responsavelLimpeza}</td>
                           <td className="px-3 py-2">
                             <StatusBadge status={statusItem} />
                           </td>

@@ -9,7 +9,7 @@ import Link from "next/link";
 
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
-import { hasPermission } from "@/lib/permissions";
+import { hasAnyPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   canManageModuleOptions,
@@ -68,19 +68,16 @@ type WeeklyExecutionPageRecord = {
   dataExecucao: Date;
   area: string;
   assinaturaResponsavel: string;
-  assinaturaResponsavelUsuarioId: number | null;
   assinaturaResponsavelDataHora: Date | null;
   assinaturaSupervisor: string;
   status: StatusPlanoLimpeza;
   itemDescricao: string | null;
   quando: string | null;
-  funcionarioResponsavel: string | null;
   item: {
     id: number;
     ordem: number;
     oQueLimpar: string;
     quando: string | null;
-    quem: string;
   };
 };
 
@@ -143,7 +140,12 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeAssinarSupervisor = authUser
-    ? hasPermission(authUser, "modulo.limpeza_semanal.assinar_historico")
+    ? hasAnyPermission(authUser, [
+        "usuarios.responsavel_tecnico",
+        "modulo.limpeza_semanal.assinar_todos",
+        "modulo.limpeza_semanal.assinar_historico",
+        "modulo.limpeza_semanal.assinar_dia"
+      ])
     : false;
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
@@ -212,9 +214,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         area: true,
         itemDescricao: true,
         quando: true,
-        funcionarioResponsavel: true,
         assinaturaResponsavel: true,
-        assinaturaResponsavelUsuarioId: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
         status: true,
@@ -223,8 +223,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             id: true,
             ordem: true,
             oQueLimpar: true,
-            quando: true,
-            quem: true
+            quando: true
           }
         }
       },
@@ -295,21 +294,17 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           id: true,
           itemDescricao: true,
           quando: true,
-          funcionarioResponsavel: true,
           status: true,
           assinaturaResponsavel: true,
-          assinaturaResponsavelUsuarioId: true,
           assinaturaResponsavelDataHora: true,
           assinaturaSupervisor: true,
           observacaoResponsavel: true,
-          observacaoSupervisor: true,
           item: {
             select: {
               id: true,
               ordem: true,
               oQueLimpar: true,
-              quando: true,
-              quem: true
+              quando: true
             }
           }
         },
@@ -607,7 +602,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           closeHref={returnTo}
           returnTo={returnTo}
           usuarioAssinando={responsavelLogado}
-          usuarioAssinandoId={authUser?.id ?? null}
           podeAssinarSupervisor={podeAssinarSupervisor}
           dataHoraAtual={formatDateTimeDisplay(now)}
           execution={executionParaAssinatura}
@@ -615,20 +609,13 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             id: executionItem.id,
             status: getWeeklyRecordStatus(executionItem),
             assinaturaResponsavel: executionItem.assinaturaResponsavel,
-            assinaturaResponsavelUsuarioId: executionItem.assinaturaResponsavelUsuarioId,
-            assinaturaSupervisor: executionItem.assinaturaSupervisor,
             observacaoResponsavel: executionItem.observacaoResponsavel,
-            observacaoSupervisor: executionItem.observacaoSupervisor,
             etapa: getWeeklySignStage(executionItem),
             quandoAssinado: getWeeklyExecutionQuandoLabel(executionItem),
             item: {
               id: executionItem.item.id,
               ordem: executionItem.item.ordem,
-              oQueLimpar: executionItem.itemDescricao ?? executionItem.item.oQueLimpar,
-              quem:
-                executionItem.assinaturaResponsavel ||
-                executionItem.funcionarioResponsavel ||
-                executionItem.item.quem
+              oQueLimpar: executionItem.itemDescricao ?? executionItem.item.oQueLimpar
             }
           }))}
         />

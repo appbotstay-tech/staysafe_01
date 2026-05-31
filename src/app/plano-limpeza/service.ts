@@ -287,8 +287,7 @@ export async function ensureWeeklyChecklistForDateRange(params: {
         oQueLimpar: true,
         qualProduto: true,
         quando: true,
-        setorResponsavel: true,
-        quem: true
+        setorResponsavel: true
       },
       orderBy: [{ area: "asc" }, { ordem: "asc" }, { oQueLimpar: "asc" }]
     });
@@ -392,7 +391,7 @@ export async function ensureWeeklyChecklistForDateRange(params: {
             qualProduto: activeItemById.get(desired.itemId)?.qualProduto ?? null,
             quando: null,
             setorResponsavel: activeItemById.get(desired.itemId)?.setorResponsavel ?? null,
-            funcionarioResponsavel: activeItemById.get(desired.itemId)?.quem ?? null,
+            funcionarioResponsavel: null,
             assinaturaResponsavel: "",
             assinaturaSupervisor: "",
             status: StatusPlanoLimpeza.PENDENTE
@@ -426,7 +425,7 @@ export async function ensureWeeklyChecklistForDateRange(params: {
           updateData.qualProduto = expectedItem.qualProduto;
           updateData.quando = null;
           updateData.setorResponsavel = expectedItem.setorResponsavel;
-          updateData.funcionarioResponsavel = expectedItem.quem;
+          updateData.funcionarioResponsavel = null;
         }
         if (keeper.weekStart.getTime() !== desired.weekStart.getTime()) {
           updateData.dataExecucao = desired.weekStart;
