@@ -97,7 +97,9 @@ export function MonthlyClosureSection({
   indicators,
   signedClosure,
   canSign,
-  pendingDailySignatures
+  pendingDailySignatures,
+  monthlyReportHref,
+  monthlyReportLabel = "Gerar Relatório Mensal"
 }: {
   moduleCode: OperationalSignatureModuleCode;
   month: number;
@@ -107,6 +109,8 @@ export function MonthlyClosureSection({
   signedClosure: SignatureInfo;
   canSign: boolean;
   pendingDailySignatures: number;
+  monthlyReportHref?: string;
+  monthlyReportLabel?: string;
 }) {
   const indicatorEntries = Object.entries(indicators);
 
@@ -121,7 +125,19 @@ export function MonthlyClosureSection({
             Consolidação de {String(month).padStart(2, "0")}/{year} para entrega e auditoria sanitária.
           </p>
         </div>
-        <SupervisorSignatureStatus signature={signedClosure} />
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <SupervisorSignatureStatus signature={signedClosure} />
+          {monthlyReportHref ? (
+            <a
+              href={monthlyReportHref}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary"
+            >
+              {monthlyReportLabel}
+            </a>
+          ) : null}
+        </div>
       </div>
 
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
