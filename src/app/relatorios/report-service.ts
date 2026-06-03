@@ -32,6 +32,7 @@ import {
   getStartOfAppDay,
   parseAppDateInput
 } from "@/lib/date-time";
+import { hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
@@ -378,7 +379,13 @@ async function generateTemperaturaReport(moduleId: ReportModuleId, reportId: str
       operacional &&
       (item.status === StatusTemperaturaEquipamento.ALERTA ||
         item.status === StatusTemperaturaEquipamento.CRITICO);
-    const temFoto = operacional && hasText(item.fotoBase64) && hasText(item.fotoMimeType);
+    const temFoto =
+      operacional &&
+      hasImageEvidence({
+        url: item.fotoUrl,
+        mimeType: item.fotoMimeType,
+        base64: item.fotoBase64
+      });
     if (reportId === "fora-faixa" && !foraFaixa) return false;
     if (reportId === "acoes-corretivas" && !hasText(item.acaoCorretiva)) return false;
     if (reportId === "foto-obrigatoria" && !foraFaixa) return false;
@@ -404,12 +411,26 @@ async function generateTemperaturaReport(moduleId: ReportModuleId, reportId: str
       { label: "Total de registros", value: filtered.length },
       { label: "Fora da faixa", value: filtered.filter((item) => isTemperaturaOperacional(item.statusOperacionalEquipamento) && item.status !== StatusTemperaturaEquipamento.CONFORME).length },
       { label: "Com ação corretiva", value: filtered.filter((item) => hasText(item.acaoCorretiva)).length },
-      { label: "Com foto", value: filtered.filter((item) => hasText(item.fotoBase64)).length }
+      {
+        label: "Com foto",
+        value: filtered.filter((item) =>
+          hasImageEvidence({
+            url: item.fotoUrl,
+            mimeType: item.fotoMimeType,
+            base64: item.fotoBase64
+          })
+        ).length
+      }
     ],
     columns: columns([["data", "Data"], ["equipamento", "Equipamento"], ["turno", "Turno"], ["statusOperacional", "Status operacional"], ["temperatura", "Temperatura"], ["status", "Status"], ["acaoCorretiva", "Ação corretiva"], ["foto", "Foto"], ["responsavel", "Responsável"], ["dataHoraRegistro", "Data/hora do registro"]]),
     rows: filtered.map((item) => {
       const operacional = isTemperaturaOperacional(item.statusOperacionalEquipamento);
-      return { data: formatDateDisplay(item.data), equipamento: item.equipamento, turno: labelTurnoTemperatura(item.turno), statusOperacional: labelStatusOperacionalTemperatura(item.statusOperacionalEquipamento), temperatura: operacional ? formatTemperature(item.temperaturaAferida) : "Não aplicável", status: operacional ? labelStatusTemperatura(item.status) : "Não aplicável", acaoCorretiva: operacional ? valueOrDash(item.acaoCorretiva) : "-", foto: operacional && hasText(item.fotoBase64) ? "Foto anexada" : "-", responsavel: item.responsavel, dataHoraRegistro: formatDateTimeDisplay(item.createdAt) };
+      const temFoto = hasImageEvidence({
+        url: item.fotoUrl,
+        mimeType: item.fotoMimeType,
+        base64: item.fotoBase64
+      });
+      return { data: formatDateDisplay(item.data), equipamento: item.equipamento, turno: labelTurnoTemperatura(item.turno), statusOperacional: labelStatusOperacionalTemperatura(item.statusOperacionalEquipamento), temperatura: operacional ? formatTemperature(item.temperaturaAferida) : "Não aplicável", status: operacional ? labelStatusTemperatura(item.status) : "Não aplicável", acaoCorretiva: operacional ? valueOrDash(item.acaoCorretiva) : "-", foto: operacional && temFoto ? "Foto anexada" : "-", responsavel: item.responsavel, dataHoraRegistro: formatDateTimeDisplay(item.createdAt) };
     })
   });
 }
@@ -657,7 +678,7 @@ async function countGeneralModuleRows(range: DateRange) {
   );
   return [
     { id: "higienizacao-hortifruti", modulo: "Higienização de Hortifruti", total: hort.length, pendencias: hort.filter((item) => !hasText(item.inicioProcesso) || !hasText(item.terminoProcesso)).length, concluidos: hort.length, naoConformidades: 0, acoesCorretivas: 0, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
-    { id: "controle-temperatura-equipamentos", modulo: "Controle de Temperatura", total: temp.length, pendencias: tempOperacionais.filter((item) => (item.status === StatusTemperaturaEquipamento.ALERTA || item.status === StatusTemperaturaEquipamento.CRITICO) && !hasText(item.fotoBase64)).length, concluidos: temp.filter((item) => !isTemperaturaOperacional(item.statusOperacionalEquipamento) || item.status === StatusTemperaturaEquipamento.CONFORME).length, naoConformidades: tempOperacionais.filter((item) => item.status !== StatusTemperaturaEquipamento.CONFORME).length, acoesCorretivas: tempOperacionais.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
+    { id: "controle-temperatura-equipamentos", modulo: "Controle de Temperatura", total: temp.length, pendencias: tempOperacionais.filter((item) => (item.status === StatusTemperaturaEquipamento.ALERTA || item.status === StatusTemperaturaEquipamento.CRITICO) && !hasImageEvidence({ url: item.fotoUrl, mimeType: item.fotoMimeType, base64: item.fotoBase64 })).length, concluidos: temp.filter((item) => !isTemperaturaOperacional(item.statusOperacionalEquipamento) || item.status === StatusTemperaturaEquipamento.CONFORME).length, naoConformidades: tempOperacionais.filter((item) => item.status !== StatusTemperaturaEquipamento.CONFORME).length, acoesCorretivas: tempOperacionais.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "controle-qualidade-oleo", modulo: "Controle de Qualidade do Óleo", total: oleo.length, pendencias: oleo.filter((item) => item.status === StatusQualidadeOleo.DESCARTAR || item.status === StatusQualidadeOleo.ULTIMA_UTILIZACAO).length, concluidos: oleo.filter((item) => item.status === StatusQualidadeOleo.ADEQUADO || item.status === StatusQualidadeOleo.SEM_UTILIZACAO).length, naoConformidades: oleo.filter((item) => item.status !== StatusQualidadeOleo.ADEQUADO && item.status !== StatusQualidadeOleo.SEM_UTILIZACAO).length, acoesCorretivas: oleo.filter((item) => item.status === StatusQualidadeOleo.DESCARTAR || item.status === StatusQualidadeOleo.ATENCAO || item.status === StatusQualidadeOleo.ULTIMA_UTILIZACAO).length, semAssinatura: 0, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "rastreabilidade-recebimento", modulo: "Rastreabilidade de Recebimento", total: receb.length, pendencias: receb.filter((item) => item.statusGeral === StatusRecebimento.PENDENTE).length, concluidos: receb.filter((item) => item.statusGeral === StatusRecebimento.CONFORME).length, naoConformidades: receb.filter((item) => item.statusGeral === StatusRecebimento.NAO_CONFORME).length, acoesCorretivas: receb.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: receb.filter((item) => !hasText(item.responsavelRecebimento)).length, chamadosAbertos: 0, chamadosConcluidos: 0 },
     { id: "controle-buffet-amostras", modulo: "Controle de Buffet / Amostras", total: buffetColetados.length, pendencias: buffetColetados.filter((item) => item.status === StatusItemBuffetAmostra.PENDENTE).length, concluidos: buffetColetados.filter((item) => item.status === StatusItemBuffetAmostra.PREENCHIDO || item.status === StatusItemBuffetAmostra.ASSINADO).length, naoConformidades: buffetColetados.filter((item) => item.statusTemperatura === StatusTemperaturaBuffetAmostra.ALERTA || item.statusTemperatura === StatusTemperaturaBuffetAmostra.CRITICO).length, acoesCorretivas: buffetColetados.filter((item) => hasText(item.acaoCorretiva)).length, semAssinatura: buffetColetados.filter((item) => !hasText(item.assinaturaNome)).length, chamadosAbertos: 0, chamadosConcluidos: 0 },

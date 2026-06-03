@@ -18,7 +18,12 @@ import {
   validateSignaturePassword
 } from "@/lib/authz";
 import { canEditRecordDate } from "@/lib/permissions";
-import { parseImageUploadFromFormData } from "@/lib/image-upload";
+import {
+  hasStoredImage,
+  parseImageUploadFromFormData
+} from "@/lib/image-upload";
+import { TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES } from "@/lib/image-upload-rules";
+import { saveTemperatureEquipmentEvidenceImage } from "@/lib/local-image-storage";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -372,11 +377,15 @@ export async function createRegistroAction(formData: FormData) {
         ? await parseImageUploadFromFormData({
             formData,
             key: "fotoDesvio",
+            maxBytes: TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES,
             required: isCorrectiveActionRequired(payload.status),
             requiredMessage:
               "Anexe uma foto da evidência para salvar este registro."
           })
         : null;
+    const fotoArmazenada = fotoDesvio
+      ? await saveTemperatureEquipmentEvidenceImage(fotoDesvio)
+      : null;
 
     await prisma.controleTemperaturaEquipamento.create({
       data: {
@@ -384,8 +393,12 @@ export async function createRegistroAction(formData: FormData) {
         data,
         turno,
         fotoNome: fotoDesvio?.fileName ?? null,
-        fotoMimeType: fotoDesvio?.mimeType ?? null,
-        fotoBase64: fotoDesvio?.base64 ?? null
+        fotoMimeType: fotoArmazenada?.mimeType ?? null,
+        fotoBase64: null,
+        fotoUrl: fotoArmazenada?.url ?? null,
+        fotoTamanhoBytes: fotoArmazenada?.size ?? null,
+        fotoCriadoEm: fotoArmazenada?.createdAt ?? null,
+        fotoCriadoPorUsuarioId: fotoArmazenada ? actor.id : null
       }
     });
 
@@ -441,18 +454,27 @@ export async function updateRegistroAction(formData: FormData) {
     const fotoDesvio = registroEmOperacao
       ? await parseImageUploadFromFormData({
           formData,
-          key: "fotoDesvio"
+          key: "fotoDesvio",
+          maxBytes: TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES
         })
       : null;
     const exigeFoto = registroEmOperacao && isCorrectiveActionRequired(payload.status);
     const temFotoExistente =
-      registroEmOperacao && Boolean(existing.fotoBase64 && existing.fotoMimeType);
+      registroEmOperacao &&
+      hasStoredImage({
+        url: existing.fotoUrl,
+        mimeType: existing.fotoMimeType,
+        base64: existing.fotoBase64
+      });
 
     if (exigeFoto && !fotoDesvio && !temFotoExistente) {
       throw new Error(
         "Anexe uma foto da evidência para salvar este registro."
       );
     }
+    const fotoArmazenada = fotoDesvio
+      ? await saveTemperatureEquipmentEvidenceImage(fotoDesvio)
+      : null;
 
     await prisma.controleTemperaturaEquipamento.update({
       where: { id },
@@ -463,13 +485,21 @@ export async function updateRegistroAction(formData: FormData) {
           ? {
               fotoNome: null,
               fotoMimeType: null,
-              fotoBase64: null
+              fotoBase64: null,
+              fotoUrl: null,
+              fotoTamanhoBytes: null,
+              fotoCriadoEm: null,
+              fotoCriadoPorUsuarioId: null
             }
-          : fotoDesvio
+          : fotoDesvio && fotoArmazenada
           ? {
               fotoNome: fotoDesvio.fileName,
-              fotoMimeType: fotoDesvio.mimeType,
-              fotoBase64: fotoDesvio.base64
+              fotoMimeType: fotoArmazenada.mimeType,
+              fotoBase64: null,
+              fotoUrl: fotoArmazenada.url,
+              fotoTamanhoBytes: fotoArmazenada.size,
+              fotoCriadoEm: fotoArmazenada.createdAt,
+              fotoCriadoPorUsuarioId: actor.id
             }
           : {})
       }

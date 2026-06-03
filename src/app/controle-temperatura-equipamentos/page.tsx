@@ -13,7 +13,12 @@ import { DocumentosModuleHeader } from "@/components/documentos/documentos-modul
 import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
-import { getImageDataUrl } from "@/lib/image-upload";
+import { getStoredImageSrc, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
+import {
+  TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES,
+  TEMPERATURE_EVIDENCE_IMAGE_MAX_WIDTH,
+  TEMPERATURE_EVIDENCE_IMAGE_TARGET_BYTES
+} from "@/lib/image-upload-rules";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -226,7 +231,11 @@ export default async function ControleTemperaturaEquipamentosPage({
     ? await prisma.controleTemperaturaEquipamento.findUnique({ where: { id: deleteId } })
     : null;
   const fotoRegistroEmEdicao = registroEmEdicao
-    ? getImageDataUrl(registroEmEdicao.fotoMimeType, registroEmEdicao.fotoBase64)
+    ? getStoredImageSrc({
+        url: registroEmEdicao.fotoUrl,
+        mimeType: registroEmEdicao.fotoMimeType,
+        base64: registroEmEdicao.fotoBase64
+      })
     : null;
 
   const equipamentoFormOptions =
@@ -354,7 +363,11 @@ export default async function ControleTemperaturaEquipamentosPage({
     ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
   const fotoSelecionadaDataUrl = registroFotoSelecionado
-    ? getImageDataUrl(registroFotoSelecionado.fotoMimeType, registroFotoSelecionado.fotoBase64)
+    ? getStoredImageSrc({
+        url: registroFotoSelecionado.fotoUrl,
+        mimeType: registroFotoSelecionado.fotoMimeType,
+        base64: registroFotoSelecionado.fotoBase64
+      })
     : null;
   const hrefFecharFoto = buildPathWithParams(parametrosRetorno);
   const buildHrefFoto = (id: number) => {
@@ -501,7 +514,11 @@ export default async function ControleTemperaturaEquipamentosPage({
               label="Anexar foto da evidência"
               existingImageDataUrl={fotoRegistroEmEdicao}
               existingFileName={registroEmEdicao?.fotoNome ?? null}
-              helperText="Selecione uma imagem da galeria ou dos arquivos do dispositivo. Obrigatória em Alerta/Crítico. Formatos: JPG, PNG ou WEBP de até 5 MB."
+              helperText="Obrigatória em Alerta/Crítico. A imagem será otimizada para até 1280 px e deve ficar com no máximo 1 MB."
+              maxBytes={TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES}
+              compressBeforeUpload
+              compressionTargetBytes={TEMPERATURE_EVIDENCE_IMAGE_TARGET_BYTES}
+              compressionMaxWidth={TEMPERATURE_EVIDENCE_IMAGE_MAX_WIDTH}
               requiredStatusFieldName="statusCalculado"
               requiredStatusValues={["ALERTA", "CRITICO"]}
               requiredMessage="Anexe uma foto da evidência para salvar este registro."
@@ -681,7 +698,11 @@ export default async function ControleTemperaturaEquipamentosPage({
                     query.set("editId", String(registro.id));
                     return buildPathWithParams(query);
                   })();
-                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
+                  const hasStoredImage = hasImageEvidence({
+                    url: registro.fotoUrl,
+                    mimeType: registro.fotoMimeType,
+                    base64: registro.fotoBase64
+                  });
                   const registroEmOperacao = isOperationalRecord(registro);
                   const observacaoRegistro = registroEmOperacao
                     ? registro.observacoes

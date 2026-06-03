@@ -1,4 +1,7 @@
 export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES = 1 * 1024 * 1024;
+export const TEMPERATURE_EVIDENCE_IMAGE_TARGET_BYTES = 600 * 1024;
+export const TEMPERATURE_EVIDENCE_IMAGE_MAX_WIDTH = 1280;
 
 export const ACCEPTED_IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -17,6 +20,20 @@ export const UNSUPPORTED_IMAGE_FORMAT_MESSAGE =
 
 export const IMAGE_TOO_LARGE_MESSAGE =
   "A foto selecionada é muito grande. Envie uma imagem menor.";
+
+function formatBytes(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+
+  if (megabytes >= 1) {
+    return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+  }
+
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+export function getImageTooLargeMessage(maxBytes = MAX_IMAGE_UPLOAD_BYTES): string {
+  return `A foto selecionada é muito grande. Envie uma imagem de até ${formatBytes(maxBytes)}.`;
+}
 
 export function getFileExtension(fileName: string): string {
   const parts = fileName.toLowerCase().split(".");
@@ -44,13 +61,15 @@ export function validateImageUploadFile(file: {
   name: string;
   size: number;
   type: string;
-}): string {
+}, options: { maxBytes?: number } = {}): string {
   if (!isAcceptedImageFile(file)) {
     return UNSUPPORTED_IMAGE_FORMAT_MESSAGE;
   }
 
-  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
-    return IMAGE_TOO_LARGE_MESSAGE;
+  const maxBytes = options.maxBytes ?? MAX_IMAGE_UPLOAD_BYTES;
+
+  if (file.size > maxBytes) {
+    return getImageTooLargeMessage(maxBytes);
   }
 
   return "";

@@ -9,7 +9,7 @@ import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
-import { getImageDataUrl } from "@/lib/image-upload";
+import { getStoredImageSrc, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
@@ -218,7 +218,11 @@ export default async function ControleTemperaturaHistoricoPage({
     ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
   const fotoSelecionadaDataUrl = registroFotoSelecionado
-    ? getImageDataUrl(registroFotoSelecionado.fotoMimeType, registroFotoSelecionado.fotoBase64)
+    ? getStoredImageSrc({
+        url: registroFotoSelecionado.fotoUrl,
+        mimeType: registroFotoSelecionado.fotoMimeType,
+        base64: registroFotoSelecionado.fotoBase64
+      })
     : null;
 
   const diasComRegistro = new Set(registrosMensais.map((registro) => formatAppDateInput(registro.data)));
@@ -417,7 +421,11 @@ export default async function ControleTemperaturaHistoricoPage({
                   const observacaoRegistro = registroEmOperacao
                     ? registro.observacoes
                     : registro.observacaoStatusOperacional;
-                  const hasStoredImage = Boolean(registro.fotoMimeType && registro.fotoBase64);
+                  const hasStoredImage = hasImageEvidence({
+                    url: registro.fotoUrl,
+                    mimeType: registro.fotoMimeType,
+                    base64: registro.fotoBase64
+                  });
 
                   return (
                     <tr key={registro.id}>

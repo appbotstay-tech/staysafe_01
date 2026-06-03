@@ -7,6 +7,8 @@ import {
 type ParsedImageUpload = {
   fileName: string;
   mimeType: string;
+  size: number;
+  buffer: Buffer;
   base64: string;
 };
 
@@ -40,14 +42,12 @@ export async function parseImageUploadFromFormData(
     name: value.name,
     size: value.size,
     type: value.type
+  }, {
+    maxBytes
   });
 
   if (validationMessage) {
     throw new Error(validationMessage);
-  }
-
-  if (value.size > maxBytes) {
-    throw new Error("A foto selecionada é muito grande. Envie uma imagem menor.");
   }
 
   try {
@@ -56,6 +56,8 @@ export async function parseImageUploadFromFormData(
     return {
       fileName: value.name,
       mimeType: value.type || "image/jpeg",
+      size: buffer.byteLength,
+      buffer,
       base64: buffer.toString("base64")
     };
   } catch {
@@ -71,4 +73,29 @@ export function getImageDataUrl(mimeType: string | null, base64: string | null):
   }
 
   return `data:${mimeType};base64,${base64}`;
+}
+
+export function getStoredImageSrc(params: {
+  url?: string | null;
+  mimeType?: string | null;
+  base64?: string | null;
+}): string | null {
+  const url = params.url?.trim();
+
+  if (url) {
+    return url;
+  }
+
+  return getImageDataUrl(params.mimeType ?? null, params.base64 ?? null);
+}
+
+export function hasStoredImage(params: {
+  url?: string | null;
+  mimeType?: string | null;
+  base64?: string | null;
+}): boolean {
+  return Boolean(
+    params.url?.trim() ||
+      ((params.mimeType?.trim() ?? "") && (params.base64?.trim() ?? ""))
+  );
 }

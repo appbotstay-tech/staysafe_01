@@ -31,6 +31,7 @@ import {
 import { isServicoDisponivelNaData } from "@/app/controle-buffet-amostras/utils";
 import type { AuthenticatedUser } from "@/lib/auth-session";
 import { getEndOfAppDay, getStartOfAppDay, parseAppDateInput } from "@/lib/date-time";
+import { hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -2069,6 +2070,7 @@ async function buildNonConformitySummary(params: {
         statusOperacionalEquipamento: true,
         status: true,
         acaoCorretiva: true,
+        fotoUrl: true,
         fotoBase64: true,
         fotoMimeType: true,
         responsavel: true,
@@ -2284,7 +2286,11 @@ async function buildNonConformitySummary(params: {
     });
 
   for (const record of temperaturasNaoConformes) {
-    const hasEvidence = Boolean(record.fotoBase64 && record.fotoMimeType);
+    const hasEvidence = hasImageEvidence({
+      url: record.fotoUrl,
+      mimeType: record.fotoMimeType,
+      base64: record.fotoBase64
+    });
     addInsightItem(summary, {
       id: `nc-temperatura:${record.id}`,
       moduleId: MODULES.temperatura.id,
@@ -2481,6 +2487,7 @@ async function buildCorrectiveActionsSummary(params: {
         statusOperacionalEquipamento: true,
         status: true,
         acaoCorretiva: true,
+        fotoUrl: true,
         fotoBase64: true,
         fotoMimeType: true,
         responsavel: true,
@@ -2582,7 +2589,11 @@ async function buildCorrectiveActionsSummary(params: {
       severity: record.status === StatusTemperaturaEquipamento.CRITICO ? "Crítico" : "Atenção",
       occurrenceType: "Ação corretiva de temperatura",
       correctiveAction: record.acaoCorretiva ?? undefined,
-      hasEvidence: Boolean(record.fotoBase64 && record.fotoMimeType),
+      hasEvidence: hasImageEvidence({
+        url: record.fotoUrl,
+        mimeType: record.fotoMimeType,
+        base64: record.fotoBase64
+      }),
       relatedTicketStatus:
         ticketStatusByRecordContext.get(
           maintenanceContextKey(OrigemChamadoManutencao.TEMPERATURA, record.id) ?? ""

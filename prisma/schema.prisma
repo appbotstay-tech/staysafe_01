@@ -476,6 +476,10 @@ model ControleTemperaturaEquipamento {
   fotoNome                         String?
   fotoMimeType                     String?
   fotoBase64                       String?                         @db.Text
+  fotoUrl                          String?
+  fotoTamanhoBytes                 Int?
+  fotoCriadoEm                     DateTime?
+  fotoCriadoPorUsuarioId           Int?
   responsavel                      String
   observacoes                      String?
   observacaoStatusOperacional      String?
