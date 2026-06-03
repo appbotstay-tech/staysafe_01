@@ -22,6 +22,8 @@ type DocumentosModuleHeaderProps = {
   modulePath: string;
   searchParams: SearchParams;
   actions?: ReactNode;
+  historyHref?: string;
+  historyLabel?: string;
   managementHref?: string;
   managementLabel?: string;
   maintenanceHref?: string;
@@ -102,6 +104,8 @@ export async function DocumentosModuleHeader({
   modulePath,
   searchParams,
   actions,
+  historyHref,
+  historyLabel = "Histórico",
   managementHref,
   managementLabel = "Gerenciar",
   maintenanceHref,
@@ -172,6 +176,11 @@ export async function DocumentosModuleHeader({
           <Link href={anexosHref} className="btn-secondary">
             Anexos
           </Link>
+          {historyHref ? (
+            <Link href={historyHref} className="btn-secondary">
+              {historyLabel}
+            </Link>
+          ) : null}
           {maintenanceHref ? (
             <Link href={maintenanceHref} className="btn-secondary">
               {maintenanceLabel}

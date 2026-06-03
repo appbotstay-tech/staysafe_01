@@ -18,7 +18,11 @@
     "buffet:reset-kplatz": "node --experimental-strip-types prisma/reset-buffet-amostras-kplatz.ts",
     "reset:kplatz-inicio": "node --no-warnings --experimental-strip-types prisma/reset-kplatz-inicio-operacao.ts",
     "reset:historicos-operacionais": "node --no-warnings --experimental-strip-types prisma/reset-historicos-operacionais.ts",
-    "reset:historico-plano-diario": "node --no-warnings --experimental-strip-types prisma/reset-historico-plano-diario.ts"
+    "reset:historico-plano-diario": "node --no-warnings --experimental-strip-types prisma/reset-historico-plano-diario.ts",
+    "fotos:temperatura:dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts migrar --dry-run",
+    "fotos:temperatura:migrar": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts migrar",
+    "fotos:temperatura:limpar-dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar --dry-run",
+    "fotos:temperatura:limpar-base64": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"

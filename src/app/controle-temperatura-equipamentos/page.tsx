@@ -385,16 +385,8 @@ export default async function ControleTemperaturaEquipamentosPage({
         modulePath={MODULE_PATH}
         searchParams={params}
         managementHref={podeGerenciarOpcoes ? "/controle-temperatura-equipamentos/opcoes" : undefined}
+        historyHref={podeVerGestao ? "/controle-temperatura-equipamentos/historico" : undefined}
         maintenanceHref="/chamados-manutencao?origem=TEMPERATURA"
-        actions={
-          <>
-            {podeVerGestao ? (
-              <Link href="/controle-temperatura-equipamentos/historico" className="btn-secondary">
-                Histórico
-              </Link>
-            ) : null}
-          </>
-        }
       />
 
       {feedback ? (
