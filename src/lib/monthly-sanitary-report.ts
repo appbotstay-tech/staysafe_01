@@ -126,15 +126,13 @@ function renderHeader(report: MonthlySanitaryReport): string {
               <strong>${escapeHtml(report.brandName)}</strong>
               <span>Controle sanitário</span>
             </td>
-            <td class="title-cell" colspan="2">${escapeHtml(report.title)}</td>
-            <th>Código</th>
-            <td>${escapeHtml(report.annexCode)}</td>
+            <td class="title-cell" colspan="4">${escapeHtml(report.title)}</td>
           </tr>
           <tr>
             <th>Relatório</th>
             <td>${escapeHtml(report.reportName)}</td>
-            <th>Revisão</th>
-            <td>${escapeHtml(report.revision)}</td>
+            <th>Anexo</th>
+            <td>${escapeHtml(report.annexCode)}</td>
           </tr>
           <tr>
             <th>Data da elaboração</th>
@@ -155,25 +153,21 @@ function renderHeader(report: MonthlySanitaryReport): string {
 }
 
 function renderFooter(report: MonthlySanitaryReport): string {
-  const responsibleName = report.footerResponsibleName?.trim() ?? "";
+  const responsibleName =
+    report.footerResponsibleName?.trim() || "______________________________";
 
   return `
     <footer>
       <table class="manual-signature-table">
         <tbody>
           <tr>
-            <th>Responsável Técnico ou Nutricionista</th>
+            <th>Responsável Técnico ou Nutricionista:</th>
             <td>${escapeHtml(responsibleName)}</td>
-          </tr>
-          <tr>
-            <th>Data</th>
+            <th>Data:</th>
             <td>${escapeHtml(report.footerDate)}</td>
           </tr>
         </tbody>
       </table>
-      <p class="generated-line">
-        Relatório gerado pelo ${escapeHtml(report.brandName)} em ${escapeHtml(report.generatedAtSentence)}.
-      </p>
     </footer>`;
 }
 
@@ -342,18 +336,34 @@ function renderStyles(): string {
         break-inside: avoid;
       }
 
+      .manual-signature-table {
+        table-layout: fixed;
+      }
+
       .manual-signature-table th {
-        width: 24%;
+        vertical-align: middle;
       }
 
       .manual-signature-table td {
         height: 28px;
+        vertical-align: middle;
+        white-space: nowrap;
       }
 
-      .generated-line {
-        margin-top: 6px;
-        font-size: 9px;
-        text-align: right;
+      .manual-signature-table tr > th:first-child {
+        width: 30%;
+      }
+
+      .manual-signature-table tr > td:nth-child(2) {
+        width: 40%;
+      }
+
+      .manual-signature-table tr > th:nth-child(3) {
+        width: 8%;
+      }
+
+      .manual-signature-table tr > td:nth-child(4) {
+        width: 22%;
       }
 
       @media print {
