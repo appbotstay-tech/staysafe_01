@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
-import { formatAppDateTime } from "@/lib/date-time";
+import { formatAppDateTime, getAppDate, getAppMonthYear } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports, canManageModuleOptions } from "@/lib/rbac";
 
@@ -19,6 +19,21 @@ type PageProps = {
 };
 
 export const dynamic = "force-dynamic";
+
+const MONTH_OPTIONS = [
+  { value: 1, label: "Janeiro" },
+  { value: 2, label: "Fevereiro" },
+  { value: 3, label: "Março" },
+  { value: 4, label: "Abril" },
+  { value: 5, label: "Maio" },
+  { value: 6, label: "Junho" },
+  { value: 7, label: "Julho" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Setembro" },
+  { value: 10, label: "Outubro" },
+  { value: 11, label: "Novembro" },
+  { value: 12, label: "Dezembro" }
+];
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -37,6 +52,88 @@ function buildInitialFilters(params: ReportSearchParams): Record<string, string>
     if (normalized) result[key] = normalized;
   }
   return result;
+}
+
+function SanitaryReportsSection({
+  defaultMonth,
+  defaultYear
+}: {
+  defaultMonth: number;
+  defaultYear: number;
+}) {
+  const futureReports = [
+    "Temperatura de Equipamentos",
+    "Controle de Amostras",
+    "Qualidade do Óleo",
+    "Rastreabilidade",
+    "Limpeza Diária/Semanal"
+  ];
+
+  return (
+    <section className="bpma-card print:hidden">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        Relatórios Sanitários
+      </h2>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
+        <form
+          method="get"
+          action="/relatorios/higienizacao-hortifruti/mensal"
+          target="_blank"
+          className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+        >
+          <div className="sm:col-span-3">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Higienização de Hortifruti
+            </h3>
+          </div>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Mês
+            <select name="mes" defaultValue={String(defaultMonth)} className="bpma-input">
+              {MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={String(month.value)}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Ano
+            <input
+              type="number"
+              name="ano"
+              min={2020}
+              max={2100}
+              defaultValue={defaultYear}
+              className="bpma-input"
+            />
+          </label>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary w-full sm:w-auto">
+              Gerar Relatório
+            </button>
+          </div>
+        </form>
+
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Próximos relatórios sanitários
+            </h3>
+          </div>
+          <ul className="divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            {futureReports.map((reportName) => (
+              <li key={reportName} className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="text-slate-700 dark:text-slate-200">{reportName}</span>
+                <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
+                  Futuro
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function ReportResult({ report }: { report: GeneratedReport }) {
@@ -150,6 +247,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const generated = firstParam(params.generated) === "1";
   const podeGerenciarOpcoes = canManageModuleOptions(user);
   const initialFilters = buildInitialFilters(params);
+  const defaultMonthYear = getAppMonthYear(getAppDate());
   const [report, configuracaoCabecalho] = await Promise.all([
     generated
       ? generateReport({
@@ -200,6 +298,11 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
           </div>
         </section>
       ) : null}
+
+      <SanitaryReportsSection
+        defaultMonth={defaultMonthYear.mes}
+        defaultYear={defaultMonthYear.ano}
+      />
 
       <ReportControls
         selectedModuleId={selectedModule.id}

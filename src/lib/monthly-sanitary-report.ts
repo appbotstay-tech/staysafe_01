@@ -10,13 +10,6 @@ export type MonthlySanitaryReportSummaryItem = {
   value: string | number;
 };
 
-export type MonthlySanitaryReportDigitalSignature = {
-  name: string;
-  role: string;
-  signedAt: string;
-  observation?: string | null;
-} | null;
-
 export type MonthlySanitaryReport = {
   title: string;
   reportName: string;
@@ -29,8 +22,9 @@ export type MonthlySanitaryReport = {
   brandName: string;
   emittedAt: string;
   generatedAtSentence: string;
+  footerResponsibleName?: string | null;
+  footerDate: string;
   summaryItems: MonthlySanitaryReportSummaryItem[];
-  digitalSignature: MonthlySanitaryReportDigitalSignature;
   columns: MonthlySanitaryReportColumn[];
   rows: MonthlySanitaryReportRow[];
 };
@@ -82,47 +76,6 @@ function renderSummaryTable(items: MonthlySanitaryReportSummaryItem[]): string {
       <table class="summary-table">
         <tbody>
           ${rows.join("")}
-        </tbody>
-      </table>
-    </section>`;
-}
-
-function renderDigitalSignature(
-  signature: MonthlySanitaryReportDigitalSignature,
-  brandName: string
-): string {
-  if (!signature) {
-    return `
-      <section class="report-section">
-        <h2>Assinatura digital do fechamento mensal</h2>
-        <table class="signature-info-table">
-          <tbody>
-            <tr>
-              <th>Status</th>
-              <td>Fechamento mensal ainda não assinado digitalmente no ${escapeHtml(brandName)}.</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>`;
-  }
-
-  return `
-    <section class="report-section">
-      <h2>Assinatura digital do fechamento mensal</h2>
-      <table class="signature-info-table">
-        <tbody>
-          <tr>
-            <th>Nome</th>
-            <td>${escapeHtml(signature.name)}</td>
-            <th>Perfil</th>
-            <td>${escapeHtml(signature.role)}</td>
-          </tr>
-          <tr>
-            <th>Data e hora</th>
-            <td>${escapeHtml(signature.signedAt)}</td>
-            <th>Observação</th>
-            <td>${escapeHtml(displayValue(signature.observation))}</td>
-          </tr>
         </tbody>
       </table>
     </section>`;
@@ -202,23 +155,19 @@ function renderHeader(report: MonthlySanitaryReport): string {
 }
 
 function renderFooter(report: MonthlySanitaryReport): string {
+  const responsibleName = report.footerResponsibleName?.trim() ?? "";
+
   return `
     <footer>
       <table class="manual-signature-table">
         <tbody>
           <tr>
             <th>Responsável Técnico ou Nutricionista</th>
-            <td></td>
+            <td>${escapeHtml(responsibleName)}</td>
+          </tr>
+          <tr>
             <th>Data</th>
-            <td class="date-line">____/____/____</td>
-          </tr>
-          <tr>
-            <th>Assinatura</th>
-            <td colspan="3"></td>
-          </tr>
-          <tr>
-            <th>Carimbo</th>
-            <td colspan="3"></td>
+            <td>${escapeHtml(report.footerDate)}</td>
           </tr>
         </tbody>
       </table>
@@ -342,44 +291,45 @@ function renderStyles(): string {
         background: #ffffff;
       }
 
-      .signature-info-table th {
-        width: 14%;
-      }
-
       .records-table {
         table-layout: fixed;
       }
 
       .records-table th:nth-child(1),
       .records-table td:nth-child(1) {
-        width: 9%;
+        width: 8%;
       }
 
       .records-table th:nth-child(2),
       .records-table td:nth-child(2) {
-        width: 18%;
+        width: 16%;
       }
 
       .records-table th:nth-child(3),
       .records-table td:nth-child(3) {
-        width: 18%;
+        width: 16%;
       }
 
       .records-table th:nth-child(4),
       .records-table td:nth-child(4),
       .records-table th:nth-child(5),
       .records-table td:nth-child(5) {
-        width: 11%;
+        width: 10%;
       }
 
       .records-table th:nth-child(6),
       .records-table td:nth-child(6) {
-        width: 16%;
+        width: 15%;
       }
 
       .records-table th:nth-child(7),
       .records-table td:nth-child(7) {
-        width: 17%;
+        width: 15%;
+      }
+
+      .records-table th:nth-child(8),
+      .records-table td:nth-child(8) {
+        width: 20%;
       }
 
       .empty-message {
@@ -397,12 +347,7 @@ function renderStyles(): string {
       }
 
       .manual-signature-table td {
-        height: 30px;
-      }
-
-      .manual-signature-table .date-line {
-        width: 22%;
-        text-align: center;
+        height: 28px;
       }
 
       .generated-line {
@@ -446,7 +391,6 @@ export function renderMonthlySanitaryReportDocument(
     <main class="report-page">
       ${renderHeader(report)}
       ${renderSummaryTable(report.summaryItems)}
-      ${renderDigitalSignature(report.digitalSignature, report.brandName)}
       ${renderDataTable(report)}
       ${renderFooter(report)}
     </main>

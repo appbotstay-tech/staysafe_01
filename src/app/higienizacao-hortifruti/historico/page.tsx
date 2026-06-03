@@ -168,11 +168,6 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
   if (filtroHortifruti) parametrosRetorno.set("filtroHortifruti", filtroHortifruti);
   if (filtroResponsavel) parametrosRetorno.set("filtroResponsavel", filtroResponsavel);
   const returnTo = buildPathWithParams(parametrosRetorno);
-  const monthlyReportParams = new URLSearchParams({
-    mes: String(selectedMonth),
-    ano: String(selectedYear)
-  });
-  const monthlyReportHref = `/higienizacao-hortifruti/historico/relatorio-mensal?${monthlyReportParams.toString()}`;
 
   const grupoSelecionado = diaAberto
     ? grupos.find((grupo) => formatAppDateInput(grupo.data) === diaAberto)
@@ -345,7 +340,6 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
         signedClosure={fechamentoMensal}
         canSign={canSignMonthly}
         pendingDailySignatures={indicadoresMensais["Dias pendentes de assinatura"]}
-        monthlyReportHref={monthlyReportHref}
       />
 
       {grupoSelecionado ? (
