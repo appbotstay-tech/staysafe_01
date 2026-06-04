@@ -21,6 +21,8 @@
     "reset:historico-plano-diario": "node --no-warnings --experimental-strip-types prisma/reset-historico-plano-diario.ts",
     "fotos:temperatura:dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts migrar --dry-run",
     "fotos:temperatura:migrar": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts migrar",
+    "fotos:temperatura:reparar-arquivos-dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts reparar --dry-run",
+    "fotos:temperatura:reparar-arquivos": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts reparar",
     "fotos:temperatura:limpar-dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar --dry-run",
     "fotos:temperatura:limpar-base64": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar"
   },

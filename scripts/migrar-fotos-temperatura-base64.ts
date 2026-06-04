@@ -6,7 +6,7 @@ import path from "path";
 import { PrismaClient } from "@prisma/client";
 
 type ImageMimeType = "image/jpeg" | "image/png" | "image/webp";
-type Mode = "migrar" | "limpar";
+type Mode = "migrar" | "limpar" | "reparar";
 
 type ParsedImage = {
   buffer: Buffer;
@@ -36,7 +36,11 @@ const CLEANUP_SAMPLE_LIMIT = 20;
 
 function parseArgs(): { mode: Mode; dryRun: boolean } {
   const args = process.argv.slice(2);
-  const mode = args.includes("limpar") ? "limpar" : "migrar";
+  const mode: Mode = args.includes("limpar")
+    ? "limpar"
+    : args.includes("reparar")
+      ? "reparar"
+      : "migrar";
   const dryRun = args.includes("--dry-run") || args.includes("dry-run");
 
   return { mode, dryRun };
@@ -201,6 +205,16 @@ async function saveImage(params: {
   await writeFile(filePath, params.buffer);
 
   return filePath;
+}
+
+async function saveImageAtResolvedPath(params: {
+  uploadRoot: string;
+  filePath: string;
+  buffer: Buffer;
+}): Promise<void> {
+  assertPathInsideRoot(params.uploadRoot, params.filePath);
+  await mkdir(path.dirname(params.filePath), { recursive: true });
+  await writeFile(params.filePath, params.buffer);
 }
 
 function estimateTextBytes(value: string | null): number {
@@ -380,6 +394,126 @@ async function migrateBase64Photos(dryRun: boolean): Promise<void> {
   console.log(`- ignorados: ${ignored}`);
   console.log(`- erros: ${errors}`);
   console.log(`- tamanho aproximado migrado: ${formatBytes(migratedBytes)}`);
+  console.log(`- IDs com falha: ${failedIds.length ? failedIds.join(", ") : "-"}`);
+  console.log("- fotoBase64 foi preservado nesta etapa.");
+}
+
+async function repairMissingPhotoFiles(dryRun: boolean): Promise<void> {
+  const uploadRoot = getUploadRoot();
+  const records = await prisma.controleTemperaturaEquipamento.findMany({
+    where: {
+      fotoBase64: { not: null },
+      NOT: [{ fotoBase64: "" }, { fotoUrl: "" }],
+      fotoUrl: { not: null }
+    },
+    select: {
+      id: true,
+      fotoBase64: true,
+      fotoUrl: true,
+      fotoMimeType: true,
+      fotoTamanhoBytes: true
+    },
+    orderBy: { id: "asc" }
+  });
+
+  let existingFiles = 0;
+  let missingFiles = 0;
+  let wouldRecreate = 0;
+  let recreated = 0;
+  let errors = 0;
+  let pendingReduction = 0;
+  const recreatedIds: number[] = [];
+  const failedIds: number[] = [];
+  const pathsToCreateSamples: string[] = [];
+
+  console.log(`Modo: reparar arquivos${dryRun ? " (dry-run)" : ""}`);
+  console.log(`Diretorio de upload: ${uploadRoot}`);
+  console.log(`Registros com fotoBase64 e fotoUrl: ${records.length}`);
+
+  for (const record of records) {
+    try {
+      if (!record.fotoBase64?.trim() || !record.fotoUrl?.trim()) {
+        continue;
+      }
+
+      pendingReduction += estimateTextBytes(record.fotoBase64);
+
+      const resolvedPath = resolveStoredUploadPath(uploadRoot, record.fotoUrl);
+      const existingFileStat = await stat(resolvedPath.filePath).catch(() => null);
+
+      if (existingFileStat && existingFileStat.size > 0) {
+        existingFiles += 1;
+        continue;
+      }
+
+      missingFiles += 1;
+      wouldRecreate += 1;
+
+      if (pathsToCreateSamples.length < CLEANUP_SAMPLE_LIMIT) {
+        pathsToCreateSamples.push(
+          `- ID ${record.id}: ${record.fotoUrl} -> ${resolvedPath.filePath} (${resolvedPath.source})`
+        );
+      }
+
+      if (dryRun) {
+        continue;
+      }
+
+      const image = parseBase64Image(record.fotoBase64, record.fotoMimeType);
+      await saveImageAtResolvedPath({
+        uploadRoot,
+        filePath: resolvedPath.filePath,
+        buffer: image.buffer
+      });
+
+      const savedFileStat = await stat(resolvedPath.filePath);
+      if (savedFileStat.size <= 0) {
+        throw new Error("arquivo recriado ficou vazio");
+      }
+
+      if (record.fotoTamanhoBytes !== savedFileStat.size) {
+        await prisma.controleTemperaturaEquipamento.update({
+          where: { id: record.id },
+          data: { fotoTamanhoBytes: savedFileStat.size }
+        });
+      }
+
+      recreated += 1;
+      recreatedIds.push(record.id);
+    } catch (error) {
+      errors += 1;
+      failedIds.push(record.id);
+      console.error(
+        `Falha ao reparar registro ${record.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  console.log(`Caminhos fisicos que seriam criados (primeiros ${CLEANUP_SAMPLE_LIMIT}):`);
+  if (pathsToCreateSamples.length === 0) {
+    console.log("- nenhum");
+  } else {
+    for (const sample of pathsToCreateSamples) {
+      console.log(sample);
+    }
+  }
+
+  console.log("Resumo do reparo:");
+  console.log(`- total com fotoBase64 e fotoUrl: ${records.length}`);
+  console.log(`- arquivos existentes: ${existingFiles}`);
+  console.log(`- arquivos ausentes: ${missingFiles}`);
+  console.log(`- seriam recriados: ${wouldRecreate}`);
+  if (dryRun) {
+    console.log("- recriados: 0 (dry-run)");
+    console.log("- nenhum dado alterado e nenhum arquivo criado.");
+  } else {
+    console.log(`- recriados: ${recreated}`);
+  }
+  console.log(`- reducao ainda nao aplicada: ${formatBytes(pendingReduction)}`);
+  console.log(`- erros: ${errors}`);
+  console.log(`- IDs recriados: ${recreatedIds.length ? recreatedIds.join(", ") : "-"}`);
   console.log(`- IDs com falha: ${failedIds.length ? failedIds.join(", ") : "-"}`);
   console.log("- fotoBase64 foi preservado nesta etapa.");
 }
@@ -572,6 +706,11 @@ async function main(): Promise<void> {
 
   if (mode === "limpar") {
     await cleanMigratedBase64(dryRun);
+    return;
+  }
+
+  if (mode === "reparar") {
+    await repairMissingPhotoFiles(dryRun);
     return;
   }
 
