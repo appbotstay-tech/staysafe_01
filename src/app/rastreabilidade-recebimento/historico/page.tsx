@@ -423,11 +423,13 @@ export default async function RastreabilidadeRecebimentoHistoricoPage({
                   </span>
                 </div>
                 <div className="mt-3 overflow-x-auto">
-                  <table className="min-w-[1100px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                  <table className="min-w-[1300px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
                     <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       <tr>
                         <th className="px-3 py-2">Produto</th>
                         <th className="px-3 py-2">Lote</th>
+                        <th className="px-3 py-2">Fabricação</th>
+                        <th className="px-3 py-2">Validade</th>
                         <th className="px-3 py-2">Temperatura</th>
                         <th className="px-3 py-2">Transporte</th>
                         <th className="px-3 py-2">Aspecto</th>
@@ -441,6 +443,12 @@ export default async function RastreabilidadeRecebimentoHistoricoPage({
                         <tr key={item.id}>
                           <td className="px-3 py-2">{item.produto}</td>
                           <td className="px-3 py-2">{item.lote ?? "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {item.dataFabricacao ? formatDateDisplay(item.dataFabricacao) : "-"}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {item.dataValidade ? formatDateDisplay(item.dataValidade) : "-"}
+                          </td>
                           <td className="px-3 py-2">{formatTemperatureDisplay(item.temperatura)}</td>
                           <td className="px-3 py-2">{item.transporteEntregador ?? "-"}</td>
                           <td className="px-3 py-2">{item.aspectoSensorial ?? "-"}</td>
