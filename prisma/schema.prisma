@@ -519,6 +519,8 @@ model ControleTemperaturaEquipamentoOpcao {
   nome                 String
   categoriaEquipamento CategoriaEquipamentoTemperatura?
   ativo                Boolean                          @default(true)
+  turnoManha           Boolean                          @default(true)
+  turnoTarde           Boolean                          @default(true)
   createdAt            DateTime                         @default(now())
   updatedAt            DateTime                         @updatedAt
 

@@ -8,11 +8,13 @@ import {
   CategoriaTemperatura,
   findMatchingTemperatureRule,
   getOperationalStatusLabel,
+  getShiftLabel,
   getStatusLabel,
   isOperationalTemperatureStatus,
   parseTemperatureInput,
   RegraTemperaturaCategoria,
-  StatusOperacionalTemperatura
+  StatusOperacionalTemperatura,
+  TurnoTemperatura
 } from "./utils";
 
 type EquipamentoCategoria = {
@@ -27,15 +29,24 @@ type RegraCategoriaComTipo = RegraTemperaturaCategoria & {
 type RegistroDuplicidade = {
   id: number;
   equipamento: string;
+  turno: TurnoTemperatura;
   href: string;
+};
+
+type EquipamentoTurnos = {
+  nome: string;
+  turnos: TurnoTemperatura[];
 };
 
 type AutomaticCorrectiveActionFieldsProps = {
   equipamentoOptions: string[];
   equipamentosCategoria: EquipamentoCategoria[];
+  equipamentosTurnos: EquipamentoTurnos[];
   regrasCategoria: RegraCategoriaComTipo[];
   registrosDuplicidade?: RegistroDuplicidade[];
   defaultEquipamento?: string;
+  defaultTurno?: TurnoTemperatura;
+  allowTurnoSelection?: boolean;
   defaultTemperatura?: string;
   defaultAcaoCorretiva?: string | null;
   defaultStatusOperacional?: StatusOperacionalTemperatura;
@@ -51,12 +62,20 @@ const STATUS_OPERACIONAL_OPTIONS: Array<{
   { value: "INATIVO", label: "Inativo" }
 ];
 
+const SHIFT_OPTIONS: Array<{ value: TurnoTemperatura; label: string }> = [
+  { value: "MANHA", label: "Manhã" },
+  { value: "TARDE", label: "Tarde" }
+];
+
 export function AutomaticCorrectiveActionFields({
   equipamentoOptions,
   equipamentosCategoria,
+  equipamentosTurnos,
   regrasCategoria,
   registrosDuplicidade = [],
   defaultEquipamento = "",
+  defaultTurno = "MANHA",
+  allowTurnoSelection = true,
   defaultTemperatura = "",
   defaultAcaoCorretiva = null,
   defaultStatusOperacional = "EM_OPERACAO",
@@ -64,6 +83,7 @@ export function AutomaticCorrectiveActionFields({
 }: AutomaticCorrectiveActionFieldsProps) {
   const statusInputRef = useRef<HTMLInputElement | null>(null);
   const [equipamentoSelecionado, setEquipamentoSelecionado] = useState(defaultEquipamento);
+  const [turnoSelecionado, setTurnoSelecionado] = useState<TurnoTemperatura>(defaultTurno);
   const [temperaturaInput, setTemperaturaInput] = useState(defaultTemperatura);
   const [statusOperacional, setStatusOperacional] =
     useState<StatusOperacionalTemperatura>(defaultStatusOperacional);
@@ -79,6 +99,24 @@ export function AutomaticCorrectiveActionFields({
     return map;
   }, [equipamentosCategoria]);
 
+  const turnosPorEquipamento = useMemo(() => {
+    const map = new Map<string, TurnoTemperatura[]>();
+
+    for (const equipamento of equipamentosTurnos) {
+      map.set(equipamento.nome, equipamento.turnos);
+    }
+
+    return map;
+  }, [equipamentosTurnos]);
+
+  const turnosDisponiveis = useMemo(() => {
+    const configuredShifts = turnosPorEquipamento.get(equipamentoSelecionado);
+
+    return configuredShifts && configuredShifts.length > 0
+      ? configuredShifts
+      : SHIFT_OPTIONS.map((option) => option.value);
+  }, [equipamentoSelecionado, turnosPorEquipamento]);
+
   const regrasPorCategoria = useMemo(() => {
     const map = new Map<CategoriaTemperatura, RegraCategoriaComTipo[]>();
 
@@ -90,6 +128,17 @@ export function AutomaticCorrectiveActionFields({
 
     return map;
   }, [regrasCategoria]);
+
+  useEffect(() => {
+    if (!allowTurnoSelection) {
+      setTurnoSelecionado(defaultTurno);
+      return;
+    }
+
+    if (!turnosDisponiveis.includes(turnoSelecionado)) {
+      setTurnoSelecionado(turnosDisponiveis[0] ?? "MANHA");
+    }
+  }, [allowTurnoSelection, defaultTurno, turnoSelecionado, turnosDisponiveis]);
 
   const avaliacao = useMemo(() => {
     if (!equipamentoEmOperacao) {
@@ -145,10 +194,12 @@ export function AutomaticCorrectiveActionFields({
 
     return (
       registrosDuplicidade.find(
-        (registro) => normalizeOption(registro.equipamento) === equipamentoNormalizado
+        (registro) =>
+          normalizeOption(registro.equipamento) === equipamentoNormalizado &&
+          registro.turno === turnoSelecionado
       ) ?? null
     );
-  }, [equipamentoSelecionado, registrosDuplicidade]);
+  }, [equipamentoSelecionado, registrosDuplicidade, turnoSelecionado]);
 
   useEffect(() => {
     const input = statusInputRef.current;
@@ -232,6 +283,44 @@ export function AutomaticCorrectiveActionFields({
         />
       </label>
 
+      {allowTurnoSelection ? (
+        <label className="text-sm text-slate-700 dark:text-slate-200">
+          Turno *
+          <select
+            name="turno"
+            value={turnoSelecionado}
+            required
+            className={inputClassName}
+            onChange={(event) => {
+              setTurnoSelecionado(event.target.value as TurnoTemperatura);
+            }}
+          >
+            {SHIFT_OPTIONS.filter((option) => turnosDisponiveis.includes(option.value)).map(
+              (option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              )
+            )}
+          </select>
+          <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+            {equipamentoSelecionado && turnosDisponiveis.length === 1
+              ? `Este equipamento gera pendência apenas no turno ${getShiftLabel(turnosDisponiveis[0] ?? "MANHA")}.`
+              : "Selecione um turno configurado para este equipamento."}
+          </span>
+        </label>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+          <input type="hidden" name="turno" value={turnoSelecionado} readOnly />
+          <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Turno
+          </p>
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {getShiftLabel(turnoSelecionado)}
+          </p>
+        </div>
+      )}
+
       <label className="text-sm text-slate-700 dark:text-slate-200">
         Status do equipamento *
         <select
@@ -312,7 +401,7 @@ export function AutomaticCorrectiveActionFields({
       {registroDuplicado ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-2 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           <p>
-            Já existe registro deste equipamento para o turno selecionado.
+            Já existe registro deste equipamento para o turno {getShiftLabel(turnoSelecionado)}.
           </p>
           <a href={registroDuplicado.href} className="mt-2 inline-flex text-sm font-medium underline">
             Abrir registro existente

@@ -61,6 +61,14 @@ function getInputValue(formData: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getInputValues(formData: FormData, key: string): string[] {
+  return formData
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function getReturnToPath(formData: FormData): string {
   const value = getInputValue(formData, "returnTo");
 
@@ -133,6 +141,65 @@ async function ensureUniqueTemperatureMeasurement(params: {
   }
 }
 
+function parseShiftValue(value: string): TurnoTemperaturaEquipamento | null {
+  if (value === TurnoTemperaturaEquipamento.MANHA) {
+    return TurnoTemperaturaEquipamento.MANHA;
+  }
+
+  if (value === TurnoTemperaturaEquipamento.TARDE) {
+    return TurnoTemperaturaEquipamento.TARDE;
+  }
+
+  return null;
+}
+
+function getShiftLabel(turno: TurnoTemperaturaEquipamento): string {
+  return turno === TurnoTemperaturaEquipamento.MANHA ? "Manhã" : "Tarde";
+}
+
+function getConfiguredEquipmentShifts(equipment: {
+  turnoManha: boolean;
+  turnoTarde: boolean;
+}): TurnoTemperaturaEquipamento[] {
+  const shifts: TurnoTemperaturaEquipamento[] = [];
+
+  if (equipment.turnoManha) {
+    shifts.push(TurnoTemperaturaEquipamento.MANHA);
+  }
+
+  if (equipment.turnoTarde) {
+    shifts.push(TurnoTemperaturaEquipamento.TARDE);
+  }
+
+  return shifts;
+}
+
+function parseConfiguredShiftsFromFormData(formData: FormData): {
+  turnoManha: boolean;
+  turnoTarde: boolean;
+} {
+  const selectedShifts = new Set(getInputValues(formData, "turnosConferencia"));
+  const turnoManha = selectedShifts.has(TurnoTemperaturaEquipamento.MANHA);
+  const turnoTarde = selectedShifts.has(TurnoTemperaturaEquipamento.TARDE);
+
+  if (!turnoManha && !turnoTarde) {
+    throw new Error("Selecione pelo menos um turno de conferência.");
+  }
+
+  return { turnoManha, turnoTarde };
+}
+
+function ensureEquipmentSupportsShift(
+  configuredShifts: TurnoTemperaturaEquipamento[],
+  turno: TurnoTemperaturaEquipamento
+) {
+  if (!configuredShifts.includes(turno)) {
+    throw new Error(
+      `Este equipamento não está configurado para conferência no turno ${getShiftLabel(turno)}.`
+    );
+  }
+}
+
 async function isMonthSigned(mes: number, ano: number): Promise<boolean> {
   const fechamento = await prisma.controleTemperaturaEquipamentoFechamento.findUnique({
     where: { mes_ano: { mes, ano } }
@@ -172,10 +239,16 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
     throw new Error("O equipamento selecionado está sem categoria configurada.");
   }
 
+  const turnosConferencia = getConfiguredEquipmentShifts(equipamentoOption);
+  if (turnosConferencia.length === 0) {
+    throw new Error("O equipamento selecionado está sem turnos de conferência configurados.");
+  }
+
   if (statusOperacionalEquipamento !== StatusOperacionalEquipamento.EM_OPERACAO) {
     return {
       equipamento: equipamentoOption.nome,
       categoriaEquipamento: equipamentoOption.categoriaEquipamento,
+      turnosConferencia,
       statusOperacionalEquipamento,
       temperaturaAferida: null,
       status: StatusTemperaturaEquipamento.CONFORME,
@@ -245,6 +318,7 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
   return {
     equipamento: equipamentoOption.nome,
     categoriaEquipamento: equipamentoOption.categoriaEquipamento,
+    turnosConferencia,
     statusOperacionalEquipamento,
     temperaturaAferida,
     status,
@@ -352,7 +426,8 @@ export async function createRegistroAction(formData: FormData) {
     );
 
     const data = getTodaySystemDate();
-    const payload = await getRegistroPayload(formData, actor.nomeCompleto);
+    const registroPayload = await getRegistroPayload(formData, actor.nomeCompleto);
+    const { turnosConferencia, ...payload } = registroPayload;
     const { mes, ano } = getMonthYear(data);
 
     if (await isMonthSigned(mes, ano)) {
@@ -361,10 +436,19 @@ export async function createRegistroAction(formData: FormData) {
       );
     }
 
+    const turnoInput = getInputValue(formData, "turno");
     const turno =
-      getCurrentShift() === "MANHA"
+      turnoInput.length > 0
+        ? parseShiftValue(turnoInput)
+        : getCurrentShift() === "MANHA"
         ? TurnoTemperaturaEquipamento.MANHA
         : TurnoTemperaturaEquipamento.TARDE;
+
+    if (!turno) {
+      throw new Error("Selecione um turno de conferência válido.");
+    }
+
+    ensureEquipmentSupportsShift(turnosConferencia, turno);
 
     await ensureUniqueTemperatureMeasurement({
       equipamento: payload.equipamento,
@@ -441,7 +525,13 @@ export async function updateRegistroAction(formData: FormData) {
       throw new Error("Seu perfil não pode editar este registro de temperatura.");
     }
 
-    const payload = await getRegistroPayload(formData, actor.nomeCompleto);
+    const registroPayload = await getRegistroPayload(formData, actor.nomeCompleto);
+    const { turnosConferencia, ...payload } = registroPayload;
+
+    if (payload.equipamento !== existing.equipamento) {
+      ensureEquipmentSupportsShift(turnosConferencia, existing.turno);
+    }
+
     await ensureUniqueTemperatureMeasurement({
       equipamento: payload.equipamento,
       data: existing.data,
@@ -785,11 +875,17 @@ export async function createCatalogOptionAction(formData: FormData) {
       throw new Error("Selecione a categoria do equipamento.");
     }
 
+    const turnosConferencia =
+      tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO
+        ? parseConfiguredShiftsFromFormData(formData)
+        : { turnoManha: true, turnoTarde: true };
+
     await prisma.controleTemperaturaEquipamentoOpcao.create({
       data: {
         tipo,
         nome,
         categoriaEquipamento,
+        ...turnosConferencia,
         ativo: true
       }
     });
@@ -845,12 +941,22 @@ export async function updateCatalogOptionAction(formData: FormData) {
       throw new Error("Selecione a categoria do equipamento.");
     }
 
+    const turnosConferencia =
+      option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO
+        ? parseConfiguredShiftsFromFormData(formData)
+        : null;
+    const ativoInput = getInputValue(formData, "ativo");
+    const ativo =
+      ativoInput === "true" ? true : ativoInput === "false" ? false : option.ativo;
+
     await prisma.$transaction(async (tx) => {
       await tx.controleTemperaturaEquipamentoOpcao.update({
         where: { id: optionId },
         data: {
           nome,
-          categoriaEquipamento
+          categoriaEquipamento,
+          ativo,
+          ...(turnosConferencia ?? {})
         }
       });
 

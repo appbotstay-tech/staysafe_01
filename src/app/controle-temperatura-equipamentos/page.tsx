@@ -192,12 +192,11 @@ export default async function ControleTemperaturaEquipamentosPage({
     })
   ]);
 
-  const equipamentoOptionsAtivas = options
-    .filter(
-      (option) =>
-        option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO && option.ativo
-    )
-    .map((option) => option.nome);
+  const equipamentoCatalogOptionsAtivas = options.filter(
+    (option) =>
+      option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO && option.ativo
+  );
+  const equipamentoOptionsAtivas = equipamentoCatalogOptionsAtivas.map((option) => option.nome);
   const equipamentosCategoria: Array<{
     nome: string;
     categoria: NonNullable<(typeof options)[number]["categoriaEquipamento"]>;
@@ -213,6 +212,15 @@ export default async function ControleTemperaturaEquipamentosPage({
       });
     }
   }
+  const equipamentosTurnos = options
+    .filter((option) => option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO)
+    .map((option) => ({
+      nome: option.nome,
+      turnos: [
+        ...(option.turnoManha ? [TurnoTemperaturaEquipamento.MANHA] : []),
+        ...(option.turnoTarde ? [TurnoTemperaturaEquipamento.TARDE] : [])
+      ]
+    }));
   const regrasCategoriaForm = categoryRules.map((regra) => ({
     categoria: regra.categoria.categoria,
     temperaturaMin: regra.temperaturaMin,
@@ -336,12 +344,12 @@ export default async function ControleTemperaturaEquipamentosPage({
     ? await prisma.controleTemperaturaEquipamento.findMany({
         where: {
           data: dataFormulario,
-          turno: turnoFormulario,
           ...(registroEmEdicao ? { id: { not: registroEmEdicao.id } } : {})
         },
         select: {
           id: true,
-          equipamento: true
+          equipamento: true,
+          turno: true
         },
         orderBy: [{ createdAt: "desc" }]
       })
@@ -353,6 +361,7 @@ export default async function ControleTemperaturaEquipamentosPage({
     return {
       id: registro.id,
       equipamento: registro.equipamento,
+      turno: registro.turno,
       href: buildPathWithParams(query)
     };
   });
@@ -466,21 +475,15 @@ export default async function ControleTemperaturaEquipamentosPage({
               </p>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Turno
-              </p>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {getShiftLabel(turnoFormulario)}
-              </p>
-            </div>
-
             <AutomaticCorrectiveActionFields
               equipamentoOptions={equipamentoFormOptions}
               equipamentosCategoria={equipamentosCategoria}
+              equipamentosTurnos={equipamentosTurnos}
               regrasCategoria={regrasCategoriaForm}
               registrosDuplicidade={registrosDuplicidadeForm}
               defaultEquipamento={registroEmEdicao?.equipamento ?? ""}
+              defaultTurno={turnoFormulario}
+              allowTurnoSelection={!registroEmEdicao}
               defaultTemperatura={
                 registroEmEdicao?.temperaturaAferida !== null &&
                 registroEmEdicao?.temperaturaAferida !== undefined

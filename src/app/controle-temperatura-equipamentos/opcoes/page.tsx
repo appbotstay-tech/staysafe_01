@@ -2,11 +2,13 @@ import {
   CategoriaEquipamentoTemperatura,
   ModuloDocumento,
   StatusTemperaturaEquipamento,
-  TipoOpcaoTemperaturaEquipamento
+  TipoOpcaoTemperaturaEquipamento,
+  TurnoTemperaturaEquipamento
 } from "@prisma/client";
 import Link from "next/link";
 
 import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -31,6 +33,11 @@ const CARD_CLASS =
 const INPUT_CLASS =
   "bpma-input";
 
+const EQUIPMENT_SHIFT_OPTIONS = [
+  { value: TurnoTemperaturaEquipamento.MANHA, label: "Manhã" },
+  { value: TurnoTemperaturaEquipamento.TARDE, label: "Tarde" }
+];
+
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
 
@@ -45,6 +52,18 @@ function categoryLabel(
   nome?: string
 ): string {
   return nome || getCategoriaLabel(categoria);
+}
+
+function equipmentShiftLabels(option: {
+  turnoManha: boolean;
+  turnoTarde: boolean;
+}): string {
+  const labels = [
+    option.turnoManha ? "Manhã" : null,
+    option.turnoTarde ? "Tarde" : null
+  ].filter((label): label is string => label !== null);
+
+  return labels.length > 0 ? labels.join(" e ") : "-";
 }
 
 export default async function ControleTemperaturaOpcoesPage({
@@ -75,10 +94,14 @@ export default async function ControleTemperaturaOpcoesPage({
   const equipamentos = options.filter(
     (option) => option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO
   );
+  const equipamentoEmEdicao = editEquipamentoId
+    ? equipamentos.find((option) => option.id === editEquipamentoId) ?? null
+    : null;
   const acoesCorretivas = options.filter(
     (option) => option.tipo === TipoOpcaoTemperaturaEquipamento.ACAO_CORRETIVA
   );
   const categoriasAtivas = categorias.filter((categoria) => categoria.isActive);
+  const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -147,6 +170,27 @@ export default async function ControleTemperaturaOpcoesPage({
                 </select>
               </label>
 
+              <fieldset className="rounded-lg border border-slate-200 p-3 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                <legend className="px-1 font-medium">Turnos de conferência</legend>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Selecione em quais turnos este equipamento deve gerar pendência de conferência de temperatura.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {EQUIPMENT_SHIFT_OPTIONS.map((option) => (
+                    <label key={option.value} className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        name="turnosConferencia"
+                        value={option.value}
+                        defaultChecked
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
               <div>
                 <button type="submit" className="btn-primary">Adicionar</button>
               </div>
@@ -154,46 +198,6 @@ export default async function ControleTemperaturaOpcoesPage({
 
             <ul className="mt-4 space-y-2">
               {equipamentos.map((option) => {
-                const isEditing = editEquipamentoId === option.id;
-
-                if (isEditing) {
-                  return (
-                    <li key={option.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                      <form action={updateCatalogOptionAction} className="grid gap-2">
-                        <input type="hidden" name="optionId" value={option.id} />
-                        <input type="hidden" name="returnTo" value={PAGE_PATH} />
-
-                        <label className="text-sm text-slate-700 dark:text-slate-200">
-                          Nome
-                          <input type="text" name="nome" required defaultValue={option.nome} className={INPUT_CLASS} />
-                        </label>
-
-                        <label className="text-sm text-slate-700 dark:text-slate-200">
-                          Categoria
-                          <select
-                            name="categoriaEquipamento"
-                            required
-                            defaultValue={option.categoriaEquipamento ?? ""}
-                            className={INPUT_CLASS}
-                          >
-                            {categorias.map((categoria) => (
-                              <option key={categoria.id} value={categoria.categoria}>
-                                {categoryLabel(categoria.categoria, categoria.nome)}
-                                {categoria.isActive ? "" : " (Inativa)"}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <div className="btn-group">
-                          <button type="submit" className="btn-primary">Salvar</button>
-                          <Link href={PAGE_PATH} className="btn-secondary">Cancelar</Link>
-                        </div>
-                      </form>
-                    </li>
-                  );
-                }
-
                 const categoria = option.categoriaEquipamento
                   ? categorias.find((item) => item.categoria === option.categoriaEquipamento)
                   : null;
@@ -208,11 +212,13 @@ export default async function ControleTemperaturaOpcoesPage({
                             ? categoryLabel(option.categoriaEquipamento, categoria?.nome)
                             : "Sem categoria"}
                           {option.ativo ? " • Ativo" : " • Inativo"}
+                          {" • Turnos: "}
+                          {equipmentShiftLabels(option)}
                         </p>
                       </div>
 
                       <div className="btn-group">
-                        <Link href={`${PAGE_PATH}?editEquipamentoId=${option.id}`} className="btn-action">
+                        <Link href={`${PAGE_PATH}?editEquipamentoId=${option.id}`} scroll={false} className="btn-action">
                           Editar
                         </Link>
                         <form action={toggleCatalogOptionStatusAction}>
@@ -304,6 +310,93 @@ export default async function ControleTemperaturaOpcoesPage({
           </div>
         </div>
       </section>
+
+      {equipamentoEmEdicao ? (
+        <ActionModal
+          title="Editar equipamento"
+          cancelHref={PAGE_PATH}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Selecione em quais turnos este equipamento deve gerar pendência de conferência de temperatura.
+            </p>
+          }
+        >
+          {modalError ? (
+            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+              {modalError}
+            </p>
+          ) : null}
+          <form action={updateCatalogOptionAction} className="grid gap-3">
+            <input type="hidden" name="optionId" value={equipamentoEmEdicao.id} />
+            <input type="hidden" name="returnTo" value={`${PAGE_PATH}?editEquipamentoId=${equipamentoEmEdicao.id}`} />
+
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Nome do equipamento
+              <input type="text" name="nome" required defaultValue={equipamentoEmEdicao.nome} className={INPUT_CLASS} />
+            </label>
+
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Categoria
+              <select
+                name="categoriaEquipamento"
+                required
+                defaultValue={equipamentoEmEdicao.categoriaEquipamento ?? ""}
+                className={INPUT_CLASS}
+              >
+                {categorias.map((categoria) => (
+                  <option key={categoria.id} value={categoria.categoria}>
+                    {categoryLabel(categoria.categoria, categoria.nome)}
+                    {categoria.isActive ? "" : " (Inativa)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Status
+              <select name="ativo" defaultValue={equipamentoEmEdicao.ativo ? "true" : "false"} className={INPUT_CLASS}>
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </label>
+
+            <fieldset className="rounded-lg border border-slate-200 p-3 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
+              <legend className="px-1 font-medium">Turnos de conferência</legend>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Selecione em quais turnos este equipamento deve gerar pendência de conferência de temperatura.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {EQUIPMENT_SHIFT_OPTIONS.map((option) => (
+                  <label key={option.value} className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="turnosConferencia"
+                      value={option.value}
+                      defaultChecked={
+                        option.value === TurnoTemperaturaEquipamento.MANHA
+                          ? equipamentoEmEdicao.turnoManha
+                          : equipamentoEmEdicao.turnoTarde
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <ModalActions>
+              <Link href={PAGE_PATH} scroll={false} className="btn-secondary text-center">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-primary">
+                Salvar
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
 
       <section className={CARD_CLASS}>
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">

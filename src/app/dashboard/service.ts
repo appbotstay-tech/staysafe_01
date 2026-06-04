@@ -603,6 +603,25 @@ function temperatureShiftLabel(turno: TurnoTemperaturaEquipamento): string {
   return turno === TurnoTemperaturaEquipamento.MANHA ? "Manhã" : "Tarde";
 }
 
+function temperatureConfiguredShifts(equipment: {
+  turnoManha: boolean;
+  turnoTarde: boolean;
+}): TurnoTemperaturaEquipamento[] {
+  const shifts: TurnoTemperaturaEquipamento[] = [];
+
+  if (equipment.turnoManha) {
+    shifts.push(TurnoTemperaturaEquipamento.MANHA);
+  }
+
+  if (equipment.turnoTarde) {
+    shifts.push(TurnoTemperaturaEquipamento.TARDE);
+  }
+
+  return shifts.length > 0
+    ? shifts
+    : [TurnoTemperaturaEquipamento.MANHA, TurnoTemperaturaEquipamento.TARDE];
+}
+
 function temperatureStatusLabel(status: StatusTemperaturaEquipamento): DashboardNormalizedStatus {
   return status === StatusTemperaturaEquipamento.CONFORME ? "Concluído" : "Não conformidade";
 }
@@ -907,7 +926,6 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
   const moduleInfo = MODULES.temperatura;
   const stats = moduleStatsBase(moduleInfo);
   const dates = enumerateDateRange(range);
-  const shifts = [TurnoTemperaturaEquipamento.MANHA, TurnoTemperaturaEquipamento.TARDE];
 
   const [equipamentos, registros] = await Promise.all([
     prisma.controleTemperaturaEquipamentoOpcao.findMany({
@@ -915,7 +933,7 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
         tipo: TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO,
         ativo: true
       },
-      select: { nome: true },
+      select: { nome: true, turnoManha: true, turnoTarde: true },
       orderBy: [{ nome: "asc" }]
     }),
     prisma.controleTemperaturaEquipamento.findMany({
@@ -950,7 +968,7 @@ async function buildTemperatureStats(range: DateOnlyRange): Promise<ModuleStats>
 
   for (const date of dates) {
     for (const equipamento of equipamentos) {
-      for (const turno of shifts) {
+      for (const turno of temperatureConfiguredShifts(equipamento)) {
         const key = keyFor(date, equipamento.nome, turno);
         expectedKeys.add(key);
         const href = `${moduleInfo.href}?filtroData=${formatDateInput(date)}&filtroEquipamento=${encodeURIComponent(equipamento.nome)}`;
