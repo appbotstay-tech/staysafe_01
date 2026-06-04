@@ -14,10 +14,25 @@ type ParsedImage = {
   extension: "jpg" | "png" | "webp";
 };
 
+type ResolvedStoredPhotoPath = {
+  filePath: string;
+  source: "api-route" | "uploads-route" | "relative" | "absolute";
+};
+
+type IneligibleReason =
+  | "fotoUrl vazia"
+  | "fotoBase64 vazio"
+  | "fotoUrl invalida"
+  | "arquivo inexistente"
+  | "arquivo vazio"
+  | "erro";
+
 const prisma = new PrismaClient();
 const UPLOAD_ROUTE_PREFIX = "/api/uploads";
+const PUBLIC_UPLOAD_ROUTE_PREFIX = "/uploads";
 const TEMPERATURE_FOLDER = "temperatura-equipamentos";
 const DEFAULT_UPLOAD_ROOT = path.join(process.cwd(), ".data", "uploads");
+const CLEANUP_SAMPLE_LIMIT = 20;
 
 function parseArgs(): { mode: Mode; dryRun: boolean } {
   const args = process.argv.slice(2);
@@ -192,32 +207,93 @@ function estimateTextBytes(value: string | null): number {
   return Buffer.byteLength(value ?? "", "utf8");
 }
 
-function parseStoredUploadUrl(uploadRoot: string, url: string): string {
-  const parsedUrl = new URL(url, "http://local");
-  const pathname = parsedUrl.pathname;
-
-  if (!pathname.startsWith(`${UPLOAD_ROUTE_PREFIX}/`)) {
-    throw new Error("fotoUrl nao aponta para storage local do app");
-  }
-
-  const relativePath = pathname
-    .slice(UPLOAD_ROUTE_PREFIX.length + 1)
+function decodePathSegments(value: string): string[] {
+  return value
     .split("/")
+    .filter(Boolean)
     .map((segment) => decodeURIComponent(segment));
+}
 
+function assertSafeRelativeSegments(segments: string[]): void {
   if (
-    relativePath.length === 0 ||
-    relativePath.some(
-      (segment) => !segment || segment === "." || segment === ".."
+    segments.length === 0 ||
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === "." ||
+        segment === ".." ||
+        segment.includes("\\")
     )
   ) {
     throw new Error("fotoUrl possui caminho invalido");
   }
+}
 
-  const filePath = path.resolve(uploadRoot, ...relativePath);
+function resolveRelativeStoredPhotoPath(
+  uploadRoot: string,
+  relativePath: string,
+  source: ResolvedStoredPhotoPath["source"]
+): ResolvedStoredPhotoPath {
+  const relativeSegments = decodePathSegments(relativePath);
+  assertSafeRelativeSegments(relativeSegments);
+
+  const filePath = path.resolve(uploadRoot, ...relativeSegments);
   assertPathInsideRoot(uploadRoot, filePath);
 
-  return filePath;
+  return { filePath, source };
+}
+
+function resolveAbsoluteStoredPhotoPath(
+  uploadRoot: string,
+  storedPath: string
+): ResolvedStoredPhotoPath {
+  const decodedPath = decodeURIComponent(storedPath);
+  const filePath = path.resolve(decodedPath);
+  assertPathInsideRoot(uploadRoot, filePath);
+
+  return { filePath, source: "absolute" };
+}
+
+function resolveStoredUploadPath(
+  uploadRoot: string,
+  fotoUrl: string
+): ResolvedStoredPhotoPath {
+  const trimmedUrl = fotoUrl.trim();
+  if (!trimmedUrl) {
+    throw new Error("fotoUrl vazia");
+  }
+
+  const parsedUrl = new URL(trimmedUrl, "http://local");
+  const pathname = parsedUrl.pathname;
+
+  if (pathname.startsWith(`${UPLOAD_ROUTE_PREFIX}/`)) {
+    return resolveRelativeStoredPhotoPath(
+      uploadRoot,
+      pathname.slice(UPLOAD_ROUTE_PREFIX.length + 1),
+      "api-route"
+    );
+  }
+
+  if (pathname.startsWith(`${PUBLIC_UPLOAD_ROUTE_PREFIX}/`)) {
+    return resolveRelativeStoredPhotoPath(
+      uploadRoot,
+      pathname.slice(PUBLIC_UPLOAD_ROUTE_PREFIX.length + 1),
+      "uploads-route"
+    );
+  }
+
+  if (path.isAbsolute(trimmedUrl)) {
+    return resolveAbsoluteStoredPhotoPath(uploadRoot, trimmedUrl);
+  }
+
+  return resolveRelativeStoredPhotoPath(uploadRoot, trimmedUrl, "relative");
+}
+
+function incrementReason(
+  reasons: Map<IneligibleReason, number>,
+  reason: IneligibleReason
+): void {
+  reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
 }
 
 async function migrateBase64Photos(dryRun: boolean): Promise<void> {
@@ -326,31 +402,94 @@ async function cleanMigratedBase64(dryRun: boolean): Promise<void> {
 
   let eligible = 0;
   let cleaned = 0;
+  let ineligible = 0;
+  let foundFile = 0;
   let missingFile = 0;
   let errors = 0;
   let estimatedReduction = 0;
   const failedIds: number[] = [];
+  const ineligibleReasons = new Map<IneligibleReason, number>();
+  const testedPathSamples: string[] = [];
 
   console.log(`Modo: limpar${dryRun ? " (dry-run)" : ""}`);
   console.log(`Diretorio de upload: ${uploadRoot}`);
   console.log(`Registros com base64 e fotoUrl: ${records.length}`);
 
   for (const record of records) {
+    let resolvedPath: ResolvedStoredPhotoPath | null = null;
+
     try {
-      if (!record.fotoUrl?.trim() || !record.fotoBase64?.trim()) {
+      if (!record.fotoUrl?.trim()) {
+        ineligible += 1;
+        incrementReason(ineligibleReasons, "fotoUrl vazia");
+        if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+          testedPathSamples.push(
+            `- ID ${record.id}: fotoUrl vazia | elegivel: nao | motivo: fotoUrl vazia`
+          );
+        }
         continue;
       }
 
-      const filePath = parseStoredUploadUrl(uploadRoot, record.fotoUrl);
-      const fileStat = await stat(filePath).catch(() => null);
+      if (!record.fotoBase64?.trim()) {
+        ineligible += 1;
+        incrementReason(ineligibleReasons, "fotoBase64 vazio");
+        if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+          testedPathSamples.push(
+            `- ID ${record.id}: fotoUrl=${record.fotoUrl} | elegivel: nao | motivo: fotoBase64 vazio`
+          );
+        }
+        continue;
+      }
 
-      if (!fileStat || fileStat.size <= 0) {
+      try {
+        resolvedPath = resolveStoredUploadPath(uploadRoot, record.fotoUrl);
+      } catch (error) {
+        ineligible += 1;
+        incrementReason(ineligibleReasons, "fotoUrl invalida");
+        if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+          testedPathSamples.push(
+            `- ID ${record.id}: fotoUrl=${record.fotoUrl} | elegivel: nao | motivo: ${
+              error instanceof Error ? error.message : "fotoUrl invalida"
+            }`
+          );
+        }
+        continue;
+      }
+
+      const fileStat = await stat(resolvedPath.filePath).catch(() => null);
+
+      if (!fileStat) {
+        ineligible += 1;
         missingFile += 1;
+        incrementReason(ineligibleReasons, "arquivo inexistente");
+        if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+          testedPathSamples.push(
+            `- ID ${record.id}: ${record.fotoUrl} -> ${resolvedPath.filePath} (${resolvedPath.source}) | encontrado: nao | elegivel: nao | motivo: arquivo inexistente`
+          );
+        }
+        continue;
+      }
+
+      foundFile += 1;
+
+      if (fileStat.size <= 0) {
+        ineligible += 1;
+        incrementReason(ineligibleReasons, "arquivo vazio");
+        if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+          testedPathSamples.push(
+            `- ID ${record.id}: ${record.fotoUrl} -> ${resolvedPath.filePath} (${resolvedPath.source}) | encontrado: sim | tamanho: 0 B | elegivel: nao | motivo: arquivo vazio`
+          );
+        }
         continue;
       }
 
       eligible += 1;
       estimatedReduction += estimateTextBytes(record.fotoBase64);
+      if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+        testedPathSamples.push(
+          `- ID ${record.id}: ${record.fotoUrl} -> ${resolvedPath.filePath} (${resolvedPath.source}) | encontrado: sim | tamanho: ${formatBytes(fileStat.size)} | elegivel: sim`
+        );
+      }
 
       if (!dryRun) {
         await prisma.controleTemperaturaEquipamento.update({
@@ -362,19 +501,55 @@ async function cleanMigratedBase64(dryRun: boolean): Promise<void> {
       cleaned += 1;
     } catch (error) {
       errors += 1;
+      ineligible += 1;
+      incrementReason(ineligibleReasons, "erro");
       failedIds.push(record.id);
       console.error(
         `Falha ao limpar registro ${record.id}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
+      if (dryRun && testedPathSamples.length < CLEANUP_SAMPLE_LIMIT) {
+        testedPathSamples.push(
+          `- ID ${record.id}: ${
+            resolvedPath ? resolvedPath.filePath : record.fotoUrl ?? "-"
+          } | elegivel: nao | motivo: erro`
+        );
+      }
+    }
+  }
+
+  if (dryRun) {
+    console.log(`Caminhos fisicos testados (primeiros ${CLEANUP_SAMPLE_LIMIT}):`);
+    if (testedPathSamples.length === 0) {
+      console.log("- nenhum registro testado");
+    } else {
+      for (const sample of testedPathSamples) {
+        console.log(sample);
+      }
     }
   }
 
   console.log("Resumo da limpeza:");
+  console.log(`- total com fotoBase64 e fotoUrl: ${records.length}`);
+  console.log(`- arquivos encontrados fisicamente: ${foundFile}`);
+  console.log(`- arquivos nao encontrados: ${missingFile}`);
   console.log(`- elegiveis: ${eligible}`);
-  console.log(`- limpos: ${cleaned}`);
-  console.log(`- ignorados por arquivo inexistente/invalido: ${missingFile}`);
+  console.log(`- nao elegiveis: ${ineligible}`);
+  if (dryRun) {
+    console.log(`- seriam limpos: ${eligible}`);
+    console.log("- limpos: 0 (dry-run)");
+  } else {
+    console.log(`- limpos: ${cleaned}`);
+  }
+  console.log("- motivos dos nao elegiveis:");
+  if (ineligibleReasons.size === 0) {
+    console.log("  - nenhum");
+  } else {
+    for (const [reason, total] of ineligibleReasons.entries()) {
+      console.log(`  - ${reason}: ${total}`);
+    }
+  }
   console.log(`- erros: ${errors}`);
   console.log(`- reducao estimada: ${formatBytes(estimatedReduction)}`);
   console.log(`- IDs com falha: ${failedIds.length ? failedIds.join(", ") : "-"}`);
