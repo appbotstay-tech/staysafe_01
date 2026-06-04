@@ -11,11 +11,14 @@ import {
   getAppMonthYear
 } from "@/lib/date-time";
 import { canSignModuleMonthlyClosure } from "@/lib/module-signatures";
-import { hasAnyPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getRoleLabel, type UserRole } from "@/lib/rbac";
+import { canSignAsResponsible, getRoleLabel, type UserRole } from "@/lib/rbac";
 
-import { signWeeklyAreaSupervisorAction } from "../../actions";
+import {
+  signWeeklyAreaPendingItemsAction,
+  signWeeklyAreaSupervisorAction,
+  updateWeeklyRecordAction
+} from "../../actions";
 import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../../constants";
 import { consolidateWeeklyExecutionsByAreaWeek } from "../../service";
 import { StatusBadge } from "../../status-badge";
@@ -23,6 +26,7 @@ import {
   formatDateDisplay,
   formatDateInput,
   formatDateTimeDisplay,
+  getCurrentSystemDateTime,
   formatWeeklyExecutionQuando,
   getWeekDateRangeForDate,
   getMonthDateRange,
@@ -31,6 +35,13 @@ import {
   parsePositiveInt,
   parseWeeklyStatus
 } from "../../utils";
+import {
+  canSignAllWeeklyItems,
+  canSignHistoricalWeeklyItems,
+  canSignWeeklyAreaSupervisor,
+  canSignWeeklyItems,
+  isHistoricalWeeklySignature
+} from "../../weekly-permissions";
 import { WeeklyChecklistSync } from "../weekly-checklist-sync";
 
 const PAGE_PATH = "/plano-limpeza/semanal/historico";
@@ -71,14 +82,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
-  const canSignWeeklySupervisor = authUser
-    ? hasAnyPermission(authUser, [
-        "usuarios.responsavel_tecnico",
-        "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico",
-        "modulo.limpeza_semanal.assinar_dia"
-      ])
-    : false;
+  const now = getCurrentSystemDateTime();
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -325,11 +329,37 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const selectedSignature = selectedSummary
     ? supervisorSignatureByAreaWeek.get(selectedSummaryKey) ?? null
     : null;
+  const selectedIsHistoricalWeek = selectedSummary
+    ? isHistoricalWeeklySignature(selectedSummary.weekStart, now)
+    : false;
+  const selectedCanSignWeeklySupervisor =
+    Boolean(authUser && selectedSummary) &&
+    canSignWeeklyAreaSupervisor({
+      user: authUser!,
+      weekStart: selectedSummary!.weekStart,
+      referenceDate: now
+    });
+  const selectedCanSignItemRecords =
+    Boolean(authUser && selectedSummary) &&
+    canSignAsResponsible(authUser!) &&
+    (selectedIsHistoricalWeek
+      ? canSignHistoricalWeeklyItems(authUser!)
+      : canSignWeeklyItems(authUser!));
+  const selectedCanSignPendingItemsBatch =
+    Boolean(authUser && selectedSummary) &&
+    canSignAsResponsible(authUser!) &&
+    (selectedIsHistoricalWeek
+      ? canSignHistoricalWeeklyItems(authUser!)
+      : canSignAllWeeklyItems(authUser!));
   const canShowWeeklyAreaSignatureForm =
     Boolean(selectedSummary) &&
-    canSignWeeklySupervisor &&
+    selectedCanSignWeeklySupervisor &&
     selectedSummary!.pendingItems === 0 &&
     !selectedSignature?.isFullySigned;
+  const canShowHistoricalItemsSignatureForm =
+    Boolean(selectedSummary) &&
+    selectedCanSignPendingItemsBatch &&
+    selectedSummary!.pendingItems > 0;
 
   const observacoesPorAreaSemana = new Map<string, number>();
   for (const record of rawRecords) {
@@ -674,10 +704,17 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                 </dl>
               ) : null}
 
-              {!selectedSignature?.isFullySigned && selectedSummary.pendingItems > 0 ? (
+              {!selectedSignature?.isFullySigned && !selectedCanSignWeeklySupervisor ? (
+                <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  Seu perfil não possui permissão para assinar esta área da semana.
+                </p>
+              ) : null}
+
+              {!selectedSignature?.isFullySigned &&
+              selectedCanSignWeeklySupervisor &&
+              selectedSummary.pendingItems > 0 ? (
                 <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                  A assinatura do supervisor fica disponível quando todos os itens da área
-                  estiverem executados.
+                  A assinatura ficará disponível após a execução de todos os itens da área.
                 </p>
               ) : null}
 
@@ -715,15 +752,60 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                   </label>
                   <div className="md:col-span-2">
                     <button type="submit" className="btn-primary">
-                      Assinar área da semana
+                      Assinar área da semana como supervisor
                     </button>
                   </div>
                 </form>
               ) : null}
             </div>
 
+            {canShowHistoricalItemsSignatureForm ? (
+              <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Assinatura dos itens pendentes
+                </h3>
+                <form action={signWeeklyAreaPendingItemsAction} className="mt-3 grid gap-3 md:grid-cols-2">
+                  <input type="hidden" name="area" value={selectedSummary.area} />
+                  <input
+                    type="hidden"
+                    name="weekStart"
+                    value={formatDateInput(selectedSummary.weekStart)}
+                  />
+                  <input
+                    type="hidden"
+                    name="returnTo"
+                    value={buildOpenSummaryHref(selectedSummary)}
+                  />
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Senha para confirmar
+                    <input
+                      type="password"
+                      name="senhaConfirmacao"
+                      required
+                      autoComplete="current-password"
+                      className={INPUT_CLASS}
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Observação
+                    <input
+                      type="text"
+                      name="observacaoAssinatura"
+                      className={INPUT_CLASS}
+                      placeholder="Opcional"
+                    />
+                  </label>
+                  <div className="md:col-span-2">
+                    <button type="submit" className="btn-primary">
+                      Assinar itens pendentes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
+
             <div className="overflow-x-auto">
-              <table className="min-w-[760px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <table className="min-w-[980px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
                 <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   <tr>
                     <th className="px-3 py-2">O que limpar</th>
@@ -731,12 +813,13 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                     <th className="px-3 py-2">Responsável pela limpeza</th>
                     <th className="px-3 py-2">Status do item</th>
                     <th className="px-3 py-2">Observações</th>
+                    <th className="px-3 py-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {selectedRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                         Nenhum item/local encontrado para esta área e semana.
                       </td>
                     </tr>
@@ -771,6 +854,46 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                             <StatusBadge status={statusItem} />
                           </td>
                           <td className="px-3 py-2">{observacoes || "-"}</td>
+                          <td className="px-3 py-2">
+                            {!record.assinaturaResponsavel.trim() &&
+                            selectedCanSignItemRecords ? (
+                              <form action={updateWeeklyRecordAction} className="grid min-w-[300px] gap-2">
+                                <input type="hidden" name="id" value={String(record.id)} />
+                                <input
+                                  type="hidden"
+                                  name="returnTo"
+                                  value={buildOpenSummaryHref(selectedSummary)}
+                                />
+                                <input type="hidden" name="etapa" value="responsavel" />
+                                <input
+                                  type="password"
+                                  name="senhaConfirmacao"
+                                  required
+                                  placeholder="Confirme sua senha"
+                                  className="bpma-input text-xs"
+                                />
+                                <input
+                                  type="text"
+                                  name="observacaoAssinatura"
+                                  placeholder="Observação (Opcional)"
+                                  className="bpma-input text-xs"
+                                />
+                                <button type="submit" className="btn-primary whitespace-nowrap">
+                                  Assinar item
+                                </button>
+                              </form>
+                            ) : !record.assinaturaResponsavel.trim() ? (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {selectedIsHistoricalWeek
+                                  ? "Sem permissão para assinar item histórico"
+                                  : "Sem permissão para assinar item"}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                Item executado
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })

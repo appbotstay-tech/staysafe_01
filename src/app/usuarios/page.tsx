@@ -759,6 +759,11 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
                                   Sensível
                                 </span>
                               ) : null}
+                              {permission.descricao ? (
+                                <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                                  {permission.descricao}
+                                </span>
+                              ) : null}
                             </span>
                           </label>
                         );

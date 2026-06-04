@@ -18,7 +18,6 @@ import {
   ensureCanManageOptions,
   ensureCanReopenMonth,
   ensureCanSignResponsible,
-  ensureAnyPermission,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -40,6 +39,14 @@ import {
   formatWeeklySignatureDateTime,
   parsePositiveInt
 } from "./utils";
+import {
+  canSignWeeklyAreaSupervisor,
+  canSignHistoricalWeeklyItems,
+  canSignWeeklyItems,
+  isHistoricalWeeklySignature,
+  WEEKLY_HISTORICAL_ITEM_SIGNATURE_PERMISSION_CODE,
+  WEEKLY_SIGN_ALL_ITEMS_PERMISSION_CODE
+} from "./weekly-permissions";
 
 const MODULE_PATH = "/plano-limpeza";
 const DIARIO_PATH = "/plano-limpeza/diario";
@@ -1230,69 +1237,161 @@ export async function updateWeeklyRecordAction(formData: FormData) {
       throw new Error("A etapa de assinatura informada é inválida para este checklist.");
     }
 
-    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
-
-    if (etapaPermitida === "responsavel") {
-      ensureCanSignResponsible(actor);
-      const signedAt = getCurrentSystemDateTime();
-
-      await prisma.planoLimpezaSemanalExecucao.update({
-        where: { id },
-        data: {
-          assinaturaResponsavel: actor.nomeCompleto,
-          assinaturaResponsavelUsuarioId: actor.id,
-          assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
-          assinaturaResponsavelPerfil: actor.perfil,
-          assinaturaResponsavelDataHora: signedAt,
-          quando: formatWeeklySignatureDateTime(signedAt),
-          status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
-          observacaoResponsavel: observacaoAssinatura || null
-        }
-      });
-      await createSignatureLog({
-        user: actor,
-        tipo: "RESPONSAVEL",
-        modulo: "plano-limpeza/semanal",
-        referenciaId: String(id),
-        observacao: observacaoAssinatura || null
-      });
-    } else {
-      ensurePermission(
-        actor,
-        "modulo.limpeza_semanal.assinar_historico",
-        "Seu perfil não pode assinar a supervisão do plano semanal."
+    if (etapaPermitida !== "responsavel") {
+      throw new Error(
+        "No Plano Semanal, a assinatura do supervisor deve ser feita pela área da semana, não por item individual."
       );
-      if (!existing.assinaturaResponsavel.trim()) {
-        throw new Error("A assinatura do responsável é obrigatória antes da assinatura do supervisor.");
-      }
-      if (isSameResponsibleUser(existing, actor)) {
-        throw new Error(SELF_SUPERVISION_MESSAGE);
-      }
-      const signedAt = getCurrentSystemDateTime();
-
-      await prisma.planoLimpezaSemanalExecucao.update({
-        where: { id },
-        data: {
-          assinaturaSupervisor: actor.nomeCompleto,
-          assinaturaSupervisorUsuarioId: actor.id,
-          assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
-          assinaturaSupervisorPerfil: actor.perfil,
-          assinaturaSupervisorDataHora: signedAt,
-          status: StatusPlanoLimpeza.CONCLUIDO,
-          observacaoSupervisor: observacaoAssinatura || null
-        }
-      });
-      await createSignatureLog({
-        user: actor,
-        tipo: "SUPERVISOR",
-        modulo: "plano-limpeza/semanal",
-        referenciaId: String(id),
-        observacao: observacaoAssinatura || null
-      });
     }
 
+    ensureCanSignResponsible(actor);
+    const signedAt = getCurrentSystemDateTime();
+    const isHistoricalRecord = isHistoricalWeeklySignature(
+      getWeekDateRangeForDate(existing.dataExecucao).start,
+      signedAt
+    );
+    if (isHistoricalRecord && !canSignHistoricalWeeklyItems(actor)) {
+      throw new Error(
+        "Seu perfil não possui permissão para assinar itens históricos como responsável pela limpeza."
+      );
+    }
+    if (!isHistoricalRecord && !canSignWeeklyItems(actor)) {
+      throw new Error("Seu perfil não possui permissão para assinar itens do Plano Semanal.");
+    }
+
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    await prisma.planoLimpezaSemanalExecucao.update({
+      where: { id },
+      data: {
+        assinaturaResponsavel: actor.nomeCompleto,
+        assinaturaResponsavelUsuarioId: actor.id,
+        assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+        assinaturaResponsavelPerfil: actor.perfil,
+        assinaturaResponsavelDataHora: signedAt,
+        quando: formatWeeklySignatureDateTime(signedAt),
+        status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
+        observacaoResponsavel: observacaoAssinatura || null
+      }
+    });
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL",
+      modulo: "plano-limpeza/semanal",
+      referenciaId: String(id),
+      observacao: observacaoAssinatura || null
+    });
+
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Checklist Semanal Assinado com Sucesso.");
+    redirectWithFeedback(returnTo, "success", "Item semanal assinado como responsável pela limpeza.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function signWeeklyAreaPendingItemsAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, SEMANAL_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureCanSignResponsible(actor);
+
+    const area = getInputValue(formData, "area");
+    ensureNonEmpty(area, "Área");
+
+    const weekStartRaw = getInputValue(formData, "weekStart");
+    const weekStart = parseDateInput(weekStartRaw);
+    if (!weekStart) {
+      throw new Error("Semana inválida para assinatura dos itens.");
+    }
+
+    const weekRange = getWeekDateRangeForDate(weekStart);
+    const signedAt = getCurrentSystemDateTime();
+    const isHistoricalWeek = isHistoricalWeeklySignature(weekRange.start, signedAt);
+    ensurePermission(
+      actor,
+      isHistoricalWeek
+        ? WEEKLY_HISTORICAL_ITEM_SIGNATURE_PERMISSION_CODE
+        : WEEKLY_SIGN_ALL_ITEMS_PERMISSION_CODE,
+      isHistoricalWeek
+        ? "Seu perfil não possui permissão para assinar itens históricos como responsável pela limpeza."
+        : "Seu perfil não pode usar Assinar itens no plano semanal."
+      );
+
+    const periods = new Map(
+      [weekRange.start, weekRange.end].map((date) => {
+        const period = getMonthYear(date);
+        return [`${period.ano}-${period.mes}`, period];
+      })
+    );
+    for (const period of periods.values()) {
+      if (await isMonthSigned(TipoPlanoLimpeza.SEMANAL, period.mes, period.ano)) {
+        throw new Error("Esta área/semana pertence a um período fechado e não pode ser alterada.");
+      }
+    }
+
+    const records = await prisma.planoLimpezaSemanalExecucao.findMany({
+      where: {
+        area,
+        dataExecucao: {
+          gte: weekRange.start,
+          lte: weekRange.end
+        }
+      },
+      select: {
+        id: true,
+        assinaturaResponsavel: true,
+        assinaturaSupervisor: true
+      }
+    });
+
+    if (records.length === 0) {
+      throw new Error("Não há registros para esta área e semana.");
+    }
+
+    const pendingResponsibleRecords = records.filter(
+      (record) =>
+        record.assinaturaResponsavel.trim().length === 0 &&
+        record.assinaturaSupervisor.trim().length === 0
+    );
+    if (pendingResponsibleRecords.length === 0) {
+      throw new Error("Não há itens pendentes elegíveis para assinatura nesta área da semana.");
+    }
+
+    const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+    const observacaoAssinatura = getInputValue(formData, "observacaoAssinatura");
+    await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
+
+    await prisma.planoLimpezaSemanalExecucao.updateMany({
+      where: { id: { in: pendingResponsibleRecords.map((record) => record.id) } },
+      data: {
+        assinaturaResponsavel: actor.nomeCompleto,
+        assinaturaResponsavelUsuarioId: actor.id,
+        assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+        assinaturaResponsavelPerfil: actor.perfil,
+        assinaturaResponsavelDataHora: signedAt,
+        quando: formatWeeklySignatureDateTime(signedAt),
+        status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
+        observacaoResponsavel: observacaoAssinatura || null
+      }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL",
+      modulo: "plano-limpeza/semanal/area",
+      referenciaId: `${area}|${formatDateInput(weekRange.start)}`,
+      observacao:
+        observacaoAssinatura ||
+        `Assinar itens pendentes - ${pendingResponsibleRecords.length} item(ns) assinado(s).`
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      `${pendingResponsibleRecords.length} item(ns) da área foram assinados com sucesso.`
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
@@ -1304,17 +1403,6 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureAnyPermission(
-      actor,
-      [
-        "usuarios.responsavel_tecnico",
-        "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico",
-        "modulo.limpeza_semanal.assinar_dia"
-      ],
-      "Seu perfil não pode assinar a supervisão do plano semanal."
-    );
-
     const area = getInputValue(formData, "area");
     ensureNonEmpty(area, "Área");
 
@@ -1325,6 +1413,16 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
     }
 
     const weekRange = getWeekDateRangeForDate(weekStart);
+    if (
+      !canSignWeeklyAreaSupervisor({
+        user: actor,
+        weekStart: weekRange.start,
+        referenceDate: getCurrentSystemDateTime()
+      })
+    ) {
+      throw new Error("Seu perfil não possui permissão para assinar esta área da semana.");
+    }
+
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
     const observacaoAssinatura = getInputValue(formData, "observacaoAssinatura");
 

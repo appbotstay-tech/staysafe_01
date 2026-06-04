@@ -193,8 +193,8 @@ export function canSignAsSupervisor(role: RoleSubject): boolean {
         "modulo.amostras.assinar_historico",
         "modulo.limpeza_diaria.assinar_todos",
         "modulo.limpeza_diaria.assinar_historico",
-        "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico"
+        "modulo.limpeza_semanal.editar_historico",
+        "modulo.limpeza_semanal.assinar_dia"
       ])
     : role === "DEV" || role === "GERENTE" || role === "NUTRICIONISTA";
 }

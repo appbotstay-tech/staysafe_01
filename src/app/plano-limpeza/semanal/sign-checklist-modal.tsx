@@ -1,7 +1,11 @@
 import { StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
-import { signWeeklyAreaSupervisorAction, updateWeeklyRecordAction } from "../actions";
+import {
+  signWeeklyAreaPendingItemsAction,
+  signWeeklyAreaSupervisorAction,
+  updateWeeklyRecordAction
+} from "../actions";
 import { StatusBadge } from "../status-badge";
 import { formatDateDisplay, formatDateInput } from "../utils";
 
@@ -10,6 +14,9 @@ type WeeklySignChecklistModalProps = {
   returnTo: string;
   usuarioAssinando: string;
   podeAssinarSupervisor: boolean;
+  podeAssinarItens: boolean;
+  podeAssinarTodosItens: boolean;
+  isHistorico: boolean;
   dataHoraAtual: string;
   execution: {
     executionId: number;
@@ -46,6 +53,9 @@ export function WeeklySignChecklistModal({
   returnTo,
   usuarioAssinando,
   podeAssinarSupervisor,
+  podeAssinarItens,
+  podeAssinarTodosItens,
+  isHistorico,
   dataHoraAtual,
   execution,
   items
@@ -121,10 +131,17 @@ export function WeeklySignChecklistModal({
             )}
           </div>
 
-          {!execution.assinaturaSupervisor.trim() && execution.pendingItems > 0 ? (
+          {!execution.assinaturaSupervisor.trim() && !podeAssinarSupervisor ? (
+            <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              Seu perfil não possui permissão para assinar esta área da semana.
+            </p>
+          ) : null}
+
+          {!execution.assinaturaSupervisor.trim() &&
+          podeAssinarSupervisor &&
+          execution.pendingItems > 0 ? (
             <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              A assinatura do supervisor fica disponível quando todos os itens da área
-              estiverem executados.
+              A assinatura ficará disponível após a execução de todos os itens da área.
             </p>
           ) : null}
 
@@ -156,7 +173,7 @@ export function WeeklySignChecklistModal({
               </label>
               <div className="md:col-span-2">
                 <button type="submit" className="btn-primary">
-                  Assinar área da semana
+                  Assinar área da semana como supervisor
                 </button>
               </div>
             </form>
@@ -165,7 +182,35 @@ export function WeeklySignChecklistModal({
 
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="border-b border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-            Itens/Locais da Área ({items.length})
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <span>Itens/Locais da Área ({items.length})</span>
+              {podeAssinarTodosItens && execution.pendingItems > 0 ? (
+                <form
+                  action={signWeeklyAreaPendingItemsAction}
+                  className="grid w-full gap-2 md:w-auto md:min-w-[520px] md:grid-cols-[1fr_1fr_auto]"
+                >
+                  <input type="hidden" name="area" value={execution.area} />
+                  <input type="hidden" name="weekStart" value={formatDateInput(execution.weekStart)} />
+                  <input type="hidden" name="returnTo" value={returnTo} />
+                  <input
+                    type="password"
+                    name="senhaConfirmacao"
+                    required
+                    placeholder="Confirme sua senha"
+                    className="bpma-input text-xs"
+                  />
+                  <input
+                    type="text"
+                    name="observacaoAssinatura"
+                    placeholder="Observação (Opcional)"
+                    className="bpma-input text-xs"
+                  />
+                  <button type="submit" className="btn-primary whitespace-nowrap">
+                    Assinar itens pendentes
+                  </button>
+                </form>
+              ) : null}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[820px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
@@ -201,7 +246,7 @@ export function WeeklySignChecklistModal({
                         {executionItem.observacaoResponsavel || "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {executionItem.etapa === "responsavel" ? (
+                        {executionItem.etapa === "responsavel" && podeAssinarItens ? (
                           <form action={updateWeeklyRecordAction} className="grid min-w-[320px] gap-2">
                             <input type="hidden" name="id" value={String(executionItem.id)} />
                             <input type="hidden" name="returnTo" value={returnTo} />
@@ -220,12 +265,20 @@ export function WeeklySignChecklistModal({
                               className="bpma-input text-xs"
                             />
                             <button type="submit" className="btn-primary whitespace-nowrap">
-                              Assinar
+                              Assinar item
                             </button>
                           </form>
+                        ) : executionItem.etapa === "responsavel" && isHistorico ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Sem permissão para assinar item histórico
+                          </span>
+                        ) : executionItem.etapa === "responsavel" ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Sem permissão para assinar item
+                          </span>
                         ) : executionItem.etapa === "supervisor" ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Aguardando supervisão
+                            Aguardando assinatura da área da semana
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">

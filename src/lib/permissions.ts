@@ -471,14 +471,56 @@ function buildModulePermissions(params: {
   prefixo: string;
   acoes: string[];
 }): PermissionDefinition[] {
-  return params.acoes.map((acao) => ({
-    codigo: `${params.prefixo}.${acao}`,
-    nome: getFriendlyActionName(acao),
-    grupo: params.grupo,
-    modulo: params.modulo,
-    acao,
-    sensivel: /editar_historico|excluir_registro|reabrir_mes/.test(acao)
-  }));
+  return params.acoes.map((acao) => {
+    const display = getPermissionDisplay(params.modulo, acao);
+
+    return {
+      codigo: `${params.prefixo}.${acao}`,
+      nome: display.nome,
+      descricao: display.descricao,
+      grupo: params.grupo,
+      modulo: params.modulo,
+      acao,
+      sensivel: /editar_historico|excluir_registro|reabrir_mes/.test(acao)
+    };
+  });
+}
+
+function getPermissionDisplay(
+  modulo: string,
+  acao: string
+): { nome: string; descricao?: string } {
+  if (modulo === "limpeza_semanal" && acao === "assinar_dia") {
+    return {
+      nome: "Assinar semana como supervisor",
+      descricao: "Permite assinar como supervisor a área da semana quando todos os itens estiverem executados."
+    };
+  }
+
+  if (modulo === "limpeza_semanal" && acao === "editar_historico") {
+    return {
+      nome: "Assinar semana histórica como supervisor",
+      descricao:
+        "Permite validar como supervisor uma área/semana histórica após todos os itens estarem executados."
+    };
+  }
+
+  if (modulo === "limpeza_semanal" && acao === "assinar_historico") {
+    return {
+      nome: "Assinar itens históricos como responsável pela limpeza",
+      descricao:
+        "Permite assinar retroativamente itens pendentes no histórico como responsável pela limpeza; não assina supervisor."
+    };
+  }
+
+  if (modulo === "limpeza_semanal" && acao === "assinar_todos") {
+    return {
+      nome: "Assinar itens",
+      descricao: "Permite assinar/executar itens pendentes da área na semana atual, inclusive em lote."
+    };
+  }
+
+  return { nome: getFriendlyActionName(acao) };
 }
 
 function getFriendlyActionName(acao: string): string {

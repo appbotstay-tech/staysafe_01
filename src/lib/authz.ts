@@ -162,8 +162,8 @@ export function ensureCanSignSupervisor(subject: AuthorizationSubject) {
       "modulo.amostras.assinar_historico",
       "modulo.limpeza_diaria.assinar_todos",
       "modulo.limpeza_diaria.assinar_historico",
-      "modulo.limpeza_semanal.assinar_todos",
-      "modulo.limpeza_semanal.assinar_historico"
+      "modulo.limpeza_semanal.editar_historico",
+      "modulo.limpeza_semanal.assinar_dia"
     ])
   ) {
     throw new Error("Seu perfil não pode registrar assinatura de supervisão.");

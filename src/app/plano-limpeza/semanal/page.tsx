@@ -9,10 +9,10 @@ import Link from "next/link";
 
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { getCurrentUser } from "@/lib/auth-session";
-import { hasAnyPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   canManageModuleOptions,
+  canSignAsResponsible,
   canViewManagementSections
 } from "@/lib/rbac";
 
@@ -40,6 +40,13 @@ import {
 } from "../utils";
 import { WeeklySignChecklistModal } from "./sign-checklist-modal";
 import { WeeklyChecklistSync } from "./weekly-checklist-sync";
+import {
+  canSignAllWeeklyItems,
+  canSignHistoricalWeeklyItems,
+  canSignWeeklyAreaSupervisor,
+  canSignWeeklyItems,
+  isHistoricalWeeklySignature
+} from "../weekly-permissions";
 
 const PAGE_PATH = "/plano-limpeza/semanal";
 const CARD_CLASS = "bpma-card";
@@ -139,14 +146,6 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const isColaborador = authUser?.perfil === "COLABORADOR";
-  const podeAssinarSupervisor = authUser
-    ? hasAnyPermission(authUser, [
-        "usuarios.responsavel_tecnico",
-        "modulo.limpeza_semanal.assinar_todos",
-        "modulo.limpeza_semanal.assinar_historico",
-        "modulo.limpeza_semanal.assinar_dia"
-      ])
-    : false;
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
 
@@ -343,6 +342,29 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         )
       )
     : false;
+  const assinaturaHistoricaSelecionada = executionParaAssinatura
+    ? isHistoricalWeeklySignature(executionParaAssinatura.weekStart, now)
+    : false;
+  const podeAssinarSupervisorSelecionado =
+    Boolean(authUser && executionParaAssinatura) &&
+    canSignWeeklyAreaSupervisor({
+      user: authUser!,
+      weekStart: executionParaAssinatura!.weekStart,
+      referenceDate: now
+    });
+  const podeAssinarItensSelecionados =
+    Boolean(authUser && executionParaAssinatura) &&
+    canSignAsResponsible(authUser!) &&
+    (assinaturaHistoricaSelecionada
+      ? canSignHistoricalWeeklyItems(authUser!)
+      : canSignWeeklyItems(authUser!));
+  const podeAssinarTodosItensSelecionados =
+    Boolean(authUser && executionParaAssinatura) &&
+    canSignAsResponsible(authUser!) &&
+    (assinaturaHistoricaSelecionada
+      ? canSignHistoricalWeeklyItems(authUser!)
+      : canSignAllWeeklyItems(authUser!)) &&
+    !assinaturaBloqueadaPorFechamento;
 
   const paramsRetorno = new URLSearchParams();
   if (filtroData) paramsRetorno.set("filtroData", filtroData);
@@ -602,7 +624,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           closeHref={returnTo}
           returnTo={returnTo}
           usuarioAssinando={responsavelLogado}
-          podeAssinarSupervisor={podeAssinarSupervisor}
+          podeAssinarSupervisor={podeAssinarSupervisorSelecionado}
+          podeAssinarItens={podeAssinarItensSelecionados}
+          podeAssinarTodosItens={podeAssinarTodosItensSelecionados}
+          isHistorico={assinaturaHistoricaSelecionada}
           dataHoraAtual={formatDateTimeDisplay(now)}
           execution={executionParaAssinatura}
           items={executionItemsParaAssinatura.map((executionItem) => ({
