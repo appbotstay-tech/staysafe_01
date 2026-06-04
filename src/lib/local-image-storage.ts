@@ -95,9 +95,16 @@ export async function readStoredImage(relativeSegments: string[]): Promise<{
   mimeType: string;
   size: number;
 }> {
+  const normalizedSegments =
+    relativeSegments[0] === "api" && relativeSegments[1] === "uploads"
+      ? relativeSegments.slice(2)
+      : relativeSegments[0] === "uploads"
+        ? relativeSegments.slice(1)
+        : relativeSegments;
+
   if (
-    relativeSegments.length === 0 ||
-    relativeSegments.some(
+    normalizedSegments.length === 0 ||
+    normalizedSegments.some(
       (segment) =>
         !segment ||
         segment === "." ||
@@ -110,7 +117,7 @@ export async function readStoredImage(relativeSegments: string[]): Promise<{
   }
 
   const storageRoot = getLocalImageStorageRoot();
-  const filePath = path.resolve(storageRoot, ...relativeSegments);
+  const filePath = path.resolve(storageRoot, ...normalizedSegments);
   const relativePath = path.relative(storageRoot, filePath);
 
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
@@ -119,16 +126,58 @@ export async function readStoredImage(relativeSegments: string[]): Promise<{
 
   const [bytes, fileStat] = await Promise.all([readFile(filePath), stat(filePath)]);
   const extension = getFileExtension(filePath);
-  const mimeType =
-    extension === "png"
-      ? "image/png"
-      : extension === "webp"
-        ? "image/webp"
-        : "image/jpeg";
+  const mimeType = detectImageMimeType(bytes) ?? getMimeTypeFromExtension(extension);
 
   return {
     bytes,
     mimeType,
     size: fileStat.size
   };
+}
+
+function detectImageMimeType(bytes: Uint8Array): string | null {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    return "image/jpeg";
+  }
+
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  if (
+    bytes.length >= 12 &&
+    Buffer.from(bytes.subarray(0, 4)).toString("ascii") === "RIFF" &&
+    Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+function getMimeTypeFromExtension(extension: string): string {
+  if (extension === "png") {
+    return "image/png";
+  }
+
+  if (extension === "webp") {
+    return "image/webp";
+  }
+
+  return "image/jpeg";
 }

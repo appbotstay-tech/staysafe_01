@@ -9,10 +9,11 @@ import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
-import { getStoredImageSrc, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
+import { getImageDataUrl, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
+import { EvidencePhoto } from "../evidence-photo";
 import { TemperatureStatusBadge } from "../temperature-status-badge";
 import {
   formatDateDisplay,
@@ -217,13 +218,14 @@ export default async function ControleTemperaturaHistoricoPage({
   const registroFotoSelecionado = fotoId
     ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
-  const fotoSelecionadaDataUrl = registroFotoSelecionado
-    ? getStoredImageSrc({
-        url: registroFotoSelecionado.fotoUrl,
-        mimeType: registroFotoSelecionado.fotoMimeType,
-        base64: registroFotoSelecionado.fotoBase64
-      })
+  const fotoSelecionadaFallbackSrc = registroFotoSelecionado
+    ? getImageDataUrl(
+        registroFotoSelecionado.fotoMimeType,
+        registroFotoSelecionado.fotoBase64
+      )
     : null;
+  const fotoSelecionadaPrimarySrc =
+    registroFotoSelecionado?.fotoUrl?.trim() || fotoSelecionadaFallbackSrc;
 
   const diasComRegistro = new Set(registrosMensais.map((registro) => formatAppDateInput(registro.data)));
   const equipamentosMonitorados = new Set(registrosMensais.map((registro) => registro.equipamento));
@@ -489,16 +491,16 @@ export default async function ControleTemperaturaHistoricoPage({
             ) : null
           }
         >
-          {fotoSelecionadaDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fotoSelecionadaDataUrl}
+          {fotoSelecionadaPrimarySrc ? (
+            <EvidencePhoto
+              primarySrc={fotoSelecionadaPrimarySrc}
+              fallbackSrc={fotoSelecionadaFallbackSrc}
               alt={`Foto do registro ${registroFotoSelecionado?.id ?? fotoId}`}
               className="max-h-[75vh] w-full rounded-lg border border-slate-200 object-contain dark:border-slate-700"
             />
           ) : (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Não foi possível carregar a imagem anexada.
+              Foto indisponível.
             </p>
           )}
         </ActionModal>

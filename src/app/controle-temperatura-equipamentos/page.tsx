@@ -13,7 +13,11 @@ import { DocumentosModuleHeader } from "@/components/documentos/documentos-modul
 import { ImageUploadField } from "@/components/forms/image-upload-field";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
-import { getStoredImageSrc, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
+import {
+  getImageDataUrl,
+  getStoredImageSrc,
+  hasStoredImage as hasImageEvidence
+} from "@/lib/image-upload";
 import {
   TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES,
   TEMPERATURE_EVIDENCE_IMAGE_MAX_WIDTH,
@@ -28,6 +32,7 @@ import {
   updateRegistroAction
 } from "./actions";
 import { AutomaticCorrectiveActionFields } from "./automatic-corrective-action-fields";
+import { EvidencePhoto } from "./evidence-photo";
 import { TemperatureStatusBadge } from "./temperature-status-badge";
 import {
   formatDateInput,
@@ -362,13 +367,14 @@ export default async function ControleTemperaturaEquipamentosPage({
   const registroFotoSelecionado = fotoId
     ? registros.find((registro) => registro.id === fotoId) ?? null
     : null;
-  const fotoSelecionadaDataUrl = registroFotoSelecionado
-    ? getStoredImageSrc({
-        url: registroFotoSelecionado.fotoUrl,
-        mimeType: registroFotoSelecionado.fotoMimeType,
-        base64: registroFotoSelecionado.fotoBase64
-      })
+  const fotoSelecionadaFallbackSrc = registroFotoSelecionado
+    ? getImageDataUrl(
+        registroFotoSelecionado.fotoMimeType,
+        registroFotoSelecionado.fotoBase64
+      )
     : null;
+  const fotoSelecionadaPrimarySrc =
+    registroFotoSelecionado?.fotoUrl?.trim() || fotoSelecionadaFallbackSrc;
   const hrefFecharFoto = buildPathWithParams(parametrosRetorno);
   const buildHrefFoto = (id: number) => {
     const query = new URLSearchParams(parametrosRetorno);
@@ -831,16 +837,16 @@ export default async function ControleTemperaturaEquipamentosPage({
             ) : null
           }
         >
-          {fotoSelecionadaDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fotoSelecionadaDataUrl}
+          {fotoSelecionadaPrimarySrc ? (
+            <EvidencePhoto
+              primarySrc={fotoSelecionadaPrimarySrc}
+              fallbackSrc={fotoSelecionadaFallbackSrc}
               alt={`Foto do registro ${registroFotoSelecionado?.id ?? fotoId}`}
               className="max-h-[75vh] w-full rounded-lg border border-slate-200 object-contain dark:border-slate-700"
             />
           ) : (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Não foi possível carregar a imagem anexada.
+              Foto indisponível.
             </p>
           )}
         </ActionModal>

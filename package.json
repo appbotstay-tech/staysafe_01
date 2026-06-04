@@ -23,6 +23,7 @@
     "fotos:temperatura:migrar": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts migrar",
     "fotos:temperatura:reparar-arquivos-dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts reparar --dry-run",
     "fotos:temperatura:reparar-arquivos": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts reparar",
+    "fotos:temperatura:diagnosticar": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts diagnosticar",
     "fotos:temperatura:limpar-dry-run": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar --dry-run",
     "fotos:temperatura:limpar-base64": "node --no-warnings --experimental-strip-types scripts/migrar-fotos-temperatura-base64.ts limpar"
   },

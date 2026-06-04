@@ -1,12 +1,12 @@
 import "dotenv/config";
 
-import { mkdir, stat, writeFile } from "fs/promises";
+import { mkdir, readFile, stat, writeFile } from "fs/promises";
 import path from "path";
 
 import { PrismaClient } from "@prisma/client";
 
 type ImageMimeType = "image/jpeg" | "image/png" | "image/webp";
-type Mode = "migrar" | "limpar" | "reparar";
+type Mode = "migrar" | "limpar" | "reparar" | "diagnosticar";
 
 type ParsedImage = {
   buffer: Buffer;
@@ -34,16 +34,20 @@ const TEMPERATURE_FOLDER = "temperatura-equipamentos";
 const DEFAULT_UPLOAD_ROOT = path.join(process.cwd(), ".data", "uploads");
 const CLEANUP_SAMPLE_LIMIT = 20;
 
-function parseArgs(): { mode: Mode; dryRun: boolean } {
+function parseArgs(): { mode: Mode; dryRun: boolean; recordId: number | null } {
   const args = process.argv.slice(2);
   const mode: Mode = args.includes("limpar")
     ? "limpar"
     : args.includes("reparar")
       ? "reparar"
+      : args.includes("diagnosticar")
+        ? "diagnosticar"
       : "migrar";
   const dryRun = args.includes("--dry-run") || args.includes("dry-run");
+  const recordIdArg = args.find((arg) => /^\d+$/.test(arg));
+  const recordId = recordIdArg ? Number.parseInt(recordIdArg, 10) : null;
 
-  return { mode, dryRun };
+  return { mode, dryRun, recordId };
 }
 
 function getUploadRoot(): string {
@@ -107,6 +111,32 @@ function mimeTypeToExtension(mimeType: ImageMimeType): ParsedImage["extension"] 
   }
 
   return "jpg";
+}
+
+function getMimeTypeLabel(mimeType: ImageMimeType | null): string {
+  if (!mimeType) {
+    return "invalido/desconhecido";
+  }
+
+  if (mimeType === "image/jpeg") {
+    return "JPEG";
+  }
+
+  if (mimeType === "image/png") {
+    return "PNG";
+  }
+
+  return "WEBP";
+}
+
+function formatFirstBytes(buffer: Buffer, byteCount = 16): string {
+  if (buffer.length === 0) {
+    return "-";
+  }
+
+  return Array.from(buffer.subarray(0, byteCount))
+    .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
+    .join(" ");
 }
 
 function normalizeMimeType(value: string | null | undefined): ImageMimeType | null {
@@ -470,6 +500,11 @@ async function repairMissingPhotoFiles(dryRun: boolean): Promise<void> {
       if (savedFileStat.size <= 0) {
         throw new Error("arquivo recriado ficou vazio");
       }
+      const savedBuffer = await readFile(resolvedPath.filePath);
+      const savedMimeType = detectMimeType(savedBuffer);
+      if (!savedMimeType) {
+        throw new Error("arquivo recriado nao possui assinatura JPG, PNG ou WEBP valida");
+      }
 
       if (record.fotoTamanhoBytes !== savedFileStat.size) {
         await prisma.controleTemperaturaEquipamento.update({
@@ -689,6 +724,108 @@ async function cleanMigratedBase64(dryRun: boolean): Promise<void> {
   console.log(`- IDs com falha: ${failedIds.length ? failedIds.join(", ") : "-"}`);
 }
 
+async function diagnosePhotoRecord(recordId: number | null): Promise<void> {
+  if (!recordId) {
+    throw new Error(
+      "Informe o ID do registro. Exemplo: npm run fotos:temperatura:diagnosticar -- 91"
+    );
+  }
+
+  const uploadRoot = getUploadRoot();
+  const record = await prisma.controleTemperaturaEquipamento.findUnique({
+    where: { id: recordId },
+    select: {
+      id: true,
+      fotoBase64: true,
+      fotoUrl: true,
+      fotoMimeType: true,
+      fotoTamanhoBytes: true
+    }
+  });
+
+  if (!record) {
+    throw new Error(`Registro ${recordId} nao encontrado.`);
+  }
+
+  const hasBase64 = Boolean(record.fotoBase64?.trim());
+  const base64Bytes = estimateTextBytes(record.fotoBase64);
+  let base64MimeType: ImageMimeType | null = null;
+  let base64Error = "";
+
+  if (record.fotoBase64?.trim()) {
+    try {
+      base64MimeType = parseBase64Image(record.fotoBase64, record.fotoMimeType).mimeType;
+    } catch (error) {
+      base64Error = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  let resolvedPath: ResolvedStoredPhotoPath | null = null;
+  let resolveError = "";
+  let fileExists = false;
+  let fileSize = 0;
+  let firstBytes = "-";
+  let fileMimeType: ImageMimeType | null = null;
+  let fileReadError = "";
+
+  if (record.fotoUrl?.trim()) {
+    try {
+      resolvedPath = resolveStoredUploadPath(uploadRoot, record.fotoUrl);
+      const fileStat = await stat(resolvedPath.filePath).catch(() => null);
+      fileExists = Boolean(fileStat);
+      fileSize = fileStat?.size ?? 0;
+
+      if (fileStat && fileStat.size > 0) {
+        const fileBuffer = await readFile(resolvedPath.filePath);
+        firstBytes = formatFirstBytes(fileBuffer);
+        fileMimeType = detectMimeType(fileBuffer);
+      }
+    } catch (error) {
+      if (resolvedPath) {
+        fileReadError = error instanceof Error ? error.message : String(error);
+      } else {
+        resolveError = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+
+  const shouldOpenByUrl = Boolean(fileExists && fileSize > 0 && fileMimeType);
+  const shouldFallbackToBase64 = !shouldOpenByUrl && Boolean(base64MimeType);
+
+  console.log("Diagnostico de foto de temperatura:");
+  console.log(`- id: ${record.id}`);
+  console.log(`- BPMA_UPLOAD_DIR resolvido: ${uploadRoot}`);
+  console.log(`- fotoUrl: ${record.fotoUrl?.trim() || "-"}`);
+  console.log(`- fotoBase64 existe: ${hasBase64 ? "sim" : "nao"}`);
+  console.log(`- tamanho de fotoBase64: ${formatBytes(base64Bytes)}`);
+  console.log(`- fotoMimeType no banco: ${record.fotoMimeType ?? "-"}`);
+  console.log(`- fotoTamanhoBytes no banco: ${record.fotoTamanhoBytes ?? "-"}`);
+  console.log(
+    `- base64 parece imagem valida: ${base64MimeType ? `sim (${getMimeTypeLabel(base64MimeType)})` : "nao"}`
+  );
+  if (base64Error) {
+    console.log(`- erro no base64: ${base64Error}`);
+  }
+  console.log(`- caminho fisico calculado: ${resolvedPath?.filePath ?? "-"}`);
+  console.log(`- origem do caminho: ${resolvedPath?.source ?? "-"}`);
+  if (resolveError) {
+    console.log(`- erro ao resolver fotoUrl: ${resolveError}`);
+  }
+  console.log(`- arquivo existe: ${fileExists ? "sim" : "nao"}`);
+  console.log(`- tamanho do arquivo: ${formatBytes(fileSize)}`);
+  console.log(`- primeiros bytes do arquivo: ${firstBytes}`);
+  console.log(
+    `- arquivo parece imagem valida: ${fileMimeType ? `sim (${getMimeTypeLabel(fileMimeType)})` : "nao"}`
+  );
+  if (fileReadError) {
+    console.log(`- erro ao ler arquivo: ${fileReadError}`);
+  }
+  console.log(`- deveria abrir por fotoUrl: ${shouldOpenByUrl ? "sim" : "nao"}`);
+  console.log(
+    `- deveria cair para fallback base64: ${shouldFallbackToBase64 ? "sim" : "nao"}`
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -702,10 +839,15 @@ function formatBytes(bytes: number): string {
 }
 
 async function main(): Promise<void> {
-  const { mode, dryRun } = parseArgs();
+  const { mode, dryRun, recordId } = parseArgs();
 
   if (mode === "limpar") {
     await cleanMigratedBase64(dryRun);
+    return;
+  }
+
+  if (mode === "diagnosticar") {
+    await diagnosePhotoRecord(recordId);
     return;
   }
 
