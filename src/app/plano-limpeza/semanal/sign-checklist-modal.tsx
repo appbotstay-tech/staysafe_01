@@ -60,6 +60,8 @@ export function WeeklySignChecklistModal({
   execution,
   items
 }: WeeklySignChecklistModalProps) {
+  const supervisorAssumesPendingItems = execution.pendingItems > 0;
+
   return (
     <div className="bpma-modal-backdrop">
       <div className="bpma-modal-panel max-w-6xl">
@@ -141,12 +143,13 @@ export function WeeklySignChecklistModal({
           podeAssinarSupervisor &&
           execution.pendingItems > 0 ? (
             <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              A assinatura ficará disponível após a execução de todos os itens da área.
+              Existem {execution.pendingItems} item(ns) sem responsável pela limpeza. Ao
+              assinar como supervisor, você também será registrado como responsável pela
+              limpeza desses itens pendentes. Deseja continuar?
             </p>
           ) : null}
 
           {!execution.assinaturaSupervisor.trim() &&
-          execution.pendingItems === 0 &&
           podeAssinarSupervisor ? (
             <form action={signWeeklyAreaSupervisorAction} className="mt-4 grid gap-3 md:grid-cols-2">
               <input type="hidden" name="area" value={execution.area} />
@@ -172,9 +175,18 @@ export function WeeklySignChecklistModal({
                 />
               </label>
               <div className="md:col-span-2">
-                <button type="submit" className="btn-primary">
-                  Assinar área da semana como supervisor
-                </button>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                  {supervisorAssumesPendingItems ? (
+                    <Link href={closeHref} className="btn-secondary text-center">
+                      Cancelar
+                    </Link>
+                  ) : null}
+                  <button type="submit" className="btn-primary">
+                    {supervisorAssumesPendingItems
+                      ? "Assinar como supervisor e assumir itens pendentes"
+                      : "Assinar área da semana como supervisor"}
+                  </button>
+                </div>
               </div>
             </form>
           ) : null}

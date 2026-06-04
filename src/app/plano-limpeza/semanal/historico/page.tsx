@@ -138,8 +138,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         dataExecucao: true,
         area: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelUsuarioId: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
+        assinaturaSupervisorUsuarioId: true,
         assinaturaSupervisorNomeUsuario: true,
         assinaturaSupervisorPerfil: true,
         assinaturaSupervisorDataHora: true,
@@ -169,8 +171,10 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         dataExecucao: true,
         area: true,
         assinaturaResponsavel: true,
+        assinaturaResponsavelUsuarioId: true,
         assinaturaResponsavelDataHora: true,
         assinaturaSupervisor: true,
+        assinaturaSupervisorUsuarioId: true,
         assinaturaSupervisorNomeUsuario: true,
         assinaturaSupervisorPerfil: true,
         assinaturaSupervisorDataHora: true,
@@ -237,6 +241,8 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
       signedCount: number;
       totalCount: number;
       isFullySigned: boolean;
+      regularizedCount: number;
+      statusLabel: string;
       supervisorLabel: string;
       firstSignedRecord: (typeof rawRecords)[number] | null;
     }
@@ -248,10 +254,23 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
     const supervisorNames = Array.from(
       new Set(signedRecords.map((record) => record.assinaturaSupervisor.trim()))
     ).filter(Boolean);
+    const regularizedCount = signedRecords.filter(
+      (record) =>
+        record.assinaturaResponsavelUsuarioId !== null &&
+        record.assinaturaSupervisorUsuarioId !== null &&
+        record.assinaturaResponsavelUsuarioId === record.assinaturaSupervisorUsuarioId &&
+        Boolean(record.assinaturaResponsavelDataHora) &&
+        Boolean(record.assinaturaSupervisorDataHora) &&
+        record.assinaturaResponsavelDataHora!.getTime() ===
+          record.assinaturaSupervisorDataHora!.getTime()
+    ).length;
     supervisorSignatureByAreaWeek.set(key, {
       signedCount: signedRecords.length,
       totalCount: records.length,
       isFullySigned: records.length > 0 && signedRecords.length === records.length,
+      regularizedCount,
+      statusLabel:
+        regularizedCount > 0 ? "Assinado com regularização" : "Assinado sem pendências",
       supervisorLabel:
         supervisorNames.length === 0
           ? "-"
@@ -354,7 +373,6 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const canShowWeeklyAreaSignatureForm =
     Boolean(selectedSummary) &&
     selectedCanSignWeeklySupervisor &&
-    selectedSummary!.pendingItems === 0 &&
     !selectedSignature?.isFullySigned;
   const canShowHistoricalItemsSignatureForm =
     Boolean(selectedSummary) &&
@@ -573,7 +591,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                       <td className="px-3 py-2">
                         {assinaturaCompleta ? (
                           <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                            Assinado pelo Supervisor
+                            {signature?.statusLabel ?? "Assinado sem pendências"}
                           </span>
                         ) : (
                           <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -661,7 +679,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                 </div>
                 {selectedSignature?.isFullySigned ? (
                   <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                    Assinado pelo Supervisor
+                    {selectedSignature.statusLabel}
                   </span>
                 ) : (
                   <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -671,7 +689,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
               </div>
 
               {selectedSignature?.isFullySigned && selectedSignature.firstSignedRecord ? (
-                <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                <dl className="mt-4 grid gap-3 text-sm md:grid-cols-4">
                   <div>
                     <dt className="font-medium text-slate-500 dark:text-slate-400">Nome</dt>
                     <dd className="text-slate-900 dark:text-slate-100">
@@ -701,6 +719,16 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                         : "-"}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="font-medium text-slate-500 dark:text-slate-400">
+                      Regularização
+                    </dt>
+                    <dd className="text-slate-900 dark:text-slate-100">
+                      {selectedSignature.regularizedCount > 0
+                        ? `${selectedSignature.regularizedCount} item(ns) assumido(s)`
+                        : "Sem itens assumidos"}
+                    </dd>
+                  </div>
                 </dl>
               ) : null}
 
@@ -714,7 +742,9 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
               selectedCanSignWeeklySupervisor &&
               selectedSummary.pendingItems > 0 ? (
                 <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                  A assinatura ficará disponível após a execução de todos os itens da área.
+                  Existem {selectedSummary.pendingItems} item(ns) sem responsável pela limpeza. Ao
+                  assinar como supervisor, você também será registrado como responsável pela
+                  limpeza desses itens pendentes. Deseja continuar?
                 </p>
               ) : null}
 
@@ -751,9 +781,18 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                     />
                   </label>
                   <div className="md:col-span-2">
-                    <button type="submit" className="btn-primary">
-                      Assinar área da semana como supervisor
-                    </button>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                      {selectedSummary.pendingItems > 0 ? (
+                        <Link href={filteredReturnTo} className="btn-secondary text-center">
+                          Cancelar
+                        </Link>
+                      ) : null}
+                      <button type="submit" className="btn-primary">
+                        {selectedSummary.pendingItems > 0
+                          ? "Assinar como supervisor e assumir itens pendentes"
+                          : "Assinar área da semana como supervisor"}
+                      </button>
+                    </div>
                   </div>
                 </form>
               ) : null}

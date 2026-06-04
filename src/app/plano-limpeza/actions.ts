@@ -1439,7 +1439,8 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
         dataExecucao: true,
         assinaturaResponsavel: true,
         assinaturaResponsavelUsuarioId: true,
-        assinaturaSupervisor: true
+        assinaturaSupervisor: true,
+        observacaoResponsavel: true
       }
     });
 
@@ -1462,12 +1463,6 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
     const pendingResponsibleRecords = records.filter(
       (record) => record.assinaturaResponsavel.trim().length === 0
     );
-    if (pendingResponsibleRecords.length > 0) {
-      throw new Error(
-        "A assinatura do supervisor só fica disponível quando todos os itens da área estiverem executados."
-      );
-    }
-
     const pendingSupervisorRecords = records.filter(
       (record) => record.assinaturaSupervisor.trim().length === 0
     );
@@ -1475,13 +1470,9 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
       throw new Error("Esta área/semana já foi assinada pelo supervisor.");
     }
 
-    if (pendingSupervisorRecords.some((record) => isSameResponsibleUser(record, actor))) {
-      throw new Error(SELF_SUPERVISION_MESSAGE);
-    }
-
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
     const signedAt = getCurrentSystemDateTime();
-    const updateData: Prisma.PlanoLimpezaSemanalExecucaoUpdateManyMutationInput = {
+    const supervisorUpdateData: Prisma.PlanoLimpezaSemanalExecucaoUpdateManyMutationInput = {
       assinaturaSupervisor: actor.nomeCompleto,
       assinaturaSupervisorUsuarioId: actor.id,
       assinaturaSupervisorNomeUsuario: actor.nomeUsuario,
@@ -1490,24 +1481,63 @@ export async function signWeeklyAreaSupervisorAction(formData: FormData) {
       status: StatusPlanoLimpeza.CONCLUIDO
     };
     if (observacaoAssinatura) {
-      updateData.observacaoSupervisor = observacaoAssinatura;
+      supervisorUpdateData.observacaoSupervisor = observacaoAssinatura;
     }
 
-    await prisma.planoLimpezaSemanalExecucao.updateMany({
-      where: { id: { in: pendingSupervisorRecords.map((record) => record.id) } },
-      data: updateData
+    await prisma.$transaction(async (tx) => {
+      for (const record of pendingResponsibleRecords) {
+        await tx.planoLimpezaSemanalExecucao.update({
+          where: { id: record.id },
+          data: {
+            assinaturaResponsavel: actor.nomeCompleto,
+            assinaturaResponsavelUsuarioId: actor.id,
+            assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+            assinaturaResponsavelPerfil: actor.perfil,
+            assinaturaResponsavelDataHora: signedAt,
+            quando: formatWeeklySignatureDateTime(signedAt),
+            observacaoResponsavel: record.observacaoResponsavel?.trim()
+              ? record.observacaoResponsavel
+              : "Assumido durante assinatura do supervisor da área/semana."
+          }
+        });
+      }
+
+      await tx.planoLimpezaSemanalExecucao.updateMany({
+        where: { id: { in: pendingSupervisorRecords.map((record) => record.id) } },
+        data: supervisorUpdateData
+      });
     });
+
+    if (pendingResponsibleRecords.length > 0) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL",
+        modulo: "plano-limpeza/semanal/regularizacao-supervisor",
+        referenciaId: `${area}|${formatDateInput(weekRange.start)}`,
+        observacao: `${pendingResponsibleRecords.length} item(ns) assumido(s) durante assinatura do supervisor da área/semana.`
+      });
+    }
 
     await createSignatureLog({
       user: actor,
       tipo: "SUPERVISOR",
       modulo: "plano-limpeza/semanal",
       referenciaId: `${area}|${formatDateInput(weekRange.start)}`,
-      observacao: observacaoAssinatura || null
+      observacao:
+        observacaoAssinatura ||
+        (pendingResponsibleRecords.length > 0
+          ? `Assinado com regularização - ${pendingResponsibleRecords.length} item(ns) assumido(s).`
+          : "Assinado sem pendências.")
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(returnTo, "success", "Área da Semana Assinada pelo Supervisor.");
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      pendingResponsibleRecords.length > 0
+        ? `Área da semana assinada pelo supervisor com regularização de ${pendingResponsibleRecords.length} item(ns).`
+        : "Área da semana assinada pelo supervisor sem pendências."
+    );
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
