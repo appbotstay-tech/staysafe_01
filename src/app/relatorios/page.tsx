@@ -61,10 +61,6 @@ function SanitaryReportsSection({
   defaultMonth: number;
   defaultYear: number;
 }) {
-  const futureReports = [
-    "Limpeza Semanal"
-  ];
-
   return (
     <section className="bpma-card print:hidden">
       <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -305,23 +301,44 @@ function SanitaryReportsSection({
           </div>
         </form>
 
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Próximos relatórios sanitários
+        <form
+          method="get"
+          action="/relatorios/plano-limpeza-semanal/mensal"
+          target="_blank"
+          className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+        >
+          <div className="sm:col-span-3">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Plano de Limpeza Semanal por Área
             </h3>
           </div>
-          <ul className="divide-y divide-slate-200 text-sm dark:divide-slate-700">
-            {futureReports.map((reportName) => (
-              <li key={reportName} className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-slate-700 dark:text-slate-200">{reportName}</span>
-                <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">
-                  Futuro
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Mês
+            <select name="mes" defaultValue={String(defaultMonth)} className="bpma-input">
+              {MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={String(month.value)}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Ano
+            <input
+              type="number"
+              name="ano"
+              min={2020}
+              max={2100}
+              defaultValue={defaultYear}
+              className="bpma-input"
+            />
+          </label>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary w-full sm:w-auto">
+              Gerar Relatório
+            </button>
+          </div>
+        </form>
       </div>
     </section>
   );
