@@ -30,7 +30,6 @@ const REPORT_NAME = "Relatório mensal - rastreabilidade de recebimento";
 type ReceivingReportRow = {
   data: string;
   produto: string;
-  marca: string;
   nf: string;
   loteFabricacao: string;
   sif: string;
@@ -310,8 +309,8 @@ function renderStyles(): string {
         background: #ffffff;
         color: #000000;
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 9px;
-        line-height: 1.25;
+        font-size: 9.5px;
+        line-height: 1.35;
       }
 
       body {
@@ -412,8 +411,17 @@ function renderStyles(): string {
       }
 
       .receiving-table {
-        min-width: 1420px;
+        min-width: 1320px;
         table-layout: fixed;
+      }
+
+      .receiving-table th {
+        font-size: 9.2px;
+        line-height: 1.25;
+      }
+
+      .receiving-table td {
+        line-height: 1.35;
       }
 
       .receiving-table th:nth-child(1),
@@ -424,54 +432,56 @@ function renderStyles(): string {
 
       .receiving-table th:nth-child(2),
       .receiving-table td:nth-child(2) {
-        width: 11%;
+        width: 16.5%;
       }
 
       .receiving-table th:nth-child(3),
-      .receiving-table td:nth-child(3),
+      .receiving-table td:nth-child(3) {
+        width: 5.8%;
+        text-align: center;
+      }
+
       .receiving-table th:nth-child(4),
       .receiving-table td:nth-child(4) {
-        width: 6%;
-        text-align: center;
+        width: 11.5%;
       }
 
       .receiving-table th:nth-child(5),
       .receiving-table td:nth-child(5) {
-        width: 11%;
+        width: 4.7%;
+        text-align: center;
       }
 
       .receiving-table th:nth-child(6),
       .receiving-table td:nth-child(6) {
-        width: 4.8%;
+        width: 7.5%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(7),
       .receiving-table td:nth-child(7) {
-        width: 7.2%;
-        text-align: center;
-      }
-
-      .receiving-table th:nth-child(8),
-      .receiving-table td:nth-child(8),
-      .receiving-table th:nth-child(9),
-      .receiving-table td:nth-child(9) {
         width: 6.5%;
         text-align: center;
       }
 
+      .receiving-table th:nth-child(8),
+      .receiving-table td:nth-child(8) {
+        width: 6.5%;
+        text-align: center;
+      }
+
+      .receiving-table th:nth-child(9),
+      .receiving-table td:nth-child(9) {
+        width: 12.5%;
+      }
+
       .receiving-table th:nth-child(10),
       .receiving-table td:nth-child(10) {
-        width: 12%;
+        width: 15%;
       }
 
       .receiving-table th:nth-child(11),
       .receiving-table td:nth-child(11) {
-        width: 15%;
-      }
-
-      .receiving-table th:nth-child(12),
-      .receiving-table td:nth-child(12) {
         width: 8.5%;
       }
 
@@ -520,7 +530,7 @@ function renderStyles(): string {
       @media print {
         body {
           padding: 0;
-          font-size: 7.2px;
+          font-size: 8.5px;
         }
 
         .screen-actions {
@@ -541,7 +551,7 @@ function renderStyles(): string {
 
         th,
         td {
-          padding: 2px;
+          padding: 2.5px 3px;
         }
 
         thead {
@@ -613,7 +623,6 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
               <tr>
                 <td>${escapeHtml(row.data)}</td>
                 <td>${escapeHtml(row.produto)}</td>
-                <td>${escapeHtml(row.marca)}</td>
                 <td>${escapeHtml(row.nf)}</td>
                 <td>${escapeHtml(row.loteFabricacao)}</td>
                 <td>${escapeHtml(row.sif)}</td>
@@ -628,7 +637,7 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
           .join("")
       : `
         <tr>
-          <td colspan="12" class="empty-message">
+          <td colspan="11" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -640,22 +649,21 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
           <tr>
             <th>Data</th>
             <th>Produto</th>
-            <th>Marca</th>
             <th>NF</th>
             <th>Lote / Data de fabricação</th>
             <th>SIF</th>
             <th>Data / Prazo de validade</th>
             <th>Quantidade</th>
             <th>Temperatura (°C)</th>
-            <th>Característica — cor/odor/aspecto</th>
-            <th>Não conformidade / Ação / Observação</th>
+            <th>Característica</th>
+            <th>Observação</th>
             <th>Responsável</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="12" class="signature-wrapper">
+            <td colspan="11" class="signature-wrapper">
               ${renderSignatureTable(report)}
             </td>
           </tr>
@@ -772,7 +780,6 @@ export async function GET(request: NextRequest) {
     rows: records.map((record) => ({
       data: formatAppDate(record.data),
       produto: valueOrDash(record.produto),
-      marca: "-",
       nf: valueOrDash(record.notaFiscal || record.nota?.notaFiscal),
       loteFabricacao: formatLoteFabricacao(record.lote, record.dataFabricacao),
       sif: formatSifDisplayValue(record.sif),
