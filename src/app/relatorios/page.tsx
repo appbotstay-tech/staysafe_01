@@ -63,7 +63,6 @@ function SanitaryReportsSection({
 }) {
   const futureReports = [
     "Controle de Amostras",
-    "Rastreabilidade",
     "Limpeza Diária/Semanal"
   ];
 
@@ -160,6 +159,45 @@ function SanitaryReportsSection({
           <div className="sm:col-span-3">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
               Controle da Qualidade do Óleo
+            </h3>
+          </div>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Mês
+            <select name="mes" defaultValue={String(defaultMonth)} className="bpma-input">
+              {MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={String(month.value)}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Ano
+            <input
+              type="number"
+              name="ano"
+              min={2020}
+              max={2100}
+              defaultValue={defaultYear}
+              className="bpma-input"
+            />
+          </label>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary w-full sm:w-auto">
+              Gerar Relatório
+            </button>
+          </div>
+        </form>
+
+        <form
+          method="get"
+          action="/relatorios/rastreabilidade-recebimento/mensal"
+          target="_blank"
+          className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+        >
+          <div className="sm:col-span-3">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Rastreabilidade e Recebimento de Mercadorias
             </h3>
           </div>
           <label className="text-sm text-slate-700 dark:text-slate-200">
