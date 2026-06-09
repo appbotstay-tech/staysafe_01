@@ -1,17 +1,20 @@
 import {
   ClassificacaoItemBuffetAmostra,
   Prisma,
+  StatusFechamentoBuffetAmostra,
   StatusItemBuffetAmostra
 } from "@prisma/client";
 import Link from "next/link";
 
 import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
-import { ActionModal } from "@/components/ui/action-modal";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
+import { updateHistoricoRegistroAction } from "../actions";
 import {
   buildBuffetServiceHistoryGroups,
   buildBuffetServiceHistoryTotals,
@@ -19,7 +22,9 @@ import {
 } from "../service-history";
 import { ItemStatusBadge, ServiceStatusBadge, TemperatureStatusBadge } from "../status-badges";
 import {
+  getClassificacaoLabel,
   getMonthDateRange,
+  getMonthYear,
   getYearDateRange,
   parseDateInput,
   parsePositiveInt
@@ -75,6 +80,26 @@ function parseStatus(value: string): StatusItemBuffetAmostra | null {
   return null;
 }
 
+function formatTemperatureInput(value: number | null): string {
+  return value !== null && value !== undefined ? String(value).replace(".", ",") : "";
+}
+
+function getTemperatureTypeDefault(registro: {
+  temperaturaAmbiente: boolean;
+  tcEquipamento: number | null;
+  primeiraTc: number | null;
+}): "" | "NUMERICA" | "AMBIENTE" {
+  if (registro.temperaturaAmbiente) {
+    return "AMBIENTE";
+  }
+
+  if (registro.tcEquipamento !== null || registro.primeiraTc !== null) {
+    return "NUMERICA";
+  }
+
+  return "";
+}
+
 function groupServicesByDay(groups: BuffetServiceHistoryGroup[]) {
   const byDay = new Map<string, { dataInput: string; dataLabel: string; services: BuffetServiceHistoryGroup[] }>();
   for (const group of groups) {
@@ -96,6 +121,9 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const canEditHistory = authUser
+    ? hasPermission(authUser, "modulo.amostras.editar_historico")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -109,13 +137,14 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const filtroStatus = parseStatus(firstParam(params.filtroStatus).trim());
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const diaAberto = firstParam(params.dia).trim();
+  const editRegistroId = parsePositiveInt(firstParam(params.editRegistroId).trim());
 
   const todayMonth = getAppMonthYear(getAppDate());
   const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
   const selectedYear = filtroAno ?? todayMonth.ano;
   const selectedMonthRange = getAppMonthDateRange(selectedMonth, selectedYear);
 
-  const [servicos, itens] = await Promise.all([
+  const [servicos, itens, acoesCorretivasAtivas] = await Promise.all([
     prisma.controleBuffetAmostraServico.findMany({
       include: {
         itens: {
@@ -126,6 +155,10 @@ export default async function ControleBuffetAmostrasHistoricoPage({
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     }),
     prisma.controleBuffetAmostraItem.findMany({
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }]
+    }),
+    prisma.controleBuffetAmostraAcaoCorretiva.findMany({
+      where: { ativo: true },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }]
     })
   ]);
@@ -218,6 +251,45 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const assinaturasMensaisPorData = new Set(
     assinaturasMensais.map((assinatura) => formatAppDateInput(assinatura.dataReferencia))
   );
+  const registroParaEditar = canEditHistory && editRegistroId
+    ? registros.find((registro) => registro.id === editRegistroId) ?? null
+    : null;
+  const periodoRegistroParaEditar = registroParaEditar
+    ? getMonthYear(registroParaEditar.data)
+    : null;
+  const [fechamentoBuffetRegistroEditado, fechamentoModuloRegistroEditado] =
+    periodoRegistroParaEditar
+      ? await Promise.all([
+          prisma.controleBuffetAmostraFechamento.findUnique({
+            where: {
+              mes_ano: {
+                mes: periodoRegistroParaEditar.mes,
+                ano: periodoRegistroParaEditar.ano
+              }
+            }
+          }),
+          prisma.fechamentoMensalModulo.findUnique({
+            where: {
+              moduloCodigo_ano_mes: {
+                moduloCodigo: MODULE_CODE,
+                ano: periodoRegistroParaEditar.ano,
+                mes: periodoRegistroParaEditar.mes
+              }
+            }
+          })
+        ])
+      : [null, null];
+  const registroEditadoMesFechado =
+    fechamentoBuffetRegistroEditado?.status === StatusFechamentoBuffetAmostra.ASSINADO ||
+    Boolean(fechamentoModuloRegistroEditado);
+  const acaoCorretivaAtual = registroParaEditar?.acaoCorretiva?.trim() ?? "";
+  const acaoCorretivaAtualEstaAtiva = acoesCorretivasAtivas.some(
+    (option) => option.nome === acaoCorretivaAtual
+  );
+  const acoesCorretivasDoRegistroEditado =
+    acaoCorretivaAtual && !acaoCorretivaAtualEstaAtiva
+      ? [{ id: 0, nome: acaoCorretivaAtual, ativo: false, ordem: 0 }, ...acoesCorretivasAtivas]
+      : acoesCorretivasAtivas;
 
   const parametrosRetorno = new URLSearchParams();
   if (filtroData) parametrosRetorno.set("filtroData", filtroData);
@@ -234,7 +306,17 @@ export default async function ControleBuffetAmostrasHistoricoPage({
     query.set("dia", dateInput);
     return buildPathWithParams(query);
   };
+  const buildEditRecordHref = (dateInput: string, registroId: number): string => {
+    const query = new URLSearchParams(parametrosRetorno);
+    query.set("dia", dateInput);
+    query.set("editRegistroId", String(registroId));
+    return buildPathWithParams(query);
+  };
   const diaSelecionado = diaAberto ? diasHistorico.find((dia) => dia.dataInput === diaAberto) : null;
+  const editReturnTo = diaSelecionado ? buildOpenDayHref(diaSelecionado.dataInput) : returnTo;
+  const editFormReturnTo = registroParaEditar
+    ? buildEditRecordHref(formatAppDateInput(registroParaEditar.data), registroParaEditar.id)
+    : returnTo;
 
   const totaisMensais = buildBuffetServiceHistoryTotals(gruposMensais);
   const diasComRegistro = new Set(diasMensais.map((dia) => dia.dataInput));
@@ -454,7 +536,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                   <ServiceStatusBadge status={service.status} />
                 </div>
                 <div className="mt-3 overflow-x-auto">
-                  <table className="min-w-[1100px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                  <table className="min-w-[1180px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
                     <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       <tr>
                         <th className="px-3 py-2">Item</th>
@@ -466,6 +548,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                         <th className="px-3 py-2">Status item</th>
                         <th className="px-3 py-2">Ação corretiva</th>
                         <th className="px-3 py-2">Observação</th>
+                        {canEditHistory ? <th className="px-3 py-2">Ação</th> : null}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -480,6 +563,17 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                           <td className="px-3 py-2"><ItemStatusBadge status={item.status} /></td>
                           <td className="px-3 py-2">{item.acaoCorretiva}</td>
                           <td className="px-3 py-2 max-w-80 whitespace-normal break-words">{item.observacao}</td>
+                          {canEditHistory ? (
+                            <td className="px-3 py-2">
+                              <Link
+                                href={buildEditRecordHref(diaSelecionado.dataInput, item.id)}
+                                scroll={false}
+                                className="btn-action"
+                              >
+                                Editar
+                              </Link>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -496,6 +590,138 @@ export default async function ControleBuffetAmostrasHistoricoPage({
             alreadySigned={Boolean(assinaturasPorData.get(diaSelecionado.dataInput))}
             hasOperationalWarnings={diaSelecionado.services.some((service) => service.status !== "CONCLUIDO")}
           />
+        </ActionModal>
+      ) : null}
+
+      {registroParaEditar ? (
+        <ActionModal
+          title="Editar registro histórico"
+          cancelHref={editReturnTo}
+          maxWidthClassName="max-w-3xl"
+          description={
+            <p>
+              {registroParaEditar.itemNome} - {formatAppDate(registroParaEditar.data)}
+            </p>
+          }
+        >
+          {registroEditadoMesFechado ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Este registro pertence a um mês fechado. A edição será permitida pela permissão
+              sensível e registrada em auditoria.
+            </div>
+          ) : null}
+
+          <div className="mb-4 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 sm:grid-cols-2">
+            <p>
+              Serviço: <strong>{registroParaEditar.servico.nome}</strong>
+            </p>
+            <p>
+              Classificação: <strong>{getClassificacaoLabel(registroParaEditar.classificacao)}</strong>
+            </p>
+            <p>
+              Assinatura do item: <strong>{registroParaEditar.assinaturaNome ?? "-"}</strong>
+            </p>
+            <p>
+              Assinatura do supervisor:{" "}
+              <strong>{registroParaEditar.assinaturaNutricionistaNome ?? "-"}</strong>
+            </p>
+          </div>
+
+          <form action={updateHistoricoRegistroAction} className="space-y-4">
+            <input type="hidden" name="registroId" value={String(registroParaEditar.id)} />
+            <input type="hidden" name="returnTo" value={editFormReturnTo} />
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Status do item
+                <select
+                  name="naoServido"
+                  defaultValue={
+                    registroParaEditar.status === StatusItemBuffetAmostra.NAO_SERVIDO
+                      ? "true"
+                      : "false"
+                  }
+                  className={INPUT_CLASS}
+                >
+                  <option value="false">Servido</option>
+                  <option value="true">Não servido</option>
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Temperatura do item
+                <select
+                  name="temperaturaTipo"
+                  defaultValue={getTemperatureTypeDefault(registroParaEditar)}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">Selecione</option>
+                  <option value="NUMERICA">Numérica</option>
+                  <option value="AMBIENTE">Ambiente</option>
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                TC Equipamento
+                <input
+                  type="text"
+                  name="tcEquipamento"
+                  inputMode="text"
+                  placeholder="Ex.: -18 ou 62,5"
+                  defaultValue={formatTemperatureInput(registroParaEditar.tcEquipamento)}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                TC do Alimento
+                <input
+                  type="text"
+                  name="primeiraTc"
+                  inputMode="text"
+                  placeholder="Ex.: -12,5"
+                  defaultValue={formatTemperatureInput(registroParaEditar.primeiraTc)}
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200">
+                Ação corretiva
+                <select
+                  name="acaoCorretiva"
+                  defaultValue={acaoCorretivaAtual}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">Selecione</option>
+                  {acoesCorretivasDoRegistroEditado.map((option) => (
+                    <option key={`${option.id}:${option.nome}`} value={option.nome}>
+                      {option.nome}
+                      {option.id === 0 ? " (Inativa)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700 dark:text-slate-200 md:col-span-2">
+                Observação
+                <textarea
+                  name="observacao"
+                  rows={3}
+                  defaultValue={registroParaEditar.observacao ?? ""}
+                  className={INPUT_CLASS}
+                />
+              </label>
+            </div>
+
+            <ModalActions>
+              <Link href={editReturnTo} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-primary">
+                Salvar alterações
+              </button>
+            </ModalActions>
+          </form>
         </ActionModal>
       ) : null}
     </div>

@@ -151,6 +151,7 @@ function redirectWithFeedback(
     url.searchParams.delete("editServicoId");
     url.searchParams.delete("editItemId");
     url.searchParams.delete("editAcaoId");
+    url.searchParams.delete("editRegistroId");
     url.searchParams.delete("signItemId");
   }
   url.searchParams.set("feedbackType", feedbackType);
@@ -441,6 +442,95 @@ function buildNaoServidoPayload(params: {
     dataHoraRegistro: getCurrentSystemDateTime(),
     status: StatusItemBuffetAmostra.NAO_SERVIDO
   };
+}
+
+function formatAuditValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "sim" : "não";
+  }
+
+  if (typeof value === "number") {
+    return String(value).replace(".", ",");
+  }
+
+  return String(value);
+}
+
+function buildHistoricalChangeSummary(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
+): string {
+  const fields = [
+    ["tcEquipamento", "TC equipamento"],
+    ["primeiraTc", "TC alimento"],
+    ["segundaTc", "TC final"],
+    ["temperaturaAmbiente", "Temperatura ambiente"],
+    ["statusTemperatura", "Status temperatura"],
+    ["acaoCorretiva", "Ação corretiva"],
+    ["observacao", "Observação"],
+    ["responsavelNome", "Responsável"],
+    ["dataHoraRegistro", "Data/hora do registro"],
+    ["status", "Status do item"]
+  ] as const;
+
+  const changes = fields
+    .filter(([key]) => formatAuditValue(before[key]) !== formatAuditValue(after[key]))
+    .map(
+      ([key, label]) =>
+        `${label}: ${formatAuditValue(before[key])} -> ${formatAuditValue(after[key])}`
+    );
+
+  return changes.length > 0 ? changes.join("; ") : "Nenhum campo operacional alterado.";
+}
+
+function preserveHistoricalSignatureStatus(params: {
+  currentStatus: StatusItemBuffetAmostra;
+  nextStatus: StatusItemBuffetAmostra;
+  hasItemSignature: boolean;
+}): StatusItemBuffetAmostra {
+  if (params.nextStatus === StatusItemBuffetAmostra.NAO_SERVIDO) {
+    return StatusItemBuffetAmostra.NAO_SERVIDO;
+  }
+
+  if (
+    params.currentStatus === StatusItemBuffetAmostra.ASSINADO ||
+    params.hasItemSignature
+  ) {
+    return StatusItemBuffetAmostra.ASSINADO;
+  }
+
+  return params.nextStatus;
+}
+
+async function isHistoricalBuffetMonthClosed(date: Date): Promise<boolean> {
+  const period = getMonthYear(date);
+  const [legacyClosure, moduleClosure] = await Promise.all([
+    prisma.controleBuffetAmostraFechamento.findUnique({
+      where: { mes_ano: { mes: period.mes, ano: period.ano } }
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: "amostras",
+          ano: period.ano,
+          mes: period.mes
+        }
+      }
+    })
+  ]);
+
+  return (
+    legacyClosure?.status === StatusFechamentoBuffetAmostra.ASSINADO ||
+    Boolean(moduleClosure)
+  );
 }
 
 export async function saveRegistroItemAction(formData: FormData) {
@@ -813,6 +903,128 @@ export async function saveServicoItemsStateAction(
         "Não foi possível salvar os itens. Verifique os campos obrigatórios."
       )
     };
+  }
+}
+
+export async function updateHistoricoRegistroAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, HISTORY_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "modulo.amostras.editar_historico",
+      "Seu perfil não pode editar registros históricos de amostras."
+    );
+
+    const registroId = parsePositiveInt(getInputValue(formData, "registroId"));
+    const temperaturaTipo = getInputValue(formData, "temperaturaTipo");
+    const tcEquipamentoInput = getInputValue(formData, "tcEquipamento");
+    const primeiraTcInput = getInputValue(formData, "primeiraTc");
+    const acaoCorretivaInput = getInputValue(formData, "acaoCorretiva");
+    const observacao = getInputValue(formData, "observacao");
+    const naoServido = getInputValue(formData, "naoServido") === "true";
+
+    if (!registroId) {
+      throw new Error("Registro inválido para edição histórica.");
+    }
+
+    const registro = await prisma.controleBuffetAmostraRegistro.findUnique({
+      where: { id: registroId }
+    });
+
+    if (!registro) {
+      throw new Error("Registro histórico não encontrado.");
+    }
+
+    const item = {
+      nome: registro.itemNome,
+      classificacao: registro.classificacao
+    };
+    const input = {
+      tcEquipamentoInput,
+      primeiraTcInput,
+      temperaturaTipo,
+      acaoCorretivaInput,
+      observacao,
+      naoServido
+    };
+    const payload = naoServido
+      ? buildNaoServidoPayload({ actor, item, observacao })
+      : await buildRegistroPayload({ actor, item, input });
+    const nextStatus = preserveHistoricalSignatureStatus({
+      currentStatus: registro.status,
+      nextStatus: payload.status,
+      hasItemSignature: Boolean(registro.assinaturaDataHora)
+    });
+    const nextSegundaTc =
+      payload.status === StatusItemBuffetAmostra.NAO_SERVIDO ||
+      payload.temperaturaAmbiente
+        ? null
+        : registro.segundaTc;
+    const updateData = {
+      ...payload,
+      segundaTc: nextSegundaTc,
+      status: nextStatus
+    };
+    const monthClosed = await isHistoricalBuffetMonthClosed(registro.data);
+    const changeSummary = buildHistoricalChangeSummary(
+      {
+        tcEquipamento: registro.tcEquipamento,
+        primeiraTc: registro.primeiraTc,
+        segundaTc: registro.segundaTc,
+        temperaturaAmbiente: registro.temperaturaAmbiente,
+        statusTemperatura: registro.statusTemperatura,
+        acaoCorretiva: registro.acaoCorretiva,
+        observacao: registro.observacao,
+        responsavelNome: registro.responsavelNome,
+        dataHoraRegistro: registro.dataHoraRegistro,
+        status: registro.status
+      },
+      {
+        tcEquipamento: updateData.tcEquipamento,
+        primeiraTc: updateData.primeiraTc,
+        segundaTc: updateData.segundaTc,
+        temperaturaAmbiente: updateData.temperaturaAmbiente,
+        statusTemperatura: updateData.statusTemperatura,
+        acaoCorretiva: updateData.acaoCorretiva,
+        observacao: updateData.observacao,
+        responsavelNome: updateData.responsavelNome,
+        dataHoraRegistro: updateData.dataHoraRegistro,
+        status: updateData.status
+      }
+    );
+
+    await prisma.controleBuffetAmostraRegistro.update({
+      where: { id: registro.id },
+      data: updateData
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "controle-buffet-amostras/edicao-historica",
+      referenciaId: String(registro.id),
+      observacao: [
+        `Edição histórica do registro ${registro.id} em ${formatDateInput(registro.data)}.`,
+        `Mês fechado: ${monthClosed ? "sim" : "não"}.`,
+        `Assinatura do item preservada: ${registro.assinaturaDataHora ? "sim" : "não"}.`,
+        `Assinatura do supervisor preservada: ${
+          registro.assinaturaNutricionistaDataHora ? "sim" : "não"
+        }.`,
+        `Campos alterados: ${changeSummary}`
+      ].join(" ")
+    });
+
+    revalidateModulePaths(registro.servicoId);
+    redirectWithFeedback(returnTo, "success", "Registro histórico atualizado com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível atualizar o registro histórico.")
+    );
   }
 }
 
