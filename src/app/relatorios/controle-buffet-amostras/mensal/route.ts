@@ -17,6 +17,7 @@ import {
 } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports } from "@/lib/rbac";
+import { THERMAL_BOTTLE_EQUIPMENT_LABEL } from "@/app/controle-buffet-amostras/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -118,12 +119,20 @@ function formatTemperature(value: number | null | undefined): string {
 function formatRecordTemperature(
   record: Pick<
     BuffetRecord,
-    "status" | "temperaturaAmbiente" | "tcEquipamento" | "primeiraTc"
+    | "status"
+    | "usaGarrafaTermica"
+    | "temperaturaAmbiente"
+    | "tcEquipamento"
+    | "primeiraTc"
   >,
   field: "equipamento" | "produto"
 ): string {
   if (record.status === StatusItemBuffetAmostra.NAO_SERVIDO) {
     return field === "produto" ? "Não servido" : "-";
+  }
+
+  if (field === "equipamento" && record.usaGarrafaTermica) {
+    return THERMAL_BOTTLE_EQUIPMENT_LABEL;
   }
 
   if (record.temperaturaAmbiente) {
@@ -602,6 +611,7 @@ async function getMonthlyBuffetRecords(month: number, year: number) {
       itemExtra: true,
       tcEquipamento: true,
       primeiraTc: true,
+      usaGarrafaTermica: true,
       temperaturaAmbiente: true,
       acaoCorretiva: true,
       responsavelNome: true,

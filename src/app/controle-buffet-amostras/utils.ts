@@ -25,6 +25,8 @@ export type ServicoBuffetVigencia = {
   dataFim: Date | null;
 };
 
+export const THERMAL_BOTTLE_EQUIPMENT_LABEL = "Garrafa térmica";
+
 export type AvaliacaoTemperaturaBuffet = {
   status: StatusTemperaturaBuffetAmostra;
   orientacao: string;

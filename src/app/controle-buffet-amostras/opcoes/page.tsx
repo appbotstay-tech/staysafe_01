@@ -95,6 +95,9 @@ export default async function ControleBuffetAmostrasOpcoesPage({
     id: item.id,
     nome: item.nome,
     classificacaoLabel: getClassificacaoLabel(item.classificacao),
+    equipamentoLabel: item.usaGarrafaTermica
+      ? "Garrafa térmica"
+      : "Equipamento com temperatura",
     servicosLabel:
       item.servicos.length > 0
         ? item.servicos.map((vinculo) => vinculo.servico.nome).join(", ")
@@ -342,6 +345,18 @@ export default async function ControleBuffetAmostrasOpcoesPage({
               defaultValue={itemEdicao?.ordem ?? 1}
               className={INPUT_CLASS}
             />
+          </label>
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Tipo de equipamento
+            <select
+              name="usaGarrafaTermica"
+              defaultValue={itemEdicao?.usaGarrafaTermica ? "true" : "false"}
+              className={INPUT_CLASS}
+            >
+              <option value="false">Equipamento com temperatura</option>
+              <option value="true">Garrafa térmica</option>
+            </select>
           </label>
 
           {itemEdicao ? (

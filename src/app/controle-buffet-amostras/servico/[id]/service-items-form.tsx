@@ -14,7 +14,12 @@ import {
   saveServicoItemsStateAction
 } from "../../actions";
 import { ItemStatusBadge, TemperatureStatusBadge } from "../../status-badges";
-import { avaliarTemperaturaBuffet, getClassificacaoLabel, normalizeSearchText } from "../../utils";
+import {
+  avaliarTemperaturaBuffet,
+  getClassificacaoLabel,
+  normalizeSearchText,
+  THERMAL_BOTTLE_EQUIPMENT_LABEL
+} from "../../utils";
 
 type ActionState = {
   status: "idle" | "success" | "error";
@@ -45,6 +50,7 @@ export type ServiceItemFormRow = {
   avaliacaoOrientacao: string | null;
   tcEquipamento: string;
   primeiraTc: string;
+  usaGarrafaTermica: boolean;
   temperaturaAmbiente: boolean;
   acaoCorretiva: string;
   observacao: string;
@@ -311,7 +317,7 @@ export function ServiceItemsForm({
 
       const temperaturaAmbiente = temperaturaTipo === "AMBIENTE";
       const hasAnyValue = [
-        tcEquipamento,
+        row.usaGarrafaTermica ? "" : tcEquipamento,
         primeiraTc,
         acaoCorretiva,
         observacao,
@@ -351,7 +357,7 @@ export function ServiceItemsForm({
       const tcEquipamentoNumber = parseTemperatureInput(tcEquipamento);
       const primeiraTcNumber = parseTemperatureInput(primeiraTc);
 
-      if (tcEquipamentoNumber === null) {
+      if (!row.usaGarrafaTermica && tcEquipamentoNumber === null) {
         missingFields.push("TC Equipamento");
       }
 
@@ -500,6 +506,8 @@ export function ServiceItemsForm({
             const temperaturaAmbiente =
               !naoServido && (ambientRows[row.rowKey] ?? row.temperaturaAmbiente);
             const collectionDisabled = row.bloqueado || naoServido;
+            const equipmentDisabled =
+              collectionDisabled || temperaturaAmbiente || row.usaGarrafaTermica;
 
             return (
               <section
@@ -604,10 +612,18 @@ export function ServiceItemsForm({
                       type="text"
                       name={`${row.rowKey}-tcEquipamento`}
                       inputMode="text"
-                      placeholder="Ex.: -18 ou 62,5"
-                      defaultValue={row.tcEquipamento}
+                      placeholder={
+                        row.usaGarrafaTermica
+                          ? THERMAL_BOTTLE_EQUIPMENT_LABEL
+                          : "Ex.: -18 ou 62,5"
+                      }
+                      defaultValue={
+                        row.usaGarrafaTermica
+                          ? THERMAL_BOTTLE_EQUIPMENT_LABEL
+                          : row.tcEquipamento
+                      }
                       className={inputClassName}
-                      disabled={collectionDisabled || temperaturaAmbiente}
+                      disabled={equipmentDisabled}
                     />
                   </label>
                   <label className="text-sm text-slate-700 dark:text-slate-200">

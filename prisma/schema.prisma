@@ -915,15 +915,16 @@ model ControleBuffetAmostraServico {
 }
 
 model ControleBuffetAmostraItem {
-  id            Int                                @id @default(autoincrement())
-  nome          String                             @unique
-  classificacao ClassificacaoItemBuffetAmostra
-  ativo         Boolean                            @default(true)
-  ordem         Int                                @default(1)
-  createdAt     DateTime                           @default(now())
-  updatedAt     DateTime                           @updatedAt
-  servicos      ControleBuffetAmostraItemServico[]
-  registros     ControleBuffetAmostraRegistro[]
+  id                  Int                                @id @default(autoincrement())
+  nome                String                             @unique
+  classificacao       ClassificacaoItemBuffetAmostra
+  usaGarrafaTermica   Boolean                            @default(false)
+  ativo               Boolean                            @default(true)
+  ordem               Int                                @default(1)
+  createdAt           DateTime                           @default(now())
+  updatedAt           DateTime                           @updatedAt
+  servicos            ControleBuffetAmostraItemServico[]
+  registros           ControleBuffetAmostraRegistro[]
 
   @@index([ativo, ordem, nome])
   @@index([classificacao, ativo])
@@ -969,6 +970,7 @@ model ControleBuffetAmostraRegistro {
   tcEquipamento                    Float?
   primeiraTc                       Float?
   segundaTc                        Float?
+  usaGarrafaTermica                Boolean                         @default(false)
   temperaturaAmbiente              Boolean                         @default(false)
   statusTemperatura                StatusTemperaturaBuffetAmostra?
   acaoCorretiva                    String?

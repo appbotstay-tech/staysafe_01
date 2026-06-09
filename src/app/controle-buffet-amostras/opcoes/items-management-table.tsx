@@ -10,6 +10,7 @@ export type BuffetManagementItemRow = {
   id: number;
   nome: string;
   classificacaoLabel: string;
+  equipamentoLabel: string;
   servicosLabel: string;
   ordem: number;
   ativo: boolean;
@@ -56,6 +57,7 @@ export function BuffetItemsManagementTable({
             <tr>
               <th className="px-3 py-2">Item</th>
               <th className="px-3 py-2">Classificação</th>
+              <th className="px-3 py-2">Tipo de equipamento</th>
               <th className="px-3 py-2">Serviços</th>
               <th className="px-3 py-2">Ordem</th>
               <th className="px-3 py-2">Status</th>
@@ -65,13 +67,13 @@ export function BuffetItemsManagementTable({
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                   Nenhum item cadastrado.
                 </td>
               </tr>
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-3 py-3 text-slate-500 dark:text-slate-400">
                   Nenhum item encontrado.
                 </td>
               </tr>
@@ -80,6 +82,7 @@ export function BuffetItemsManagementTable({
                 <tr key={item.id}>
                   <td className="px-3 py-2">{item.nome}</td>
                   <td className="px-3 py-2">{item.classificacaoLabel}</td>
+                  <td className="px-3 py-2">{item.equipamentoLabel}</td>
                   <td className="px-3 py-2 max-w-72 whitespace-normal break-words">
                     {item.servicosLabel}
                   </td>

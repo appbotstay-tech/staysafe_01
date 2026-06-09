@@ -27,7 +27,8 @@ import {
   getMonthYear,
   getYearDateRange,
   parseDateInput,
-  parsePositiveInt
+  parsePositiveInt,
+  THERMAL_BOTTLE_EQUIPMENT_LABEL
 } from "../utils";
 
 const MODULE_PATH = "/controle-buffet-amostras";
@@ -667,9 +668,18 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                   type="text"
                   name="tcEquipamento"
                   inputMode="text"
-                  placeholder="Ex.: -18 ou 62,5"
-                  defaultValue={formatTemperatureInput(registroParaEditar.tcEquipamento)}
+                  placeholder={
+                    registroParaEditar.usaGarrafaTermica
+                      ? THERMAL_BOTTLE_EQUIPMENT_LABEL
+                      : "Ex.: -18 ou 62,5"
+                  }
+                  defaultValue={
+                    registroParaEditar.usaGarrafaTermica
+                      ? THERMAL_BOTTLE_EQUIPMENT_LABEL
+                      : formatTemperatureInput(registroParaEditar.tcEquipamento)
+                  }
                   className={INPUT_CLASS}
+                  disabled={registroParaEditar.usaGarrafaTermica}
                 />
               </label>
 

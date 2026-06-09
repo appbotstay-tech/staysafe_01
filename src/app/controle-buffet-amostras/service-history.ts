@@ -14,6 +14,7 @@ import {
   getClassificacaoLabel,
   getTipoServicoLabel,
   normalizeSearchText,
+  THERMAL_BOTTLE_EQUIPMENT_LABEL,
   type StatusServicoBuffet
 } from "./utils";
 
@@ -27,6 +28,7 @@ type BuffetServiceRecord = {
   tcEquipamento: number | null;
   primeiraTc: number | null;
   segundaTc: number | null;
+  usaGarrafaTermica: boolean;
   temperaturaAmbiente: boolean;
   statusTemperatura: StatusTemperaturaBuffetAmostra | null;
   acaoCorretiva: string | null;
@@ -178,9 +180,11 @@ export function buildBuffetServiceHistoryGroups(
       nome: record.itemNome,
       itemExtra: record.itemExtra,
       classificacaoLabel: getClassificacaoLabel(record.classificacao),
-      tcEquipamentoLabel: record.temperaturaAmbiente
-        ? "Ambiente"
-        : formatTemperatureDisplay(record.tcEquipamento),
+      tcEquipamentoLabel: record.usaGarrafaTermica
+        ? THERMAL_BOTTLE_EQUIPMENT_LABEL
+        : record.temperaturaAmbiente
+          ? "Ambiente"
+          : formatTemperatureDisplay(record.tcEquipamento),
       temperaturaInicialLabel: record.temperaturaAmbiente
         ? "Ambiente"
         : formatTemperatureDisplay(record.primeiraTc),

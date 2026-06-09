@@ -77,6 +77,7 @@ type RegistroTemperaturaInput = {
 type RegistroItemSource = {
   nome: string;
   classificacao: ClassificacaoItemBuffetAmostra;
+  usaGarrafaTermica: boolean;
 };
 
 type RegistroItemPayload = {
@@ -85,6 +86,7 @@ type RegistroItemPayload = {
   tcEquipamento: number | null;
   primeiraTc: number | null;
   segundaTc: number | null;
+  usaGarrafaTermica: boolean;
   temperaturaAmbiente: boolean;
   statusTemperatura: ReturnType<typeof avaliarTemperaturaBuffet>["status"] | null;
   acaoCorretiva: string | null;
@@ -303,6 +305,7 @@ async function buildRegistroPayload(params: {
   input: RegistroTemperaturaInput;
 }): Promise<RegistroItemPayload> {
   const temperaturaAmbiente = params.input.temperaturaTipo === "AMBIENTE";
+  const usaGarrafaTermica = params.item.usaGarrafaTermica;
   const acaoCorretivaOption = params.input.acaoCorretivaInput
     ? await findAcaoCorretivaByName(params.input.acaoCorretivaInput, false)
     : null;
@@ -325,6 +328,7 @@ async function buildRegistroPayload(params: {
       tcEquipamento: null,
       primeiraTc: null,
       segundaTc: null,
+      usaGarrafaTermica,
       temperaturaAmbiente: true,
       statusTemperatura: null,
       acaoCorretiva,
@@ -337,10 +341,16 @@ async function buildRegistroPayload(params: {
     };
   }
 
-  const tcEquipamento = parseTemperatureInput(params.input.tcEquipamentoInput);
+  const tcEquipamento = usaGarrafaTermica
+    ? null
+    : parseTemperatureInput(params.input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(params.input.primeiraTcInput);
 
-  if (tcEquipamento === null || primeiraTc === null) {
+  if ((!usaGarrafaTermica && tcEquipamento === null) || primeiraTc === null) {
+    if (usaGarrafaTermica) {
+      throw new Error("Preencha TC do Alimento com um valor válido.");
+    }
+
     throw new Error("Preencha TC Equipamento e TC do Alimento com valores válidos.");
   }
 
@@ -362,6 +372,7 @@ async function buildRegistroPayload(params: {
     tcEquipamento,
     primeiraTc,
     segundaTc: null,
+    usaGarrafaTermica,
     temperaturaAmbiente: false,
     statusTemperatura: avaliacao.status,
     acaoCorretiva,
@@ -383,8 +394,9 @@ function getRegistroItemIssue(
   }
 
   const temperaturaAmbiente = input.temperaturaTipo === "AMBIENTE";
+  const usaGarrafaTermica = item.usaGarrafaTermica;
   const values = [
-    input.tcEquipamentoInput,
+    usaGarrafaTermica ? "" : input.tcEquipamentoInput,
     input.primeiraTcInput,
     input.acaoCorretivaInput,
     input.observacao,
@@ -404,7 +416,7 @@ function getRegistroItemIssue(
   const tcEquipamento = parseTemperatureInput(input.tcEquipamentoInput);
   const primeiraTc = parseTemperatureInput(input.primeiraTcInput);
 
-  if (tcEquipamento === null) {
+  if (!usaGarrafaTermica && tcEquipamento === null) {
     missingFields.push("TC Equipamento");
   }
 
@@ -431,6 +443,7 @@ function buildNaoServidoPayload(params: {
     tcEquipamento: null,
     primeiraTc: null,
     segundaTc: null,
+    usaGarrafaTermica: params.item.usaGarrafaTermica,
     temperaturaAmbiente: false,
     statusTemperatura: null,
     acaoCorretiva: null,
@@ -795,7 +808,8 @@ export async function saveServicoItemsStateAction(
 
           const item = {
             nome: registro.itemNome,
-            classificacao: registro.classificacao
+            classificacao: registro.classificacao,
+            usaGarrafaTermica: registro.usaGarrafaTermica
           };
 
           if (input.naoServido) {
@@ -939,7 +953,8 @@ export async function updateHistoricoRegistroAction(formData: FormData) {
 
     const item = {
       nome: registro.itemNome,
-      classificacao: registro.classificacao
+      classificacao: registro.classificacao,
+      usaGarrafaTermica: registro.usaGarrafaTermica
     };
     const input = {
       tcEquipamentoInput,
@@ -1088,6 +1103,7 @@ export async function createExtraItemStateAction(
         itemExtra: true,
         itemNome: nome,
         classificacao,
+        usaGarrafaTermica: false,
         responsavelUsuarioId: actor.id,
         responsavelNome: actor.nomeCompleto,
         responsavelPerfil: actor.perfil,
@@ -1667,6 +1683,7 @@ export async function createItemAction(formData: FormData) {
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const classificacao = parseItemClassification(getInputValue(formData, "classificacao"));
+    const usaGarrafaTermica = getInputValue(formData, "usaGarrafaTermica") === "true";
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? 1;
     const servicoIds = getInputNumberList(formData, "servicoIds");
 
@@ -1696,6 +1713,7 @@ export async function createItemAction(formData: FormData) {
         data: {
           nome,
           classificacao,
+          usaGarrafaTermica,
           ordem,
           ativo: true
         }
@@ -1743,6 +1761,7 @@ export async function updateItemAction(formData: FormData) {
 
     const nome = sanitizeCatalogValue(getInputValue(formData, "nome"));
     const classificacao = parseItemClassification(getInputValue(formData, "classificacao"));
+    const usaGarrafaTermica = getInputValue(formData, "usaGarrafaTermica") === "true";
     const ordem = parsePositiveInt(getInputValue(formData, "ordem")) ?? existing.ordem;
     const ativo = getInputValue(formData, "ativo") === "true";
     const servicoIds = getInputNumberList(formData, "servicoIds");
@@ -1774,6 +1793,7 @@ export async function updateItemAction(formData: FormData) {
         data: {
           nome,
           classificacao,
+          usaGarrafaTermica,
           ordem,
           ativo
         }
