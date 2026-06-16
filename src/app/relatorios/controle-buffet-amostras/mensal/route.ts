@@ -9,19 +9,21 @@ import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   formatAppDate,
+  formatAppDateInput,
   formatAppDateTime,
   getAppDate,
   getAppMonthDateRange,
   getAppMonthYear,
   getAppNow
 } from "@/lib/date-time";
+import { OPERATIONAL_SIGNATURE_MODULES } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports } from "@/lib/rbac";
 import { THERMAL_BOTTLE_EQUIPMENT_LABEL } from "@/app/controle-buffet-amostras/utils";
 
 export const dynamic = "force-dynamic";
 
-const MODULE_CODE = "amostras";
+const MODULE_CODE = OPERATIONAL_SIGNATURE_MODULES.amostras.codigo;
 const MODULE_NAME = "Controle de Buffet / Amostras";
 const REPORT_TITLE = "CONTROLE DE AMOSTRAS E TEMPERATURA DO BUFFET";
 const REPORT_NAME = "Relatório mensal - controle de buffet / amostras";
@@ -32,6 +34,7 @@ type BuffetReportRow = {
   temperaturaProduto: string;
   acaoCorretiva: string;
   responsavel: string;
+  supervisor: string;
 };
 
 type BuffetServiceTable = {
@@ -168,7 +171,10 @@ function buildServiceTitle(record: BuffetRecord): string {
   return `${record.servico.nome.toLocaleUpperCase("pt-BR")} - ${formatAppDate(record.data)}`;
 }
 
-function buildServiceTables(records: BuffetRecord[]): BuffetServiceTable[] {
+function buildServiceTables(
+  records: BuffetRecord[],
+  supervisorByDate: Map<string, string>
+): BuffetServiceTable[] {
   const groupsByKey = new Map<
     string,
     {
@@ -180,7 +186,8 @@ function buildServiceTables(records: BuffetRecord[]): BuffetServiceTable[] {
   >();
 
   for (const record of records) {
-    const key = `${record.data.toISOString().slice(0, 10)}:${record.servicoId}`;
+    const dataInput = formatAppDateInput(record.data);
+    const key = `${dataInput}:${record.servicoId}`;
     const group = groupsByKey.get(key) ?? {
       serviceOrder: record.servico.ordem,
       dateTime: record.data.getTime(),
@@ -215,7 +222,8 @@ function buildServiceTables(records: BuffetRecord[]): BuffetServiceTable[] {
           record.status === StatusItemBuffetAmostra.NAO_SERVIDO
             ? "-"
             : valueOrDash(record.acaoCorretiva),
-        responsavel: valueOrDash(record.responsavelNome)
+        responsavel: valueOrDash(record.responsavelNome),
+        supervisor: valueOrDash(supervisorByDate.get(formatAppDateInput(record.data)))
       }))
     }));
 }
@@ -375,25 +383,34 @@ function renderStyles(): string {
 
       .service-table th:nth-child(1),
       .service-table td:nth-child(1) {
-        width: 33%;
+        width: 28%;
       }
 
       .service-table th:nth-child(2),
-      .service-table td:nth-child(2),
+      .service-table td:nth-child(2) {
+        width: 12%;
+        text-align: center;
+      }
+
       .service-table th:nth-child(3),
       .service-table td:nth-child(3) {
-        width: 14%;
+        width: 10%;
         text-align: center;
       }
 
       .service-table th:nth-child(4),
       .service-table td:nth-child(4) {
-        width: 21%;
+        width: 18%;
       }
 
       .service-table th:nth-child(5),
       .service-table td:nth-child(5) {
-        width: 18%;
+        width: 16%;
+      }
+
+      .service-table th:nth-child(6),
+      .service-table td:nth-child(6) {
+        width: 16%;
       }
 
       .empty-message {
@@ -523,12 +540,13 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
                 <td>${escapeHtml(row.temperaturaProduto)}</td>
                 <td>${escapeHtml(row.acaoCorretiva)}</td>
                 <td>${escapeHtml(row.responsavel)}</td>
+                <td>${escapeHtml(row.supervisor)}</td>
               </tr>`
           )
           .join("")
       : `
         <tr>
-          <td colspan="5" class="empty-message">
+          <td colspan="6" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -544,12 +562,13 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
             <th>T°C</th>
             <th>Ação Corretiva</th>
             <th>Responsável pela verificação</th>
+            <th>Supervisor</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="5" class="signature-wrapper">
+            <td colspan="6" class="signature-wrapper">
               ${renderSignatureTable(report)}
             </td>
           </tr>
@@ -652,10 +671,24 @@ export async function GET(request: NextRequest) {
   const currentMonthYear = getAppMonthYear(getAppDate());
   const month = parseMonth(request.nextUrl.searchParams.get("mes")) ?? currentMonthYear.mes;
   const year = parseYear(request.nextUrl.searchParams.get("ano")) ?? currentMonthYear.ano;
+  const monthRange = getAppMonthDateRange(month, year);
   const generatedAt = getAppNow();
 
-  const [records, genericMonthlyClosure, legacyMonthlyClosure] = await Promise.all([
+  const [records, dailySignatures, genericMonthlyClosure, legacyMonthlyClosure] = await Promise.all([
     getMonthlyBuffetRecords(month, year),
+    prisma.assinaturaDiariaModulo.findMany({
+      where: {
+        moduloCodigo: MODULE_CODE,
+        dataReferencia: {
+          gte: monthRange.start,
+          lte: monthRange.end
+        }
+      },
+      select: {
+        dataReferencia: true,
+        usuarioNomeSnapshot: true
+      }
+    }),
     prisma.fechamentoMensalModulo.findUnique({
       where: {
         moduloCodigo_ano_mes: {
@@ -682,11 +715,18 @@ export async function GET(request: NextRequest) {
         ? formatGeneratedAtSentence(legacyMonthlyClosure.dataAssinatura)
         : "";
 
+  const supervisorByDate = new Map(
+    dailySignatures.map((signature) => [
+      formatAppDateInput(signature.dataReferencia),
+      signature.usuarioNomeSnapshot
+    ])
+  );
+
   const report: MonthlyBuffetReport = {
     monthYearLabel: formatMonthYear(month, year),
     unitName: getConfiguredUnitName(),
     emittedAt: formatAppDateTime(generatedAt),
-    services: buildServiceTables(records),
+    services: buildServiceTables(records, supervisorByDate),
     closureResponsible,
     closureDate,
     closureStatus: closureResponsible ? "Assinado digitalmente" : "Pendente de assinatura"
