@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   StatusFechamentoTemperaturaEquipamento,
+  StatusOperacionalEquipamento,
   TipoOpcaoTemperaturaEquipamento,
   TurnoTemperaturaEquipamento
 } from "@prisma/client";
@@ -9,30 +10,41 @@ import {
 import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
+  formatAppDateInput,
   formatAppDateTime,
   getAppDate,
   getAppMonthDateRange,
   getAppMonthYear,
   getAppNow
 } from "@/lib/date-time";
+import { OPERATIONAL_SIGNATURE_MODULES } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-const MODULE_CODE = "temperatura";
+const MODULE_CODE = OPERATIONAL_SIGNATURE_MODULES.temperatura.codigo;
 const MODULE_NAME = "Controle de Temperatura dos Equipamentos";
 const REPORT_TITLE = "CONTROLE DE TEMPERATURA DOS EQUIPAMENTOS";
 const REPORT_NAME = "Relatório mensal - temperatura dos equipamentos";
-const DEFAULT_SHIFTS = [
+const SHIFTS = [
   TurnoTemperaturaEquipamento.MANHA,
   TurnoTemperaturaEquipamento.TARDE
-];
+] as const;
 
-type TemperatureGridRow = {
-  equipamento: string;
-  turno: TurnoTemperaturaEquipamento;
-  temperaturesByDay: Map<number, string>;
+type TemperatureRecord = Awaited<ReturnType<typeof getMonthlyTemperatureRecords>>[number];
+type EquipmentOption = Awaited<ReturnType<typeof getTemperatureEquipmentOptions>>[number];
+
+type ShiftCell = {
+  temperature: string;
+  correctiveAction: string;
+  responsible: string;
+  supervisor: string;
+};
+
+type EquipmentReport = {
+  name: string;
+  cellsByDayShift: Map<string, ShiftCell>;
 };
 
 type MonthlyTemperatureReport = {
@@ -41,7 +53,7 @@ type MonthlyTemperatureReport = {
   monthYearLabel: string;
   unitName: string;
   emittedAt: string;
-  rows: TemperatureGridRow[];
+  equipments: EquipmentReport[];
   days: number[];
   closureResponsible: string;
   closureDate: string;
@@ -94,6 +106,15 @@ function formatGeneratedAtSentence(date: Date): string {
   return `${datePart} às ${timePart ?? ""}`.trim();
 }
 
+function valueOrEmpty(value: string | null | undefined): string {
+  return value?.trim() ?? "";
+}
+
+function valueOrDash(value: string | null | undefined): string {
+  const normalized = value?.trim() ?? "";
+  return normalized || "-";
+}
+
 function formatTemperature(value: number | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
@@ -109,19 +130,20 @@ function labelTurno(turno: TurnoTemperaturaEquipamento): string {
   return turno === TurnoTemperaturaEquipamento.MANHA ? "Manhã" : "Tarde";
 }
 
-function configuredShifts(equipment: {
-  turnoManha?: boolean | null;
-  turnoTarde?: boolean | null;
-} | null): TurnoTemperaturaEquipamento[] {
-  if (!equipment) {
-    return DEFAULT_SHIFTS;
-  }
+function getRecordDateKey(record: Pick<TemperatureRecord, "data">): string {
+  return formatAppDateInput(record.data);
+}
 
-  const shifts: TurnoTemperaturaEquipamento[] = [];
-  if (equipment.turnoManha) shifts.push(TurnoTemperaturaEquipamento.MANHA);
-  if (equipment.turnoTarde) shifts.push(TurnoTemperaturaEquipamento.TARDE);
+function getRecordKey(params: {
+  equipment: string;
+  turno: TurnoTemperaturaEquipamento;
+  day: number;
+}): string {
+  return `${params.equipment}|${params.turno}|${params.day}`;
+}
 
-  return shifts.length > 0 ? shifts : DEFAULT_SHIFTS;
+function getCellKey(turno: TurnoTemperaturaEquipamento, day: number): string {
+  return `${turno}|${day}`;
 }
 
 function escapeHtml(value: string | number | null | undefined): string {
@@ -133,12 +155,125 @@ function escapeHtml(value: string | number | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
+async function getTemperatureEquipmentOptions() {
+  return prisma.controleTemperaturaEquipamentoOpcao.findMany({
+    where: { tipo: TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO },
+    select: {
+      nome: true,
+      ativo: true
+    },
+    orderBy: [{ ativo: "desc" }, { nome: "asc" }]
+  });
+}
+
+async function getMonthlyTemperatureRecords(month: number, year: number) {
+  const monthRange = getAppMonthDateRange(month, year);
+
+  return prisma.controleTemperaturaEquipamento.findMany({
+    where: {
+      data: {
+        gte: monthRange.start,
+        lte: monthRange.end
+      }
+    },
+    select: {
+      id: true,
+      data: true,
+      equipamento: true,
+      turno: true,
+      statusOperacionalEquipamento: true,
+      temperaturaAferida: true,
+      acaoCorretiva: true,
+      responsavel: true,
+      createdAt: true
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }]
+  });
+}
+
+function buildEquipmentNames(
+  equipmentOptions: EquipmentOption[],
+  records: TemperatureRecord[]
+): string[] {
+  const recordsByEquipment = new Map<string, TemperatureRecord[]>();
+  for (const record of records) {
+    const group = recordsByEquipment.get(record.equipamento) ?? [];
+    group.push(record);
+    recordsByEquipment.set(record.equipamento, group);
+  }
+
+  const optionsByName = new Map(equipmentOptions.map((option) => [option.nome, option]));
+  const equipmentNames: string[] = [];
+
+  for (const option of equipmentOptions) {
+    if (option.ativo || recordsByEquipment.has(option.nome)) {
+      equipmentNames.push(option.nome);
+    }
+  }
+
+  const extraEquipmentNames = Array.from(recordsByEquipment.keys())
+    .filter((name) => !optionsByName.has(name))
+    .sort((first, second) => first.localeCompare(second, "pt-BR"));
+
+  equipmentNames.push(...extraEquipmentNames);
+
+  return equipmentNames;
+}
+
+function buildEquipmentReports(params: {
+  equipmentOptions: EquipmentOption[];
+  records: TemperatureRecord[];
+  days: number[];
+  supervisorByDate: Map<string, string>;
+}): EquipmentReport[] {
+  const recordsByKey = new Map<string, TemperatureRecord>();
+
+  for (const record of params.records) {
+    const key = getRecordKey({
+      equipment: record.equipamento,
+      turno: record.turno,
+      day: record.data.getUTCDate()
+    });
+
+    if (!recordsByKey.has(key)) {
+      recordsByKey.set(key, record);
+    }
+  }
+
+  return buildEquipmentNames(params.equipmentOptions, params.records).map((name) => {
+    const cellsByDayShift = new Map<string, ShiftCell>();
+
+    for (const day of params.days) {
+      for (const turno of SHIFTS) {
+        const record = recordsByKey.get(getRecordKey({ equipment: name, turno, day }));
+        if (!record) {
+          continue;
+        }
+
+        const inOperation =
+          record.statusOperacionalEquipamento === StatusOperacionalEquipamento.EM_OPERACAO;
+        cellsByDayShift.set(getCellKey(turno, day), {
+          temperature: inOperation ? formatTemperature(record.temperaturaAferida) : "",
+          correctiveAction: inOperation ? valueOrEmpty(record.acaoCorretiva) : "",
+          responsible: valueOrEmpty(record.responsavel),
+          supervisor: valueOrDash(params.supervisorByDate.get(getRecordDateKey(record)))
+        });
+      }
+    }
+
+    return {
+      name,
+      cellsByDayShift
+    };
+  });
+}
+
 function renderStyles(): string {
   return `
     <style>
       @page {
         size: A4 landscape;
-        margin: 8mm;
+        margin: 7mm;
       }
 
       * {
@@ -151,25 +286,20 @@ function renderStyles(): string {
         background: #ffffff;
         color: #000000;
         font-family: Arial, Helvetica, sans-serif;
-        font-size: 10px;
-        line-height: 1.25;
+        font-size: 8.2px;
+        line-height: 1.18;
       }
 
       body {
-        padding: 14px;
-      }
-
-      .report-page {
-        max-width: 1420px;
-        margin: 0 auto;
-        background: #ffffff;
+        padding: 0;
       }
 
       .screen-actions {
         display: flex;
         justify-content: flex-end;
         gap: 8px;
-        margin-bottom: 10px;
+        margin: 10px auto;
+        max-width: 1120px;
       }
 
       .screen-actions button {
@@ -182,8 +312,19 @@ function renderStyles(): string {
         padding: 7px 10px;
       }
 
-      .table-wrap {
-        overflow-x: auto;
+      .equipment-page {
+        display: flex;
+        min-height: 196mm;
+        page-break-after: always;
+        break-after: page;
+        flex-direction: column;
+        gap: 5px;
+        padding: 0;
+      }
+
+      .equipment-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
       }
 
       table {
@@ -195,7 +336,7 @@ function renderStyles(): string {
       th,
       td {
         border: 1px solid #000000;
-        padding: 3px 4px;
+        padding: 2px 3px;
         text-align: center;
         vertical-align: middle;
       }
@@ -207,25 +348,24 @@ function renderStyles(): string {
 
       .header-table {
         table-layout: fixed;
-        margin-bottom: 8px;
       }
 
       .brand-cell {
         width: 20%;
-        font-size: 13px;
+        font-size: 12px;
         text-align: center;
       }
 
       .brand-cell span {
         display: block;
-        margin-top: 3px;
-        font-size: 9px;
+        margin-top: 2px;
+        font-size: 8px;
         font-weight: 400;
       }
 
       .title-cell {
         width: 54%;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 700;
         letter-spacing: 0;
         text-align: center;
@@ -233,75 +373,113 @@ function renderStyles(): string {
 
       .month-cell {
         width: 26%;
-        font-size: 11px;
+        font-size: 10px;
         text-align: center;
       }
 
       .meta-line {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: 8px;
         justify-content: space-between;
-        margin-bottom: 8px;
-        font-size: 10px;
+        font-size: 8px;
       }
 
-      .temperature-grid {
-        min-width: 1160px;
+      .equipment-info {
         table-layout: fixed;
       }
 
-      .equipment-head,
-      .equipment-cell {
-        width: 18%;
+      .equipment-info th {
+        width: 16%;
         text-align: left;
       }
 
-      .shift-head,
-      .shift-cell {
-        width: 7%;
+      .equipment-info td {
+        text-align: left;
       }
 
-      .day-head,
-      .day-cell {
-        width: 2.4%;
-        min-width: 24px;
+      .temperature-table {
+        table-layout: fixed;
       }
 
-      .equipment-cell {
-        font-weight: 700;
+      .temperature-table th,
+      .temperature-table td {
         overflow-wrap: anywhere;
       }
 
-      .day-cell {
-        height: 22px;
-        font-size: 8px;
-        white-space: nowrap;
+      .day-column {
+        width: 4%;
+        font-weight: 700;
       }
 
-      .empty-message {
-        height: 28px;
+      .temperature-column {
+        width: 8%;
+      }
+
+      .action-column {
+        width: 16%;
+      }
+
+      .responsible-column,
+      .supervisor-column {
+        width: 10%;
+      }
+
+      .day-row td {
+        height: 14px;
+      }
+
+      .footer-block {
+        margin-top: auto;
+      }
+
+      .corrective-title {
+        background: #f2f2f2;
+        font-weight: 700;
         text-align: center;
+        text-transform: uppercase;
+      }
+
+      .corrective-table {
+        table-layout: fixed;
+      }
+
+      .corrective-table th,
+      .corrective-table td {
+        padding: 2px 3px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .corrective-table th {
+        text-align: center;
+      }
+
+      .corrective-range {
+        width: 22%;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
       }
 
       .signature-table {
         table-layout: fixed;
-        margin-top: 12px;
+        margin-top: 4px;
       }
 
       .signature-table th,
       .signature-table td {
-        height: 30px;
+        height: 20px;
         text-align: left;
         white-space: nowrap;
       }
 
       .signature-table th:first-child {
-        width: 28%;
+        width: 30%;
       }
 
       .signature-table td:nth-child(2) {
-        width: 44%;
+        width: 42%;
       }
 
       .signature-table th:nth-child(3) {
@@ -312,36 +490,14 @@ function renderStyles(): string {
         width: 21%;
       }
 
-      @media print {
-        body {
-          padding: 0;
-          font-size: 8px;
-        }
+      .empty-message {
+        height: 42px;
+        text-align: center;
+      }
 
+      @media print {
         .screen-actions {
           display: none;
-        }
-
-        .report-page {
-          max-width: none;
-        }
-
-        .table-wrap {
-          overflow: visible;
-        }
-
-        .temperature-grid {
-          min-width: 0;
-        }
-
-        th,
-        td {
-          padding: 2px;
-        }
-
-        .day-cell {
-          font-size: 7px;
-          height: 18px;
         }
 
         thead {
@@ -382,83 +538,152 @@ function renderHeader(report: MonthlyTemperatureReport): string {
     </header>`;
 }
 
-function renderTemperatureGrid(report: MonthlyTemperatureReport): string {
-  const dayHeaders = report.days
-    .map((day) => `<th class="day-head">${day}</th>`)
-    .join("");
-
-  const rows =
-    report.rows.length > 0
-      ? report.rows
-          .map((row, rowIndex, rows) => {
-            const equipmentRowSpan = rows.filter(
-              (candidate) => candidate.equipamento === row.equipamento
-            ).length;
-            const isFirstEquipmentRow =
-              rowIndex === 0 || rows[rowIndex - 1]?.equipamento !== row.equipamento;
-            const equipmentCell = isFirstEquipmentRow
-              ? `<td class="equipment-cell" rowspan="${equipmentRowSpan}">${escapeHtml(row.equipamento)}</td>`
-              : "";
-            const cells = report.days
-              .map(
-                (day) =>
-                  `<td class="day-cell">${escapeHtml(row.temperaturesByDay.get(day) ?? "")}</td>`
-              )
-              .join("");
-
-            return `
-              <tr>
-                ${equipmentCell}
-                <td class="shift-cell">${escapeHtml(labelTurno(row.turno))}</td>
-                ${cells}
-              </tr>`;
-          })
-          .join("")
-      : `
-        <tr>
-          <td colspan="${report.days.length + 2}" class="empty-message">
-            Nenhum equipamento encontrado para o mês de referência.
-          </td>
-        </tr>`;
-
+function renderEquipmentInfo(equipment: EquipmentReport, report: MonthlyTemperatureReport): string {
   return `
-    <div class="table-wrap">
-      <table class="temperature-grid">
-        <thead>
-          <tr>
-            <th class="equipment-head">Equipamento</th>
-            <th class="shift-head">Turno</th>
-            ${dayHeaders}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    </div>`;
+    <table class="equipment-info">
+      <tbody>
+        <tr>
+          <th>Mês/Ano</th>
+          <td>${escapeHtml(report.monthYearLabel)}</td>
+          <th>Equipamento</th>
+          <td>${escapeHtml(equipment.name)}</td>
+        </tr>
+      </tbody>
+    </table>`;
 }
 
-function renderFooter(report: MonthlyTemperatureReport): string {
-  const responsible =
-    report.closureResponsible.trim() || "________________________________________";
-  const date = report.closureDate.trim() || "___/___/____";
+function renderShiftHeader(): string {
+  return `
+    <th class="temperature-column">Temperatura</th>
+    <th class="action-column">Ação corretiva</th>
+    <th class="responsible-column">Responsável</th>
+    <th class="supervisor-column">Supervisor</th>`;
+}
+
+function renderShiftCells(equipment: EquipmentReport, day: number, turno: TurnoTemperaturaEquipamento): string {
+  const cell = equipment.cellsByDayShift.get(getCellKey(turno, day));
 
   return `
-    <footer>
-      <table class="signature-table">
-        <tbody>
-          <tr>
-            <th>Responsável Técnico / Nutricionista / Supervisor:</th>
-            <td>${escapeHtml(responsible)}</td>
-            <th>Data:</th>
-            <td>${escapeHtml(date)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </footer>`;
+    <td>${escapeHtml(cell?.temperature ?? "")}</td>
+    <td>${escapeHtml(cell?.correctiveAction ?? "")}</td>
+    <td>${escapeHtml(cell?.responsible ?? "")}</td>
+    <td>${escapeHtml(cell?.supervisor ?? "")}</td>`;
+}
+
+function renderEquipmentTable(equipment: EquipmentReport, report: MonthlyTemperatureReport): string {
+  const rows = report.days
+    .map(
+      (day) => `
+        <tr class="day-row">
+          <td class="day-column">${day}</td>
+          ${renderShiftCells(equipment, day, TurnoTemperaturaEquipamento.MANHA)}
+          ${renderShiftCells(equipment, day, TurnoTemperaturaEquipamento.TARDE)}
+        </tr>`
+    )
+    .join("");
+
+  return `
+    <table class="temperature-table">
+      <thead>
+        <tr>
+          <th class="day-column" rowspan="2">Dia</th>
+          <th colspan="4">${escapeHtml(labelTurno(TurnoTemperaturaEquipamento.MANHA))}</th>
+          <th colspan="4">${escapeHtml(labelTurno(TurnoTemperaturaEquipamento.TARDE))}</th>
+        </tr>
+        <tr>
+          ${renderShiftHeader()}
+          ${renderShiftHeader()}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderCorrectiveActionBlock(): string {
+  return `
+    <table class="corrective-table">
+      <tbody>
+        <tr>
+          <th colspan="4" class="corrective-title">Ação corretiva para equipamentos de refrigeração e congelamento</th>
+        </tr>
+        <tr>
+          <td class="corrective-range">Acima de 8°C</td>
+          <td>TEMPERATURAS INADEQUADAS - SOLICITAR MANUTENÇÃO URGENTE</td>
+          <td class="corrective-range">Abaixo de -13°C</td>
+          <td>TEMPERATURAS INADEQUADAS - SOLICITAR MANUTENÇÃO URGENTE</td>
+        </tr>
+        <tr>
+          <td class="corrective-range">Entre 5°C e 8°C</td>
+          <td>VARIAÇÃO ACEITÁVEL PARA O TURNO, SE PERSISTIR NO TURNO SEGUINTE ACIONAR A MANUTENÇÃO</td>
+          <td class="corrective-range">Entre -17°C e -14°C</td>
+          <td>VARIAÇÃO ACEITÁVEL PARA O TURNO, SE PERSISTIR NO TURNO SEGUINTE ACIONAR A MANUTENÇÃO</td>
+        </tr>
+        <tr>
+          <td class="corrective-range">Até 4°C</td>
+          <td>FAIXA IDEAL DE TEMPERATURA</td>
+          <td class="corrective-range">Até -18°C</td>
+          <td>FAIXA IDEAL DE TEMPERATURA</td>
+        </tr>
+        <tr>
+          <th colspan="4" class="corrective-title">Ação corretiva para equipamentos a quente (banho maria, estufa, passthrough e placa de indução)</th>
+        </tr>
+        <tr>
+          <td class="corrective-range">Abaixo de 80°C</td>
+          <td>AGUARDAR ATINGIR A TEMPERATURA ADEQUADA</td>
+          <td class="corrective-range">ACIMA DE 80°C</td>
+          <td>FAIXA IDEAL DE TEMPERATURA</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function renderClosureSignature(report: MonthlyTemperatureReport): string {
+  return `
+    <table class="signature-table">
+      <tbody>
+        <tr>
+          <th>Responsável Técnico ou Nutricionista:</th>
+          <td>${escapeHtml(report.closureResponsible)}</td>
+          <th>Data:</th>
+          <td>${escapeHtml(report.closureDate)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function renderEquipmentPage(equipment: EquipmentReport, report: MonthlyTemperatureReport): string {
+  return `
+    <section class="equipment-page">
+      ${renderHeader(report)}
+      ${renderEquipmentInfo(equipment, report)}
+      ${renderEquipmentTable(equipment, report)}
+      <div class="footer-block">
+        ${renderCorrectiveActionBlock()}
+        ${renderClosureSignature(report)}
+      </div>
+    </section>`;
 }
 
 function renderReportDocument(report: MonthlyTemperatureReport): string {
+  const equipmentPages =
+    report.equipments.length > 0
+      ? report.equipments.map((equipment) => renderEquipmentPage(equipment, report)).join("")
+      : `
+        <section class="equipment-page">
+          ${renderHeader(report)}
+          <table>
+            <tbody>
+              <tr>
+                <td class="empty-message">Nenhum equipamento encontrado para o mês de referência.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footer-block">
+            ${renderCorrectiveActionBlock()}
+            ${renderClosureSignature(report)}
+          </div>
+        </section>`;
+
   return `<!doctype html>
 <html lang="pt-BR">
   <head>
@@ -468,13 +693,11 @@ function renderReportDocument(report: MonthlyTemperatureReport): string {
     ${renderStyles()}
   </head>
   <body>
-    <main class="report-page">
-      <div class="screen-actions">
-        <button type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
-      </div>
-      ${renderHeader(report)}
-      ${renderTemperatureGrid(report)}
-      ${renderFooter(report)}
+    <div class="screen-actions">
+      <button type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
+    </div>
+    <main>
+      ${equipmentPages}
     </main>
   </body>
 </html>`;
@@ -497,99 +720,48 @@ export async function GET(request: NextRequest) {
   const days = Array.from({ length: monthRange.end.getUTCDate() }, (_, index) => index + 1);
   const generatedAt = getAppNow();
 
-  const [equipmentOptions, records, genericMonthlyClosure, legacyMonthlyClosure] =
-    await Promise.all([
-      prisma.controleTemperaturaEquipamentoOpcao.findMany({
-        where: { tipo: TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO },
-        select: {
-          nome: true,
-          ativo: true,
-          turnoManha: true,
-          turnoTarde: true
-        },
-        orderBy: [{ ativo: "desc" }, { nome: "asc" }]
-      }),
-      prisma.controleTemperaturaEquipamento.findMany({
-        where: {
-          data: {
-            gte: monthRange.start,
-            lte: monthRange.end
-          }
-        },
-        select: {
-          data: true,
-          equipamento: true,
-          turno: true,
-          temperaturaAferida: true,
-          createdAt: true
-        },
-        orderBy: [{ createdAt: "desc" }]
-      }),
-      prisma.fechamentoMensalModulo.findUnique({
-        where: {
-          moduloCodigo_ano_mes: {
-            moduloCodigo: MODULE_CODE,
-            ano: year,
-            mes: month
-          }
+  const [
+    equipmentOptions,
+    records,
+    dailySignatures,
+    genericMonthlyClosure,
+    legacyMonthlyClosure
+  ] = await Promise.all([
+    getTemperatureEquipmentOptions(),
+    getMonthlyTemperatureRecords(month, year),
+    prisma.assinaturaDiariaModulo.findMany({
+      where: {
+        moduloCodigo: MODULE_CODE,
+        dataReferencia: {
+          gte: monthRange.start,
+          lte: monthRange.end
         }
-      }),
-      prisma.controleTemperaturaEquipamentoFechamento.findUnique({
-        where: { mes_ano: { mes: month, ano: year } }
-      })
-    ]);
-
-  const recordsByKey = new Map<string, (typeof records)[number]>();
-  for (const record of records) {
-    const day = record.data.getUTCDate();
-    const key = `${record.equipamento}|${record.turno}|${day}`;
-    if (!recordsByKey.has(key)) {
-      recordsByKey.set(key, record);
-    }
-  }
-
-  const recordsByEquipment = new Map<string, (typeof records)[number][]>();
-  for (const record of records) {
-    const group = recordsByEquipment.get(record.equipamento) ?? [];
-    group.push(record);
-    recordsByEquipment.set(record.equipamento, group);
-  }
-
-  const optionsByName = new Map(equipmentOptions.map((option) => [option.nome, option]));
-  const equipmentNames: string[] = [];
-  for (const option of equipmentOptions) {
-    if (option.ativo || recordsByEquipment.has(option.nome)) {
-      equipmentNames.push(option.nome);
-    }
-  }
-
-  const extraEquipmentNames = Array.from(recordsByEquipment.keys())
-    .filter((name) => !optionsByName.has(name))
-    .sort((first, second) => first.localeCompare(second, "pt-BR"));
-
-  equipmentNames.push(...extraEquipmentNames);
-
-  const rows: TemperatureGridRow[] = equipmentNames.flatMap((equipmentName) => {
-    const option = optionsByName.get(equipmentName) ?? null;
-
-    return configuredShifts(option).map((turno) => {
-      const temperaturesByDay = new Map<number, string>();
-
-      for (const day of days) {
-        const record = recordsByKey.get(`${equipmentName}|${turno}|${day}`);
-        const temperature = formatTemperature(record?.temperaturaAferida);
-        if (temperature) {
-          temperaturesByDay.set(day, temperature);
+      },
+      select: {
+        dataReferencia: true,
+        usuarioNomeSnapshot: true
+      }
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: MODULE_CODE,
+          ano: year,
+          mes: month
         }
       }
+    }),
+    prisma.controleTemperaturaEquipamentoFechamento.findUnique({
+      where: { mes_ano: { mes: month, ano: year } }
+    })
+  ]);
 
-      return {
-        equipamento: equipmentName,
-        turno,
-        temperaturesByDay
-      };
-    });
-  });
+  const supervisorByDate = new Map(
+    dailySignatures.map((signature) => [
+      formatAppDateInput(signature.dataReferencia),
+      signature.usuarioNomeSnapshot
+    ])
+  );
 
   const closureResponsible =
     genericMonthlyClosure?.usuarioNomeSnapshot ??
@@ -609,7 +781,12 @@ export async function GET(request: NextRequest) {
     monthYearLabel: formatMonthYear(month, year),
     unitName: getConfiguredUnitName(),
     emittedAt: formatAppDateTime(generatedAt),
-    rows,
+    equipments: buildEquipmentReports({
+      equipmentOptions,
+      records,
+      days,
+      supervisorByDate
+    }),
     days,
     closureResponsible,
     closureDate,
