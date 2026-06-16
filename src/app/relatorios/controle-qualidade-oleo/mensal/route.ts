@@ -27,6 +27,7 @@ type OilReportRow = {
   fitaOleo: string;
   temperatura: string;
   responsavel: string;
+  supervisor: string;
   observacao: string;
 };
 
@@ -238,7 +239,7 @@ function renderStyles(): string {
 
       .records-table th:nth-child(1),
       .records-table td:nth-child(1) {
-        width: 14%;
+        width: 12%;
         text-align: center;
       }
 
@@ -246,18 +247,20 @@ function renderStyles(): string {
       .records-table td:nth-child(2),
       .records-table th:nth-child(3),
       .records-table td:nth-child(3) {
-        width: 18%;
+        width: 16%;
         text-align: center;
       }
 
       .records-table th:nth-child(4),
-      .records-table td:nth-child(4) {
-        width: 22%;
-      }
-
+      .records-table td:nth-child(4),
       .records-table th:nth-child(5),
       .records-table td:nth-child(5) {
-        width: 28%;
+        width: 18%;
+      }
+
+      .records-table th:nth-child(6),
+      .records-table td:nth-child(6) {
+        width: 20%;
       }
 
       .empty-message {
@@ -356,13 +359,14 @@ function renderRecordsTable(report: MonthlyOilReport): string {
                 <td>${escapeHtml(row.fitaOleo)}</td>
                 <td>${escapeHtml(row.temperatura)}</td>
                 <td>${escapeHtml(row.responsavel)}</td>
+                <td>${escapeHtml(row.supervisor)}</td>
                 <td>${escapeHtml(row.observacao)}</td>
               </tr>`
           )
           .join("")
       : `
         <tr>
-          <td colspan="5" class="empty-message">
+          <td colspan="6" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -375,6 +379,7 @@ function renderRecordsTable(report: MonthlyOilReport): string {
           <th>% da Fita do Óleo</th>
           <th>Temperatura (T°C)</th>
           <th>Responsável</th>
+          <th>Supervisor</th>
           <th>Observação</th>
         </tr>
       </thead>
@@ -453,6 +458,7 @@ export async function GET(request: NextRequest) {
         fitaOleo: true,
         temperatura: true,
         responsavel: true,
+        assinaturaSupervisorNome: true,
         observacao: true
       },
       orderBy: [{ data: "asc" }, { createdAt: "asc" }, { id: "asc" }]
@@ -492,6 +498,7 @@ export async function GET(request: NextRequest) {
       fitaOleo: formatOilStrip(record.fitaOleo),
       temperatura: formatTemperature(record.temperatura),
       responsavel: valueOrDash(record.responsavel),
+      supervisor: valueOrDash(record.assinaturaSupervisorNome),
       observacao: valueOrDash(record.observacao)
     })),
     closureResponsible,
