@@ -11,18 +11,20 @@ import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   formatAppDate,
+  formatAppDateInput,
   formatAppDateTime,
   getAppDate,
   getAppMonthDateRange,
   getAppMonthYear,
   getAppNow
 } from "@/lib/date-time";
+import { OPERATIONAL_SIGNATURE_MODULES } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-const MODULE_CODE = "rastreabilidade";
+const MODULE_CODE = OPERATIONAL_SIGNATURE_MODULES.rastreabilidade.codigo;
 const MODULE_NAME = "Rastreabilidade e Recebimento de Mercadorias";
 const REPORT_TITLE = "RASTREABILIDADE E RECEBIMENTO DE MERCADORIAS";
 const REPORT_NAME = "Relatório mensal - rastreabilidade de recebimento";
@@ -39,6 +41,7 @@ type ReceivingReportRow = {
   caracteristica: string;
   naoConformidadeAcaoObservacao: string;
   responsavel: string;
+  supervisor: string;
 };
 
 type MonthlyReceivingReport = {
@@ -411,7 +414,7 @@ function renderStyles(): string {
       }
 
       .receiving-table {
-        min-width: 1320px;
+        min-width: 1420px;
         table-layout: fixed;
       }
 
@@ -426,63 +429,68 @@ function renderStyles(): string {
 
       .receiving-table th:nth-child(1),
       .receiving-table td:nth-child(1) {
-        width: 5.5%;
+        width: 5.2%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(2),
       .receiving-table td:nth-child(2) {
-        width: 16.5%;
+        width: 15%;
       }
 
       .receiving-table th:nth-child(3),
       .receiving-table td:nth-child(3) {
-        width: 5.8%;
+        width: 5.4%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(4),
       .receiving-table td:nth-child(4) {
-        width: 11.5%;
+        width: 10.8%;
       }
 
       .receiving-table th:nth-child(5),
       .receiving-table td:nth-child(5) {
-        width: 4.7%;
+        width: 4.3%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(6),
       .receiving-table td:nth-child(6) {
-        width: 7.5%;
+        width: 7%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(7),
       .receiving-table td:nth-child(7) {
-        width: 6.5%;
+        width: 6%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(8),
       .receiving-table td:nth-child(8) {
-        width: 6.5%;
+        width: 6%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(9),
       .receiving-table td:nth-child(9) {
-        width: 12.5%;
+        width: 10.8%;
       }
 
       .receiving-table th:nth-child(10),
       .receiving-table td:nth-child(10) {
-        width: 15%;
+        width: 11%;
       }
 
       .receiving-table th:nth-child(11),
       .receiving-table td:nth-child(11) {
-        width: 8.5%;
+        width: 8%;
+      }
+
+      .receiving-table th:nth-child(12),
+      .receiving-table td:nth-child(12) {
+        width: 10.5%;
       }
 
       .empty-message {
@@ -632,12 +640,13 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
                 <td>${escapeHtml(row.caracteristica)}</td>
                 <td>${escapeHtml(row.naoConformidadeAcaoObservacao)}</td>
                 <td>${escapeHtml(row.responsavel)}</td>
+                <td>${escapeHtml(row.supervisor)}</td>
               </tr>`
           )
           .join("")
       : `
         <tr>
-          <td colspan="11" class="empty-message">
+          <td colspan="12" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -658,12 +667,13 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
             <th>Característica</th>
             <th>Observação</th>
             <th>Responsável</th>
+            <th>Supervisor</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="11" class="signature-wrapper">
+            <td colspan="12" class="signature-wrapper">
               ${renderSignatureTable(report)}
             </td>
           </tr>
@@ -709,7 +719,7 @@ export async function GET(request: NextRequest) {
   const monthRange = getAppMonthDateRange(month, year);
   const generatedAt = getAppNow();
 
-  const [records, genericMonthlyClosure, legacyMonthlyClosure] = await Promise.all([
+  const [records, dailySignatures, genericMonthlyClosure, legacyMonthlyClosure] = await Promise.all([
     prisma.rastreabilidadeRecebimentoRegistro.findMany({
       where: {
         data: {
@@ -747,6 +757,19 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [{ data: "asc" }, { notaFiscal: "asc" }, { produto: "asc" }, { id: "asc" }]
     }),
+    prisma.assinaturaDiariaModulo.findMany({
+      where: {
+        moduloCodigo: MODULE_CODE,
+        dataReferencia: {
+          gte: monthRange.start,
+          lte: monthRange.end
+        }
+      },
+      select: {
+        dataReferencia: true,
+        usuarioNomeSnapshot: true
+      }
+    }),
     prisma.fechamentoMensalModulo.findUnique({
       where: {
         moduloCodigo_ano_mes: {
@@ -773,23 +796,35 @@ export async function GET(request: NextRequest) {
         ? formatGeneratedAtSentence(legacyMonthlyClosure.dataAssinatura)
         : "";
 
+  const dailySignaturesByDate = new Map(
+    dailySignatures.map((signature) => [
+      formatAppDateInput(signature.dataReferencia),
+      signature
+    ])
+  );
+
   const report: MonthlyReceivingReport = {
     monthYearLabel: formatMonthYear(month, year),
     unitName: getConfiguredUnitName(),
     emittedAt: formatAppDateTime(generatedAt),
-    rows: records.map((record) => ({
-      data: formatAppDate(record.data),
-      produto: valueOrDash(record.produto),
-      nf: valueOrDash(record.notaFiscal || record.nota?.notaFiscal),
-      loteFabricacao: formatLoteFabricacao(record.lote, record.dataFabricacao),
-      sif: formatSifDisplayValue(record.sif),
-      validade: formatValidity(record.dataValidade, record.validadeNaoAplicavel),
-      quantidade: formatQuantity(record),
-      temperatura: formatTemperature(record.temperatura, record.temperaturaTipo),
-      caracteristica: formatCharacteristics(record),
-      naoConformidadeAcaoObservacao: formatNonConformityActionObservation(record),
-      responsavel: valueOrDash(record.responsavelRecebimento)
-    })),
+    rows: records.map((record) => {
+      const dailySignature = dailySignaturesByDate.get(formatAppDateInput(record.data));
+
+      return {
+        data: formatAppDate(record.data),
+        produto: valueOrDash(record.produto),
+        nf: valueOrDash(record.notaFiscal || record.nota?.notaFiscal),
+        loteFabricacao: formatLoteFabricacao(record.lote, record.dataFabricacao),
+        sif: formatSifDisplayValue(record.sif),
+        validade: formatValidity(record.dataValidade, record.validadeNaoAplicavel),
+        quantidade: formatQuantity(record),
+        temperatura: formatTemperature(record.temperatura, record.temperaturaTipo),
+        caracteristica: formatCharacteristics(record),
+        naoConformidadeAcaoObservacao: formatNonConformityActionObservation(record),
+        responsavel: valueOrDash(record.responsavelRecebimento),
+        supervisor: valueOrDash(dailySignature?.usuarioNomeSnapshot)
+      };
+    }),
     closureResponsible,
     closureDate,
     closureStatus: closureResponsible ? "Assinado digitalmente" : "Pendente de assinatura"
