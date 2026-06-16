@@ -9,18 +9,20 @@ import {
 import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
+  formatAppDateInput,
   formatAppDateTime,
   getAppDate,
   getAppMonthDateRange,
   getAppMonthYear,
   getAppNow
 } from "@/lib/date-time";
+import { OPERATIONAL_SIGNATURE_MODULES } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 import { canAccessReports } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-const MODULE_CODE = "limpeza_diaria";
+const MODULE_CODE = OPERATIONAL_SIGNATURE_MODULES.limpeza_diaria.codigo;
 const MODULE_NAME = "Plano de Limpeza Diário por Área";
 const REPORT_TITLE = "PLANO DE LIMPEZA - FREQUÊNCIA DIÁRIA";
 const REPORT_NAME = "Relatório mensal - plano de limpeza diária por área";
@@ -48,6 +50,7 @@ type AreaReport = {
   shifts: TurnoPlanoLimpeza[];
   weeks: WeekBlock[];
   recordsByDayShift: Map<string, DailyRecord[]>;
+  supervisorByDate: Map<string, string>;
 };
 
 type MonthlyDailyCleaningReport = {
@@ -213,6 +216,7 @@ function buildAreaReports(params: {
   daysInMonth: number;
   areaConfigs: DailyAreaConfig[];
   records: DailyRecord[];
+  supervisorByDate: Map<string, string>;
 }): AreaReport[] {
   const recordsByArea = new Map<string, DailyRecord[]>();
   for (const record of params.records) {
@@ -269,7 +273,8 @@ function buildAreaReports(params: {
         sanitizedLocations: getSanitizedLocations(areaConfig, areaRecords),
         shifts: getConfiguredShifts(areaConfig, areaRecords),
         weeks: buildWeekBlocks(params.daysInMonth),
-        recordsByDayShift: buildRecordMap(areaRecords)
+        recordsByDayShift: buildRecordMap(areaRecords),
+        supervisorByDate: params.supervisorByDate
       };
     });
 }
@@ -290,10 +295,12 @@ function getResponsibleCellValue(records: DailyRecord[]): string {
   );
 }
 
-function getSupervisorCellValue(records: DailyRecord[]): string {
-  return uniqueDisplayValues(
-    records.map((record) => record.assinaturaSupervisor || record.assinaturaSupervisorNomeUsuario)
-  );
+function getSupervisorCellValue(records: DailyRecord[], supervisorByDate: Map<string, string>): string {
+  if (records.length === 0) {
+    return "";
+  }
+
+  return supervisorByDate.get(formatAppDateInput(records[0].data))?.trim() ?? "";
 }
 
 function escapeHtml(value: string | number | null | undefined): string {
@@ -612,7 +619,7 @@ function renderWeekTable(area: AreaReport, week: WeekBlock): string {
       const supervisorCells = week.days
         .map((day) => {
           const records = getCellRecords(area, day, turno);
-          return `<td class="day-cell">${escapeHtml(getSupervisorCellValue(records))}</td>`;
+          return `<td class="day-cell">${escapeHtml(getSupervisorCellValue(records, area.supervisorByDate))}</td>`;
         })
         .join("");
 
@@ -742,9 +749,7 @@ async function getMonthlyDailyRecords(month: number, year: number) {
       area: true,
       itemDescricao: true,
       assinaturaResponsavel: true,
-      assinaturaResponsavelNomeUsuario: true,
-      assinaturaSupervisor: true,
-      assinaturaSupervisorNomeUsuario: true
+      assinaturaResponsavelNomeUsuario: true
     },
     orderBy: [{ data: "asc" }, { area: "asc" }, { turno: "asc" }, { id: "asc" }]
   });
@@ -767,10 +772,23 @@ export async function GET(request: NextRequest) {
   const daysInMonth = monthRange.end.getUTCDate();
   const generatedAt = getAppNow();
 
-  const [areaConfigs, records, genericMonthlyClosure, legacyMonthlyClosure] =
+  const [areaConfigs, records, dailySignatures, genericMonthlyClosure, legacyMonthlyClosure] =
     await Promise.all([
       getDailyAreaConfigs(),
       getMonthlyDailyRecords(month, year),
+      prisma.assinaturaDiariaModulo.findMany({
+        where: {
+          moduloCodigo: MODULE_CODE,
+          dataReferencia: {
+            gte: monthRange.start,
+            lte: monthRange.end
+          }
+        },
+        select: {
+          dataReferencia: true,
+          usuarioNomeSnapshot: true
+        }
+      }),
       prisma.fechamentoMensalModulo.findUnique({
         where: {
           moduloCodigo_ano_mes: {
@@ -803,6 +821,12 @@ export async function GET(request: NextRequest) {
         ? formatGeneratedAtSentence(legacyMonthlyClosure.dataAssinatura)
         : "";
   const monthYearLabel = formatMonthYear(month, year);
+  const supervisorByDate = new Map(
+    dailySignatures.map((signature) => [
+      formatAppDateInput(signature.dataReferencia),
+      signature.usuarioNomeSnapshot
+    ])
+  );
 
   const report: MonthlyDailyCleaningReport = {
     month,
@@ -814,7 +838,8 @@ export async function GET(request: NextRequest) {
       monthYearLabel,
       daysInMonth,
       areaConfigs,
-      records
+      records,
+      supervisorByDate
     }),
     closureResponsible,
     closureDate,
