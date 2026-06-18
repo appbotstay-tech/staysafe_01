@@ -4,8 +4,7 @@ import {
   Prisma,
   StatusFechamentoPlanoLimpeza,
   StatusPlanoLimpeza,
-  TipoPlanoLimpeza,
-  TurnoPlanoLimpeza
+  TipoPlanoLimpeza
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -21,16 +20,19 @@ import {
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 import {
   consolidateWeeklyExecutionsByAreaWeek,
   ensureWeeklyChecklistForDateRange,
+  getExpectedDailyCleaningTasks,
   getDailySignStage,
   getWeeklySignStage
 } from "./service";
 import {
   getCurrentSystemDateTime,
+  getTodaySystemDate,
   getWeekDateRangeForDate,
   formatDateInput,
   getMonthDateRange,
@@ -252,6 +254,19 @@ function isSameResponsibleUser(
   return record.assinaturaResponsavel.trim() === actor.nomeCompleto.trim();
 }
 
+function ensureCanRegularizeDailyResponsible(actor: ActionUser) {
+  if (
+    hasPermission(actor, "modulo.limpeza_diaria.assinar_historico") ||
+    hasPermission(actor, "modulo.limpeza_diaria.assinar_todos")
+  ) {
+    return;
+  }
+
+  throw new Error(
+    "Seu perfil não possui permissão para assinar itens históricos como responsável pela limpeza."
+  );
+}
+
 async function ensureWeeklyAreaName(value: string): Promise<string> {
   ensureNonEmpty(value, "Área");
 
@@ -383,17 +398,32 @@ export async function signDailyAreaPendingItemsAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanSignResponsible(actor);
+    const historicalRegularization =
+      getInputValue(formData, "historicalRegularization") === "true";
+    if (historicalRegularization) {
+      ensureCanRegularizeDailyResponsible(actor);
+    } else {
+      ensureCanSignResponsible(actor);
+      ensurePermission(
+        actor,
+        "modulo.limpeza_diaria.assinar_todos",
+        "Seu perfil não pode usar Assinar Todos no plano diário."
+      );
+    }
 
     const dataRaw = getInputValue(formData, "data");
     const areaNome = getInputValue(formData, "area");
     const senhaConfirmacao = getInputValue(formData, "senhaConfirmacao");
+    const observacao = getInputValue(formData, "observacao");
     const data = parseDateInput(dataRaw);
 
     if (!data) {
       throw new Error("Data inválida para assinatura dos itens da área.");
     }
     ensureNonEmpty(areaNome, "Área");
+    if (data.getTime() > getTodaySystemDate().getTime()) {
+      throw new Error("Não é permitido assinar pendências de datas futuras.");
+    }
 
     const period = getMonthYear(data);
     if (await isMonthSigned(TipoPlanoLimpeza.DIARIO, period.mes, period.ano)) {
@@ -401,53 +431,48 @@ export async function signDailyAreaPendingItemsAction(formData: FormData) {
     }
 
     const area = await prisma.planoLimpezaDiarioArea.findFirst({
-      where: { nome: areaNome, ativo: true },
+      where: { nome: areaNome },
       include: {
         itens: {
-          where: { ativo: true, excluidoEm: null },
+          where: { excluidoEm: null },
           orderBy: [{ ordem: "asc" }, { descricao: "asc" }]
         }
       }
     });
 
-    if (!area) {
+    if (!area || !area.ativo) {
       throw new Error("Área diária ativa não encontrada.");
     }
-    if (area.itens.length === 0) {
+
+    const expectedTasks = getExpectedDailyCleaningTasks(data, [area]).filter(
+      (task) => task.area === areaNome
+    );
+    if (expectedTasks.length === 0) {
       throw new Error("Esta área não possui itens ativos para assinatura.");
     }
 
     await validateSignaturePassword({ user: actor, password: senhaConfirmacao });
-
-    const itemIds = area.itens.map((item) => item.id);
-    const registrosExistentes = await prisma.planoLimpezaDiarioRegistro.findMany({
-      where: { data, itemId: { in: itemIds } },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }]
-    });
-
-    const registrosPorItem = new Map<number, typeof registrosExistentes>();
-    for (const registro of registrosExistentes) {
-      if (!registro.itemId) {
-        continue;
-      }
-      const atuais = registrosPorItem.get(registro.itemId) ?? [];
-      atuais.push(registro);
-      registrosPorItem.set(registro.itemId, atuais);
-    }
 
     const signedAt = getCurrentSystemDateTime();
     let itensAssinados = 0;
     let itensJaAssinados = 0;
 
     await prisma.$transaction(async (tx) => {
-      for (const item of area.itens) {
-        const registrosDoItem = registrosPorItem.get(item.id) ?? [];
-        const jaAssinado = registrosDoItem.some(
-          (registro) =>
-            registro.assinaturaResponsavel.trim().length > 0 ||
-            Boolean(registro.assinaturaResponsavelDataHora) ||
-            registro.assinaturaSupervisor.trim().length > 0 ||
-            Boolean(registro.assinaturaSupervisorDataHora)
+      for (const task of expectedTasks) {
+        const existing = await tx.planoLimpezaDiarioRegistro.findUnique({
+          where: {
+            data_turno_itemId: {
+              data,
+              turno: task.turno,
+              itemId: task.itemId
+            }
+          }
+        });
+        const jaAssinado = Boolean(
+          existing?.assinaturaResponsavel.trim() ||
+            existing?.assinaturaResponsavelDataHora ||
+            existing?.assinaturaSupervisor.trim() ||
+            existing?.assinaturaSupervisorDataHora
         );
 
         if (jaAssinado) {
@@ -455,41 +480,33 @@ export async function signDailyAreaPendingItemsAction(formData: FormData) {
           continue;
         }
 
-        const updateIds = registrosDoItem.map((registro) => registro.id);
-        if (updateIds.length > 0) {
-          await tx.planoLimpezaDiarioRegistro.updateMany({
-            where: { id: { in: updateIds } },
-            data: {
-              area: area.nome,
-              itemDescricao: item.descricao,
-              produtoUtilizado: item.produtoUtilizado,
-              setorResponsavel: item.setorResponsavel,
-              funcionarioResponsavel: item.funcionarioResponsavel,
-              assinaturaResponsavel: actor.nomeCompleto,
-              assinaturaResponsavelUsuarioId: actor.id,
-              assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
-              assinaturaResponsavelPerfil: actor.perfil,
-              assinaturaResponsavelDataHora: signedAt,
-              status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
-            }
+        const dataToSave = {
+          area: task.area,
+          itemDescricao: task.itemDescricao,
+          produtoUtilizado: task.produtoUtilizado,
+          setorResponsavel: task.setorResponsavel,
+          funcionarioResponsavel: task.funcionarioResponsavel,
+          assinaturaResponsavel: actor.nomeCompleto,
+          assinaturaResponsavelUsuarioId: actor.id,
+          assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
+          assinaturaResponsavelPerfil: actor.perfil,
+          assinaturaResponsavelDataHora: signedAt,
+          status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR,
+          ...(observacao ? { observacaoResponsavel: observacao } : {})
+        };
+
+        if (existing) {
+          await tx.planoLimpezaDiarioRegistro.update({
+            where: { id: existing.id },
+            data: dataToSave
           });
         } else {
           await tx.planoLimpezaDiarioRegistro.create({
             data: {
               data,
-              turno: TurnoPlanoLimpeza.MANHA,
-              area: area.nome,
-              itemId: item.id,
-              itemDescricao: item.descricao,
-              produtoUtilizado: item.produtoUtilizado,
-              setorResponsavel: item.setorResponsavel,
-              funcionarioResponsavel: item.funcionarioResponsavel,
-              assinaturaResponsavel: actor.nomeCompleto,
-              assinaturaResponsavelUsuarioId: actor.id,
-              assinaturaResponsavelNomeUsuario: actor.nomeUsuario,
-              assinaturaResponsavelPerfil: actor.perfil,
-              assinaturaResponsavelDataHora: signedAt,
-              status: StatusPlanoLimpeza.AGUARDANDO_SUPERVISOR
+              turno: task.turno,
+              itemId: task.itemId,
+              ...dataToSave
             }
           });
         }
@@ -507,7 +524,9 @@ export async function signDailyAreaPendingItemsAction(formData: FormData) {
       tipo: "RESPONSAVEL",
       modulo: "plano-limpeza/diario/area",
       referenciaId: `${area.id}:${dataRaw}`,
-      observacao: `Assinar Todos - ${itensAssinados} item(ns) assinados, ${itensJaAssinados} já assinados.`
+      observacao:
+        observacao ||
+        `Assinar Todos - ${itensAssinados} item(ns) assinados, ${itensJaAssinados} já assinados.`
     });
 
     revalidateModulePaths();

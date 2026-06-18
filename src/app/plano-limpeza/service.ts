@@ -16,7 +16,42 @@ import {
   periodKey
 } from "./utils";
 
-const LEGACY_DAILY_TURNO = TurnoPlanoLimpeza.MANHA;
+export const LEGACY_DAILY_TURNO = TurnoPlanoLimpeza.MANHA;
+
+type DailyExpectedAreaConfig = {
+  id: number;
+  nome: string;
+  detalhamentoLimpeza?: string | null;
+  ativo: boolean;
+  ordem: number;
+  createdAt: Date;
+  itens: Array<{
+    id: number;
+    descricao: string;
+    produtoUtilizado: string | null;
+    setorResponsavel: string | null;
+    funcionarioResponsavel: string | null;
+    ordem: number;
+    ativo: boolean;
+    excluidoEm: Date | null;
+    createdAt: Date;
+  }>;
+};
+
+export type DailyExpectedTask = {
+  data: Date;
+  turno: TurnoPlanoLimpeza;
+  areaId: number;
+  area: string;
+  areaOrdem: number;
+  areaDetalhamentoLimpeza: string | null;
+  itemId: number;
+  itemDescricao: string;
+  produtoUtilizado: string | null;
+  setorResponsavel: string | null;
+  funcionarioResponsavel: string | null;
+  itemOrdem: number;
+};
 
 function dailyItemKey(itemId: number): string {
   return String(itemId);
@@ -580,6 +615,115 @@ function consolidateWeeklyStatus(records: WeeklyExecutionForSummary[]): {
     completedItems,
     pendingItems
   };
+}
+
+function endOfOperationalDay(date: Date): Date {
+  const end = new Date(date);
+  end.setUTCHours(23, 59, 59, 999);
+  return end;
+}
+
+function startOfOperationalDay(date: Date): Date {
+  const start = new Date(date);
+  start.setUTCHours(0, 0, 0, 0);
+  return start;
+}
+
+function wasConfiguredForDate(params: {
+  createdAt: Date;
+  removedAt?: Date | null;
+  referenceDate: Date;
+}): boolean {
+  const dayStart = startOfOperationalDay(params.referenceDate);
+  const dayEnd = endOfOperationalDay(params.referenceDate);
+
+  return (
+    params.createdAt.getTime() <= dayEnd.getTime() &&
+    (!params.removedAt || params.removedAt.getTime() > dayStart.getTime())
+  );
+}
+
+export function getExpectedDailyCleaningTasks(
+  date: Date,
+  areaConfigs: DailyExpectedAreaConfig[]
+): DailyExpectedTask[] {
+  const tasks: DailyExpectedTask[] = [];
+
+  for (const areaConfig of areaConfigs) {
+    if (
+      !areaConfig.ativo ||
+      !wasConfiguredForDate({
+        createdAt: areaConfig.createdAt,
+        referenceDate: date
+      })
+    ) {
+      continue;
+    }
+
+    const expectedItems = areaConfig.itens
+      .filter(
+        (item) =>
+          item.ativo &&
+          wasConfiguredForDate({
+            createdAt: item.createdAt,
+            removedAt: item.excluidoEm,
+            referenceDate: date
+          })
+      )
+      .sort((first, second) => {
+        if (first.ordem !== second.ordem) {
+          return first.ordem - second.ordem;
+        }
+
+        return first.descricao.localeCompare(second.descricao, "pt-BR");
+      });
+
+    for (const item of expectedItems) {
+      tasks.push({
+        data: date,
+        turno: LEGACY_DAILY_TURNO,
+        areaId: areaConfig.id,
+        area: areaConfig.nome,
+        areaOrdem: areaConfig.ordem,
+        areaDetalhamentoLimpeza: areaConfig.detalhamentoLimpeza ?? null,
+        itemId: item.id,
+        itemDescricao: item.descricao,
+        produtoUtilizado: item.produtoUtilizado,
+        setorResponsavel: item.setorResponsavel,
+        funcionarioResponsavel: item.funcionarioResponsavel,
+        itemOrdem: item.ordem
+      });
+    }
+  }
+
+  return tasks.sort((first, second) => {
+    if (first.areaOrdem !== second.areaOrdem) {
+      return first.areaOrdem - second.areaOrdem;
+    }
+    if (first.area !== second.area) {
+      return first.area.localeCompare(second.area, "pt-BR");
+    }
+
+    return first.itemOrdem - second.itemOrdem;
+  });
+}
+
+export function getExpectedDailyCleaningTasksForDateRange(params: {
+  start: Date;
+  end: Date;
+  today: Date;
+  areaConfigs: DailyExpectedAreaConfig[];
+}): DailyExpectedTask[] {
+  const cappedEnd =
+    params.end.getTime() > params.today.getTime() ? params.today : params.end;
+
+  if (params.start.getTime() > cappedEnd.getTime()) {
+    return [];
+  }
+
+  return enumerateDateRange(params.start, cappedEnd).flatMap((date) =>
+    getExpectedDailyCleaningTasks(date, params.areaConfigs)
+  );
 }
 
 export function consolidateWeeklyExecutionsByAreaWeek(
