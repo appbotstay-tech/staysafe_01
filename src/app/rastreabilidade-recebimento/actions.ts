@@ -49,6 +49,7 @@ import {
   normalizeSifValue,
   SIF_BACKEND_REQUIRED_MESSAGE
 } from "./sif";
+import { getReceivingNoteEditAccessReason } from "./note-permissions";
 
 const MODULE_PATH = "/rastreabilidade-recebimento";
 const DUPLICATE_NFE_MESSAGE =
@@ -75,11 +76,38 @@ function ensureCanCreateManualReceiving(actor: AuthenticatedUser) {
   }
 }
 
-function ensureCanEditReceivingDate(actor: AuthenticatedUser, recordDate: Date) {
-  if (!canEditRecordDate(actor, "modulo.rastreabilidade", recordDate, getTodaySystemDate())) {
-    throw new Error(
-      "Seu perfil não pode editar esta nota de recebimento para a data operacional informada."
-    );
+function getReceivingNoteEditAccessMessage(
+  reason: ReturnType<typeof getReceivingNoteEditAccessReason>
+): string {
+  if (reason === "FINALIZED") {
+    return "Notas finalizadas ficam disponíveis apenas para consulta.";
+  }
+
+  if (reason === "MONTH_SIGNED") {
+    return "O mês desta nota já foi fechado e não pode ser alterado.";
+  }
+
+  return "Seu perfil não pode conferir esta nota de recebimento.";
+}
+
+function ensureCanEditReceivingNote(
+  actor: AuthenticatedUser,
+  note: {
+    data: Date;
+    statusNota: StatusNotaRecebimento;
+  },
+  monthSigned = false
+) {
+  const reason = getReceivingNoteEditAccessReason({
+    user: actor,
+    noteDate: note.data,
+    statusNota: note.statusNota,
+    today: getTodaySystemDate(),
+    monthSigned
+  });
+
+  if (reason !== "EDITABLE") {
+    throw new Error(getReceivingNoteEditAccessMessage(reason));
   }
 }
 
@@ -797,7 +825,7 @@ export async function saveNotaItemsAction(formData: FormData) {
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
-    ensureCanEditReceivingDate(actor, note.data);
+    ensureCanEditReceivingNote(actor, note);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -893,7 +921,7 @@ export async function saveNotaItemsStateAction(
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
-    ensureCanEditReceivingDate(actor, note.data);
+    ensureCanEditReceivingNote(actor, note);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -1022,7 +1050,7 @@ export async function finalizeNotaAction(formData: FormData) {
     if (await isMonthSigned(period.mes, period.ano)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser finalizado.");
     }
-    ensureCanEditReceivingDate(actor, note.data);
+    ensureCanEditReceivingNote(actor, note);
 
     if (!note.itens.length) {
       throw new Error("A nota não possui itens para finalização.");

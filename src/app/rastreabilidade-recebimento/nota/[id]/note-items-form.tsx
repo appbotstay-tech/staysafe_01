@@ -542,7 +542,7 @@ export function NoteItemsForm({
                       <span className={MOBILE_FIELD_LABEL_CLASS}>Ação</span>
                       {!canDeleteItems ? (
                         <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {readOnlyMode ? "Bloqueado" : "Sem exclusão"}
+                          {readOnlyMode ? "Somente consulta" : "Sem exclusão"}
                         </span>
                       ) : (
                         <button

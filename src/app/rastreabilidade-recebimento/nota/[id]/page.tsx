@@ -19,6 +19,10 @@ import {
   parsePositiveInt
 } from "../../utils";
 import { formatSifDisplayValue } from "../../sif";
+import {
+  getReceivingNoteEditAccessReason,
+  type ReceivingNoteEditAccessReason
+} from "../../note-permissions";
 import { NoteItemsForm, type NoteItemFormRow } from "./note-items-form";
 
 const CARD_CLASS =
@@ -100,6 +104,26 @@ function formatXmlNumber(value: number | null): string {
   });
 }
 
+function getReadOnlyReasonMessage(reason: ReceivingNoteEditAccessReason): string | null {
+  if (reason === "MONTH_SIGNED") {
+    return "Esta nota pertence a um mês fechado e está somente para consulta.";
+  }
+
+  if (reason === "FINALIZED") {
+    return "Esta nota já foi finalizada e está somente para consulta.";
+  }
+
+  if (reason === "NO_USER") {
+    return "Entre com um usuário autorizado para editar esta nota.";
+  }
+
+  if (reason === "NO_PERMISSION") {
+    return "Seu perfil não tem permissão para editar esta nota de recebimento.";
+  }
+
+  return null;
+}
+
 export default async function NotaRecebimentoPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const noteId = parsePositiveInt(id);
@@ -129,18 +153,30 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const noteFinalizada = note.statusNota === StatusNotaRecebimento.FINALIZADA;
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
-  const canEditNote = authUser
-    ? canEditRecordDate(authUser, "modulo.rastreabilidade", note.data, getTodaySystemDate())
+  const today = getTodaySystemDate();
+  const editAccessReason = getReceivingNoteEditAccessReason({
+    user: authUser,
+    noteDate: note.data,
+    statusNota: note.statusNota,
+    today,
+    monthSigned
+  });
+  const canEditNote = editAccessReason === "EDITABLE";
+  const readOnlyMode = !canEditNote;
+  const readOnlyReasonMessage = getReadOnlyReasonMessage(editAccessReason);
+  const canDeleteByDate = authUser
+    ? canEditRecordDate(authUser, "modulo.rastreabilidade", note.data, today)
     : false;
-  const readOnlyMode = monthSigned || noteFinalizada || !canEditNote;
   const xmlProductLocked = note.origemXml && !canEditImportedXmlFields(authUser?.perfil);
   const canDeleteNote =
     Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
     !monthSigned &&
-    note.statusNota !== StatusNotaRecebimento.FINALIZADA;
+    !noteFinalizada &&
+    canDeleteByDate;
   const canDeleteItems =
     Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
-    !readOnlyMode;
+    !readOnlyMode &&
+    canDeleteByDate;
   const returnTo = `/rastreabilidade-recebimento/nota/${note.id}`;
 
   const query = await searchParams;
@@ -244,6 +280,12 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
             </span>
           ) : null}
         </div>
+
+        {readOnlyReasonMessage ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            {readOnlyReasonMessage}
+          </div>
+        ) : null}
 
         {identificadoresFiscais.length ? (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
