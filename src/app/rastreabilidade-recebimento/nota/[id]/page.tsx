@@ -20,6 +20,7 @@ import {
 } from "../../utils";
 import { formatSifDisplayValue } from "../../sif";
 import {
+  canDeleteImportedReceivingNote,
   getReceivingNoteEditAccessReason,
   type ReceivingNoteEditAccessReason
 } from "../../note-permissions";
@@ -146,10 +147,30 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   }
 
   const period = getMonthYear(note.data);
-  const fechamento = await prisma.rastreabilidadeRecebimentoFechamento.findUnique({
-    where: { mes_ano: { mes: period.mes, ano: period.ano } }
-  });
-  const monthSigned = fechamento?.status === "ASSINADO";
+  const [fechamento, fechamentoMensal, assinaturaDiaria] = await Promise.all([
+    prisma.rastreabilidadeRecebimentoFechamento.findUnique({
+      where: { mes_ano: { mes: period.mes, ano: period.ano } }
+    }),
+    prisma.fechamentoMensalModulo.findUnique({
+      where: {
+        moduloCodigo_ano_mes: {
+          moduloCodigo: "rastreabilidade",
+          ano: period.ano,
+          mes: period.mes
+        }
+      }
+    }),
+    prisma.assinaturaDiariaModulo.findUnique({
+      where: {
+        moduloCodigo_dataReferencia: {
+          moduloCodigo: "rastreabilidade",
+          dataReferencia: note.data
+        }
+      }
+    })
+  ]);
+  const monthSigned = fechamento?.status === "ASSINADO" || Boolean(fechamentoMensal);
+  const daySigned = Boolean(assinaturaDiaria);
   const noteFinalizada = note.statusNota === StatusNotaRecebimento.FINALIZADA;
   const authUser = await getCurrentUser();
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
@@ -171,8 +192,9 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const canDeleteNote =
     Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
     !monthSigned &&
+    !daySigned &&
     !noteFinalizada &&
-    canDeleteByDate;
+    canDeleteImportedReceivingNote(note);
   const canDeleteItems =
     Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
     !readOnlyMode &&

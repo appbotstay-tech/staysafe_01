@@ -1,4 +1,4 @@
-import { StatusNotaRecebimento } from "@prisma/client";
+import { StatusNotaRecebimento, StatusRecebimento } from "@prisma/client";
 
 import {
   canEditRecordDate,
@@ -25,6 +25,48 @@ type ReceivingNoteEditAccessParams = {
 
 export function isReceivingNotePendingConference(statusNota: StatusNotaRecebimento): boolean {
   return statusNota !== StatusNotaRecebimento.FINALIZADA;
+}
+
+type ReceivingNoteConferenceItem = {
+  statusGeral: StatusRecebimento;
+  sif: string | null;
+  temperatura: number | null;
+  temperaturaStatus: unknown | null;
+  transporteEntregador: unknown | null;
+  aspectoSensorial: unknown | null;
+  embalagem: unknown | null;
+  acaoCorretiva: string | null;
+  responsavelRecebimento: string | null;
+  observacoes: string | null;
+};
+
+type ReceivingNoteDeleteCandidate = {
+  origemXml: boolean;
+  statusNota: StatusNotaRecebimento;
+  itens: ReceivingNoteConferenceItem[];
+};
+
+function hasReceivingConferenceData(item: ReceivingNoteConferenceItem): boolean {
+  return (
+    item.statusGeral !== StatusRecebimento.PENDENTE ||
+    Boolean(item.sif?.trim()) ||
+    item.temperatura !== null ||
+    item.temperaturaStatus !== null ||
+    item.transporteEntregador !== null ||
+    item.aspectoSensorial !== null ||
+    item.embalagem !== null ||
+    Boolean(item.acaoCorretiva?.trim()) ||
+    Boolean(item.responsavelRecebimento?.trim()) ||
+    Boolean(item.observacoes?.trim())
+  );
+}
+
+export function canDeleteImportedReceivingNote(note: ReceivingNoteDeleteCandidate): boolean {
+  const importedOnlyStatus =
+    note.statusNota === StatusNotaRecebimento.PENDENTE ||
+    note.statusNota === StatusNotaRecebimento.IMPORTADA;
+
+  return note.origemXml && importedOnlyStatus && note.itens.every((item) => !hasReceivingConferenceData(item));
 }
 
 export function getReceivingNoteEditAccessReason(

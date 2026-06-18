@@ -22,7 +22,8 @@ export function DeleteNoteModal({ formId }: DeleteNoteModalProps) {
               Confirmar Exclusão
             </h3>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Tem certeza que deseja excluir esta nota? Esta ação não poderá ser desfeita.
+              Deseja excluir esta nota importada? Esta ação removerá a nota e os produtos
+              vinculados que ainda não foram conferidos.
             </p>
 
             <div className="mt-5 btn-group">
@@ -30,7 +31,7 @@ export function DeleteNoteModal({ formId }: DeleteNoteModalProps) {
                 Cancelar
               </button>
               <button type="submit" form={formId} className="btn-danger">
-                Excluir Nota
+                Excluir nota
               </button>
             </div>
           </div>

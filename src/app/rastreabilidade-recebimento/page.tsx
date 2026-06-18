@@ -14,6 +14,10 @@ import { prisma } from "@/lib/prisma";
 
 import { deleteNoteAction } from "./actions";
 import { DeleteNoteModal } from "./delete-note-modal";
+import {
+  canDeleteImportedReceivingNote,
+  isReceivingNotePendingConference
+} from "./note-permissions";
 import { RECEBIMENTO_ORIENTACOES } from "./options";
 import { XmlImportForm } from "./xml-import-form";
 import {
@@ -134,7 +138,6 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   const now = getCurrentSystemDateTime();
-  const todayInput = formatDateInput(now);
 
   const filtroDataInicial = firstParam(params.filtroDataInicial).trim();
   const filtroDataFinal = firstParam(params.filtroDataFinal).trim();
@@ -197,6 +200,20 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
   const notasPendentesConferencia = await prisma.rastreabilidadeRecebimentoNota.findMany({
     where: whereNotasPendentes,
     include: {
+      itens: {
+        select: {
+          statusGeral: true,
+          sif: true,
+          temperatura: true,
+          temperaturaStatus: true,
+          transporteEntregador: true,
+          aspectoSensorial: true,
+          embalagem: true,
+          acaoCorretiva: true,
+          responsavelRecebimento: true,
+          observacoes: true
+        }
+      },
       _count: {
         select: {
           itens: true
@@ -205,6 +222,51 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
     },
     orderBy: [{ data: "asc" }, { createdAt: "asc" }]
   });
+  const notaDatas = Array.from(
+    new Map(notasPendentesConferencia.map((nota) => [formatDateInput(nota.data), nota.data])).values()
+  );
+  const notaPeriodos = Array.from(
+    new Map(
+      notasPendentesConferencia.map((nota) => {
+        const period = getMonthYear(nota.data);
+        return [`${period.mes}-${period.ano}`, period];
+      })
+    ).values()
+  );
+  const [fechamentosLegados, fechamentosMensais, assinaturasDiarias] =
+    notasPendentesConferencia.length > 0
+      ? await Promise.all([
+          prisma.rastreabilidadeRecebimentoFechamento.findMany({
+            where: {
+              status: "ASSINADO",
+              OR: notaPeriodos.map((period) => ({ mes: period.mes, ano: period.ano }))
+            },
+            select: { mes: true, ano: true }
+          }),
+          prisma.fechamentoMensalModulo.findMany({
+            where: {
+              moduloCodigo: "rastreabilidade",
+              OR: notaPeriodos.map((period) => ({ mes: period.mes, ano: period.ano }))
+            },
+            select: { mes: true, ano: true }
+          }),
+          prisma.assinaturaDiariaModulo.findMany({
+            where: {
+              moduloCodigo: "rastreabilidade",
+              dataReferencia: { in: notaDatas }
+            },
+            select: { dataReferencia: true }
+          })
+        ])
+      : [[], [], []];
+  const mesesBloqueadosParaExclusao = new Set(
+    [...fechamentosLegados, ...fechamentosMensais].map(
+      (fechamento) => `${fechamento.mes}-${fechamento.ano}`
+    )
+  );
+  const diasBloqueadosParaExclusao = new Set(
+    assinaturasDiarias.map((assinatura) => formatDateInput(assinatura.dataReferencia))
+  );
 
   const itemSearchDate = parseDateInput(buscaItemRecebido);
   const dataFabricacaoFiltro = parseDateInput(filtroDataFabricacao);
@@ -525,7 +587,17 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                 </tr>
               ) : (
                 notasPendentesConferencia.map((nota) => {
-                  const registroDoDiaAtual = formatDateInput(nota.data) === todayInput;
+                  const notePeriod = getMonthYear(nota.data);
+                  const exclusaoBloqueadaPorAssinatura =
+                    mesesBloqueadosParaExclusao.has(`${notePeriod.mes}-${notePeriod.ano}`) ||
+                    diasBloqueadosParaExclusao.has(formatDateInput(nota.data));
+                  const podeExcluirNota =
+                    podeExcluirNotas &&
+                    !exclusaoBloqueadaPorAssinatura &&
+                    canDeleteImportedReceivingNote(nota);
+                  const actionLabel = isReceivingNotePendingConference(nota.statusNota)
+                    ? "Conferir Nota"
+                    : "Abrir Nota";
 
                   return (
                     <tr key={nota.id}>
@@ -556,13 +628,13 @@ export default async function RastreabilidadeRecebimentoPage({ searchParams }: P
                             href={`/rastreabilidade-recebimento/nota/${nota.id}`}
                             className="btn-action"
                           >
-                            {registroDoDiaAtual ? "Conferir Nota" : "Abrir Nota"}
+                            {actionLabel}
                           </Link>
-                          {podeExcluirNotas && registroDoDiaAtual ? (
+                          {podeExcluirNota ? (
                             <DeleteNoteModal formId={`delete-note-day-${nota.id}`} />
                           ) : null}
                         </div>
-                        {podeExcluirNotas && registroDoDiaAtual ? (
+                        {podeExcluirNota ? (
                           <form
                             id={`delete-note-day-${nota.id}`}
                             action={deleteNoteAction}

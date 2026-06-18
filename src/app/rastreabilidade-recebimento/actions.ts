@@ -29,6 +29,7 @@ import {
   hasCategoryWithSameName,
   sanitizeCategoryName
 } from "./catalog";
+import { canDeleteImportedReceivingNote } from "./note-permissions";
 import { parseRecebimentoXml } from "./xml-parser";
 import {
   calculateOverallStatus,
@@ -52,6 +53,7 @@ import {
 import { getReceivingNoteEditAccessReason } from "./note-permissions";
 
 const MODULE_PATH = "/rastreabilidade-recebimento";
+const MODULE_CODE = "rastreabilidade";
 const DUPLICATE_NFE_MESSAGE =
   "Esta nota fiscal já foi importada anteriormente e não pode ser cadastrada novamente.";
 
@@ -1195,38 +1197,60 @@ export async function deleteNoteAction(formData: FormData) {
     }
 
     const note = await prisma.rastreabilidadeRecebimentoNota.findUnique({
-      where: { id: notaId }
+      where: { id: notaId },
+      include: { itens: true }
     });
 
     if (!note) {
       throw new Error("Nota não encontrada.");
     }
 
-    if (!canEditRecordDate(actor, "modulo.rastreabilidade", note.data, getTodaySystemDate())) {
-      throw new Error(
-        "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
-      );
-    }
-
     const period = getMonthYear(note.data);
-    if (await isMonthSigned(period.mes, period.ano)) {
+    const [legacyMonthSigned, monthlyClosure, dailySignature] = await Promise.all([
+      isMonthSigned(period.mes, period.ano),
+      prisma.fechamentoMensalModulo.findUnique({
+        where: {
+          moduloCodigo_ano_mes: {
+            moduloCodigo: MODULE_CODE,
+            ano: period.ano,
+            mes: period.mes
+          }
+        }
+      }),
+      prisma.assinaturaDiariaModulo.findUnique({
+        where: {
+          moduloCodigo_dataReferencia: {
+            moduloCodigo: MODULE_CODE,
+            dataReferencia: note.data
+          }
+        }
+      })
+    ]);
+
+    if (legacyMonthSigned || monthlyClosure) {
       throw new Error("Esta nota pertence a um período já fechado e não pode ser excluída.");
     }
 
-    if (note.statusNota === StatusNotaRecebimento.FINALIZADA) {
-      throw new Error("Somente notas pendentes de conferência podem ser excluídas.");
+    if (dailySignature) {
+      throw new Error("Esta nota pertence a um dia já assinado e não pode ser excluída.");
     }
 
-    await prisma.rastreabilidadeRecebimentoNota.delete({
-      where: { id: note.id }
+    if (!canDeleteImportedReceivingNote(note)) {
+      throw new Error("Somente notas importadas e ainda não conferidas podem ser excluídas.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.rastreabilidadeRecebimentoRegistro.deleteMany({
+        where: { notaId: note.id }
+      });
+
+      await tx.rastreabilidadeRecebimentoNota.delete({
+        where: { id: note.id }
+      });
     });
 
     revalidateModulePaths();
-    redirectWithFeedback(
-      returnTo,
-      "success",
-      `Nota ${note.notaFiscal} Excluída com Sucesso.`
-    );
+    redirectWithFeedback(returnTo, "success", "Nota excluída com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
