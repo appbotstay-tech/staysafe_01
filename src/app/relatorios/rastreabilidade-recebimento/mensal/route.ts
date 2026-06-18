@@ -38,8 +38,10 @@ type ReceivingReportRow = {
   validade: string;
   quantidade: string;
   temperatura: string;
-  caracteristica: string;
-  naoConformidadeAcaoObservacao: string;
+  transporte: string;
+  aspecto: string;
+  embalagem: string;
+  acaoCorretiva: string;
   responsavel: string;
   supervisor: string;
 };
@@ -198,93 +200,6 @@ function labelConformidade(value: ConformidadeRecebimento | null): string {
   return "-";
 }
 
-function formatCharacteristics(params: {
-  transporteEntregador: ConformidadeRecebimento | null;
-  aspectoSensorial: ConformidadeRecebimento | null;
-  embalagem: ConformidadeRecebimento | null;
-}): string {
-  const values = [
-    params.aspectoSensorial,
-    params.embalagem,
-    params.transporteEntregador
-  ].filter((value): value is ConformidadeRecebimento => value !== null);
-
-  if (!values.length) {
-    return "-";
-  }
-
-  if (values.every((value) => value === ConformidadeRecebimento.CONFORME)) {
-    return "Conforme";
-  }
-
-  const parts = [
-    params.aspectoSensorial
-      ? `Aspecto: ${labelConformidade(params.aspectoSensorial)}`
-      : "",
-    params.embalagem ? `Embalagem: ${labelConformidade(params.embalagem)}` : "",
-    params.transporteEntregador
-      ? `Transporte: ${labelConformidade(params.transporteEntregador)}`
-      : ""
-  ].filter(Boolean);
-
-  return parts.join("\n") || "-";
-}
-
-function getNonConformities(params: {
-  temperaturaStatus: ConformidadeRecebimento | null;
-  transporteEntregador: ConformidadeRecebimento | null;
-  aspectoSensorial: ConformidadeRecebimento | null;
-  embalagem: ConformidadeRecebimento | null;
-}): string[] {
-  const reasons: string[] = [];
-
-  if (params.temperaturaStatus === ConformidadeRecebimento.NAO_CONFORME) {
-    reasons.push("Temperatura não conforme");
-  }
-
-  if (params.aspectoSensorial === ConformidadeRecebimento.NAO_CONFORME) {
-    reasons.push("Aspecto sensorial não conforme");
-  }
-
-  if (params.embalagem === ConformidadeRecebimento.NAO_CONFORME) {
-    reasons.push("Embalagem não conforme");
-  }
-
-  if (params.transporteEntregador === ConformidadeRecebimento.NAO_CONFORME) {
-    reasons.push("Transporte/entregador não conforme");
-  }
-
-  return reasons;
-}
-
-function formatNonConformityActionObservation(params: {
-  temperaturaStatus: ConformidadeRecebimento | null;
-  transporteEntregador: ConformidadeRecebimento | null;
-  aspectoSensorial: ConformidadeRecebimento | null;
-  embalagem: ConformidadeRecebimento | null;
-  acaoCorretiva: string | null;
-  observacoes: string | null;
-}): string {
-  const parts: string[] = [];
-  const nonConformities = getNonConformities(params);
-  const action = params.acaoCorretiva?.trim();
-  const observation = params.observacoes?.trim();
-
-  if (nonConformities.length) {
-    parts.push(`Não conformidade: ${nonConformities.join("; ")}`);
-  }
-
-  if (action) {
-    parts.push(`Ação: ${action}`);
-  }
-
-  if (observation) {
-    parts.push(`Obs.: ${observation}`);
-  }
-
-  return parts.length ? parts.join("\n") : "-";
-}
-
 function escapeHtml(value: string | number | null | undefined): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -414,44 +329,44 @@ function renderStyles(): string {
       }
 
       .receiving-table {
-        min-width: 1420px;
+        min-width: 1500px;
         table-layout: fixed;
       }
 
       .receiving-table th {
-        font-size: 9.2px;
-        line-height: 1.25;
+        font-size: 8.8px;
+        line-height: 1.2;
       }
 
       .receiving-table td {
-        line-height: 1.35;
+        line-height: 1.3;
       }
 
       .receiving-table th:nth-child(1),
       .receiving-table td:nth-child(1) {
-        width: 5.2%;
+        width: 4.8%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(2),
       .receiving-table td:nth-child(2) {
-        width: 15%;
+        width: 13.5%;
       }
 
       .receiving-table th:nth-child(3),
       .receiving-table td:nth-child(3) {
-        width: 5.4%;
+        width: 4.8%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(4),
       .receiving-table td:nth-child(4) {
-        width: 10.8%;
+        width: 10.5%;
       }
 
       .receiving-table th:nth-child(5),
       .receiving-table td:nth-child(5) {
-        width: 4.3%;
+        width: 4%;
         text-align: center;
       }
 
@@ -463,33 +378,46 @@ function renderStyles(): string {
 
       .receiving-table th:nth-child(7),
       .receiving-table td:nth-child(7) {
-        width: 6%;
+        width: 5.6%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(8),
       .receiving-table td:nth-child(8) {
-        width: 6%;
+        width: 5.8%;
         text-align: center;
       }
 
       .receiving-table th:nth-child(9),
       .receiving-table td:nth-child(9) {
-        width: 10.8%;
+        width: 5.4%;
+        text-align: center;
       }
 
       .receiving-table th:nth-child(10),
       .receiving-table td:nth-child(10) {
-        width: 11%;
+        width: 5.2%;
+        text-align: center;
       }
 
       .receiving-table th:nth-child(11),
       .receiving-table td:nth-child(11) {
-        width: 8%;
+        width: 5.2%;
+        text-align: center;
       }
 
       .receiving-table th:nth-child(12),
       .receiving-table td:nth-child(12) {
+        width: 7.2%;
+      }
+
+      .receiving-table th:nth-child(13),
+      .receiving-table td:nth-child(13) {
+        width: 10.5%;
+      }
+
+      .receiving-table th:nth-child(14),
+      .receiving-table td:nth-child(14) {
         width: 10.5%;
       }
 
@@ -538,7 +466,7 @@ function renderStyles(): string {
       @media print {
         body {
           padding: 0;
-          font-size: 8.5px;
+          font-size: 9px;
         }
 
         .screen-actions {
@@ -559,7 +487,7 @@ function renderStyles(): string {
 
         th,
         td {
-          padding: 2.5px 3px;
+          padding: 2px 2.5px;
         }
 
         thead {
@@ -637,8 +565,10 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
                 <td>${escapeHtml(row.validade)}</td>
                 <td>${escapeHtml(row.quantidade)}</td>
                 <td>${escapeHtml(row.temperatura)}</td>
-                <td>${escapeHtml(row.caracteristica)}</td>
-                <td>${escapeHtml(row.naoConformidadeAcaoObservacao)}</td>
+                <td>${escapeHtml(row.transporte)}</td>
+                <td>${escapeHtml(row.aspecto)}</td>
+                <td>${escapeHtml(row.embalagem)}</td>
+                <td>${escapeHtml(row.acaoCorretiva)}</td>
                 <td>${escapeHtml(row.responsavel)}</td>
                 <td>${escapeHtml(row.supervisor)}</td>
               </tr>`
@@ -646,7 +576,7 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
           .join("")
       : `
         <tr>
-          <td colspan="12" class="empty-message">
+          <td colspan="14" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -664,8 +594,10 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
             <th>Data / Prazo de validade</th>
             <th>Quantidade</th>
             <th>Temperatura (°C)</th>
-            <th>Característica</th>
-            <th>Observação</th>
+            <th>Transporte</th>
+            <th>Aspecto</th>
+            <th>Embalagem</th>
+            <th>Ação corretiva</th>
             <th>Responsável</th>
             <th>Supervisor</th>
           </tr>
@@ -673,7 +605,7 @@ function renderRecordsTable(report: MonthlyReceivingReport): string {
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="12" class="signature-wrapper">
+            <td colspan="14" class="signature-wrapper">
               ${renderSignatureTable(report)}
             </td>
           </tr>
@@ -742,12 +674,10 @@ export async function GET(request: NextRequest) {
         unidadeMedidaTributavel: true,
         temperatura: true,
         temperaturaTipo: true,
-        temperaturaStatus: true,
         transporteEntregador: true,
         aspectoSensorial: true,
         embalagem: true,
         acaoCorretiva: true,
-        observacoes: true,
         responsavelRecebimento: true,
         nota: {
           select: {
@@ -819,8 +749,10 @@ export async function GET(request: NextRequest) {
         validade: formatValidity(record.dataValidade, record.validadeNaoAplicavel),
         quantidade: formatQuantity(record),
         temperatura: formatTemperature(record.temperatura, record.temperaturaTipo),
-        caracteristica: formatCharacteristics(record),
-        naoConformidadeAcaoObservacao: formatNonConformityActionObservation(record),
+        transporte: labelConformidade(record.transporteEntregador),
+        aspecto: labelConformidade(record.aspectoSensorial),
+        embalagem: labelConformidade(record.embalagem),
+        acaoCorretiva: valueOrDash(record.acaoCorretiva),
         responsavel: valueOrDash(record.responsavelRecebimento),
         supervisor: valueOrDash(dailySignature?.usuarioNomeSnapshot)
       };
