@@ -121,6 +121,9 @@ export default async function ControleTemperaturaEquipamentosPage({
   const podeVerGestao = authUser
     ? hasPermission(authUser, "modulo.temperatura.acessar_historico") || podeGerenciarOpcoes
     : false;
+  const podeCriarRegistro = authUser
+    ? hasPermission(authUser, "modulo.temperatura.criar_registro")
+    : false;
   const podeExcluirRegistros = authUser
     ? hasPermission(authUser, "modulo.temperatura.excluir_registro")
     : false;
@@ -230,8 +233,10 @@ export default async function ControleTemperaturaEquipamentosPage({
     ordem: regra.ordem,
     isActive: regra.isActive
   }));
+  const possuiEquipamentosAtivos = equipamentoOptionsAtivas.length > 0;
+  const possuiRegrasCategoriaAtivas = regrasCategoriaForm.length > 0;
   const configuracaoDisponivel =
-    equipamentoOptionsAtivas.length > 0 && regrasCategoriaForm.length > 0;
+    possuiEquipamentosAtivos && possuiRegrasCategoriaAtivas;
 
   const editId = parsePositiveInt(firstParam(params.editId));
   const deleteId = parsePositiveInt(firstParam(params.deleteId));
@@ -331,7 +336,8 @@ export default async function ControleTemperaturaEquipamentosPage({
     return buildPathWithParams(query);
   })();
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
-  const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
+  const mostrarFormulario =
+    (novoRegistroSelecionado && podeCriarRegistro) || Boolean(registroEmEdicao);
   const modalError = feedback && feedbackType === "error" ? feedback : "";
   const dataFormulario =
     registroEmEdicao?.data ?? parseDateInput(todayDateInput) ?? getTodaySystemDate();
@@ -441,17 +447,22 @@ export default async function ControleTemperaturaEquipamentosPage({
               abre em modal sobreposto a partir da lista.
             </p>
           ) : !configuracaoDisponivel ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              O módulo ainda não possui equipamentos ou regras de temperatura suficientes para cadastro.
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              <p>
+                {!possuiEquipamentosAtivos
+                  ? "Nenhum equipamento cadastrado. Cadastre uma categoria e um equipamento antes de criar o primeiro registro."
+                  : !possuiRegrasCategoriaAtivas
+                    ? "As categorias dos equipamentos ainda não possuem regras de temperatura ativas. Configure as regras antes de criar registros."
+                    : "Conclua a configuração inicial antes de criar registros."}
+              </p>
               {podeGerenciarOpcoes ? (
-                <>
-                  {" "}
-                  Use <strong>Gerenciar Opções</strong> para concluir a configuração inicial.
-                </>
+                <Link href="/controle-temperatura-equipamentos/opcoes" className="btn-secondary">
+                  Ir para Gerenciar Equipamentos
+                </Link>
               ) : (
-                " Solicite à gestão a configuração inicial do módulo."
+                <p>Solicite à gestão a configuração inicial do módulo.</p>
               )}
-            </p>
+            </div>
           ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
               Este registro pertence a um mês fechado e não pode ser alterado.
@@ -561,7 +572,7 @@ export default async function ControleTemperaturaEquipamentosPage({
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Registros do Dia
           </h2>
-          {configuracaoDisponivel ? (
+          {podeCriarRegistro ? (
             <Link href={hrefNovoRegistro} className="btn-primary">
               Novo Registro
             </Link>
@@ -685,7 +696,24 @@ export default async function ControleTemperaturaEquipamentosPage({
               {registros.length === 0 ? (
                 <tr>
                   <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={11}>
-                    Nenhum registro encontrado.
+                    {!possuiEquipamentosAtivos ? (
+                      <div className="space-y-2">
+                        <p className="font-medium text-slate-700 dark:text-slate-200">
+                          Nenhum equipamento cadastrado.
+                        </p>
+                        <p>
+                          Para começar a utilizar o controle de temperatura, crie uma categoria
+                          e cadastre os equipamentos que serão monitorados.
+                        </p>
+                        {podeGerenciarOpcoes ? (
+                          <Link href="/controle-temperatura-equipamentos/opcoes" className="btn-secondary">
+                            Gerenciar cadastros
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "Nenhum registro encontrado."
+                    )}
                   </td>
                 </tr>
               ) : (

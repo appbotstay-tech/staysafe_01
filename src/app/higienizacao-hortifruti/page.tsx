@@ -9,12 +9,9 @@ import Link from "next/link";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import {
-  canDeleteOperationalRecords,
-  canManageModuleOptions,
-  canViewManagementSections
-} from "@/lib/rbac";
+import { canViewManagementSections } from "@/lib/rbac";
 
 import {
   createRegistroAction,
@@ -78,8 +75,15 @@ export default async function HigienizacaoHortifrutiPage({
   const responsavelLogado = authUser?.nomeCompleto ?? "Usuário logado";
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
-  const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
-  const podeExcluirRegistros = authUser ? canDeleteOperationalRecords(authUser) : false;
+  const podeGerenciarOpcoes = authUser
+    ? hasPermission(authUser, "modulo.hortifruti.gerenciar_cadastros")
+    : false;
+  const podeCriarRegistro = authUser
+    ? hasPermission(authUser, "modulo.hortifruti.criar_registro")
+    : false;
+  const podeExcluirRegistros = authUser
+    ? hasPermission(authUser, "modulo.hortifruti.excluir_registro")
+    : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -129,8 +133,10 @@ export default async function HigienizacaoHortifrutiPage({
   const produtoUtilizadoOptions = options
     .filter((option) => option.tipo === TipoOpcaoHigienizacao.PRODUTO_UTILIZADO)
     .map((option) => option.nome);
+  const possuiHortifrutiOptions = hortifrutiOptions.length > 0;
+  const possuiProdutoUtilizadoOptions = produtoUtilizadoOptions.length > 0;
   const catalogoDisponivel =
-    hortifrutiOptions.length > 0 && produtoUtilizadoOptions.length > 0;
+    possuiHortifrutiOptions && possuiProdutoUtilizadoOptions;
 
   const editId = parsePositiveInt(firstParam(params.editId));
   const deleteId = parsePositiveInt(firstParam(params.deleteId));
@@ -204,7 +210,8 @@ export default async function HigienizacaoHortifrutiPage({
     return buildPathWithParams(query);
   })();
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
-  const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
+  const mostrarFormulario =
+    (novoRegistroSelecionado && podeCriarRegistro) || Boolean(registroEmEdicao);
   const modalError = feedback && feedbackType === "error" ? feedback : "";
   const deleteReturnTo = (() => {
     const query = new URLSearchParams(parametrosRetorno);
@@ -272,17 +279,22 @@ export default async function HigienizacaoHortifrutiPage({
               abre em modal sobreposto a partir da lista.
             </p>
           ) : !catalogoDisponivel ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Nenhuma opção de hortifruti ou produto foi cadastrada ainda.
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              <p>
+                {!possuiHortifrutiOptions && !possuiProdutoUtilizadoOptions
+                  ? "Nenhum item de hortifruti ou produto utilizado cadastrado. Cadastre os itens e produtos antes de criar o primeiro registro."
+                  : !possuiHortifrutiOptions
+                    ? "Nenhum item de hortifruti cadastrado. Cadastre os itens antes de criar o primeiro registro."
+                    : "Nenhum produto utilizado cadastrado. Cadastre o produto antes de criar o primeiro registro."}
+              </p>
               {podeGerenciarOpcoes ? (
-                <>
-                  {" "}
-                  Use <strong>Gerenciar Opções</strong> para iniciar o módulo.
-                </>
+                <Link href="/higienizacao-hortifruti/opcoes" className="btn-secondary">
+                  Ir para Gerenciar Opções
+                </Link>
               ) : (
-                " Solicite à gestão a configuração inicial do módulo."
+                <p>Solicite à gestão a configuração inicial do módulo.</p>
               )}
-            </p>
+            </div>
           ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
               Este registro pertence a um mês fechado e não pode ser alterado.
@@ -347,7 +359,7 @@ export default async function HigienizacaoHortifrutiPage({
       <section className={CARD_CLASS}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Registros</h2>
-          {catalogoDisponivel ? (
+          {podeCriarRegistro ? (
             <Link href={hrefNovoRegistro} className="btn-primary">Novo Registro</Link>
           ) : null}
         </div>
@@ -387,7 +399,24 @@ export default async function HigienizacaoHortifrutiPage({
               {registros.length === 0 ? (
                 <tr>
                   <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={8}>
-                    Nenhum registro encontrado.
+                    {!catalogoDisponivel ? (
+                      <div className="space-y-2">
+                        <p className="font-medium text-slate-700 dark:text-slate-200">
+                          Nenhum item de hortifruti cadastrado.
+                        </p>
+                        <p>
+                          Para começar a utilizar a higienização de hortifruti, cadastre os
+                          itens e os produtos utilizados no processo.
+                        </p>
+                        {podeGerenciarOpcoes ? (
+                          <Link href="/higienizacao-hortifruti/opcoes" className="btn-secondary">
+                            Gerenciar itens
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "Nenhum registro encontrado."
+                    )}
                   </td>
                 </tr>
               ) : (

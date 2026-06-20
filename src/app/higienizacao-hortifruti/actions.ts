@@ -8,10 +8,7 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
-  ensureCanCloseMonth,
-  ensureCanDeleteOperationalRecords,
-  ensureCanManageOptions,
-  ensureCanReopenMonth,
+  ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -108,6 +105,16 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
     hortifrutiInput
   );
   if (!hortifruti) {
+    const hasHortifrutiOptions = await prisma.higienizacaoHortifrutiOpcao.count({
+      where: { tipo: TipoOpcaoHigienizacao.HORTIFRUTI }
+    });
+
+    if (hasHortifrutiOptions === 0) {
+      throw new Error(
+        "Nenhum item de hortifruti cadastrado. Cadastre os itens antes de criar o primeiro registro."
+      );
+    }
+
     throw new Error("Selecione uma opção válida no campo Hortifruti.");
   }
 
@@ -116,6 +123,16 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
     produtoInput
   );
   if (!produtoUtilizado) {
+    const hasProdutoOptions = await prisma.higienizacaoHortifrutiOpcao.count({
+      where: { tipo: TipoOpcaoHigienizacao.PRODUTO_UTILIZADO }
+    });
+
+    if (hasProdutoOptions === 0) {
+      throw new Error(
+        "Nenhum produto utilizado cadastrado. Cadastre o produto antes de criar o primeiro registro."
+      );
+    }
+
     throw new Error("Selecione uma opção válida no campo Produto Utilizado.");
   }
 
@@ -146,6 +163,11 @@ export async function createRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.criar_registro",
+      "Seu perfil não pode criar registros de hortifruti."
+    );
 
     const data = getTodaySystemDate();
     const payload = await getRegistroPayload(formData, actor.nomeCompleto);
@@ -228,7 +250,11 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanDeleteOperationalRecords(actor);
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.excluir_registro",
+      "Seu perfil não pode excluir registros de hortifruti."
+    );
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -269,7 +295,11 @@ export async function closeMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanCloseMonth(actor);
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.fechar_mes",
+      "Seu perfil não pode assinar fechamento mensal de hortifruti."
+    );
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -346,7 +376,11 @@ export async function reopenMonthAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanReopenMonth(actor);
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.reabrir_mes",
+      "Seu perfil não pode reabrir períodos de hortifruti."
+    );
 
     const mes = parsePositiveInt(getInputValue(formData, "mes"));
     const ano = parsePositiveInt(getInputValue(formData, "ano"));
@@ -391,7 +425,11 @@ export async function createCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor);
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.gerenciar_cadastros",
+      "Você não tem permissão para gerenciar cadastros de hortifruti."
+    );
 
     const tipo = parseOptionType(getInputValue(formData, "tipo"));
     const nome = sanitizeCatalogName(getInputValue(formData, "nome"));
@@ -430,7 +468,11 @@ export async function deleteCatalogOptionAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensureCanManageOptions(actor);
+    ensurePermission(
+      actor,
+      "modulo.hortifruti.gerenciar_cadastros",
+      "Você não tem permissão para gerenciar cadastros de hortifruti."
+    );
 
     const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
     if (!optionId) {

@@ -232,6 +232,19 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
     true
   );
   if (!equipamentoOption) {
+    const hasActiveEquipment = await prisma.controleTemperaturaEquipamentoOpcao.count({
+      where: {
+        tipo: TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO,
+        ativo: true
+      }
+    });
+
+    if (hasActiveEquipment === 0) {
+      throw new Error(
+        "Nenhum equipamento cadastrado. Cadastre uma categoria e um equipamento antes de criar o primeiro registro."
+      );
+    }
+
     throw new Error("Selecione uma opção válida no campo Equipamento.");
   }
 
@@ -349,6 +362,64 @@ function validateRangeBounds(
       `A faixa de ${label} está inválida. O valor mínimo não pode ser maior que o máximo.`
     );
   }
+}
+
+function getCategoryParameterPayload(formData: FormData) {
+  const nome = sanitizeCatalogName(getInputValue(formData, "nome"));
+  const acaoIdeal = sanitizeCatalogName(getInputValue(formData, "acaoIdeal"));
+  const acaoAlerta = sanitizeCatalogName(getInputValue(formData, "acaoAlerta"));
+  const acaoCritica = sanitizeCatalogName(getInputValue(formData, "acaoCritica"));
+  const orientacaoCorretivaPadrao = sanitizeCatalogName(
+    getInputValue(formData, "orientacaoCorretivaPadrao")
+  );
+
+  if (!nome) {
+    throw new Error("Informe o nome da categoria.");
+  }
+
+  if (!orientacaoCorretivaPadrao) {
+    throw new Error("Informe a orientação corretiva padrão da categoria.");
+  }
+
+  if (!acaoIdeal || !acaoAlerta || !acaoCritica) {
+    throw new Error(
+      "Preencha as ações corretivas de Ideal, Alerta e Crítica para a categoria."
+    );
+  }
+
+  const temperaturaIdealMin = parseTemperatureField(formData, "temperaturaIdealMin");
+  const temperaturaIdealMax = parseTemperatureField(formData, "temperaturaIdealMax");
+  const temperaturaAlertaMin = parseTemperatureField(formData, "temperaturaAlertaMin");
+  const temperaturaAlertaMax = parseTemperatureField(formData, "temperaturaAlertaMax");
+  const temperaturaCriticaMin = parseTemperatureField(formData, "temperaturaCriticaMin");
+  const temperaturaCriticaMax = parseTemperatureField(formData, "temperaturaCriticaMax");
+
+  validateRangeBounds(temperaturaIdealMin, temperaturaIdealMax, "ideal");
+  validateRangeBounds(temperaturaAlertaMin, temperaturaAlertaMax, "alerta");
+  validateRangeBounds(temperaturaCriticaMin, temperaturaCriticaMax, "crítica");
+
+  if (temperaturaIdealMin === null && temperaturaIdealMax === null) {
+    throw new Error("Configure ao menos um limite para a faixa ideal.");
+  }
+
+  if (temperaturaAlertaMin === null && temperaturaAlertaMax === null) {
+    throw new Error("Configure ao menos um limite para a faixa de alerta.");
+  }
+
+  return {
+    nome,
+    temperaturaIdealMin,
+    temperaturaIdealMax,
+    temperaturaAlertaMin,
+    temperaturaAlertaMax,
+    temperaturaCriticaMin,
+    temperaturaCriticaMax,
+    acaoIdeal,
+    acaoAlerta,
+    acaoCritica,
+    orientacaoCorretivaPadrao,
+    isActive: getInputValue(formData, "isActive") !== "false"
+  };
 }
 
 function parseStatusValue(value: string): StatusTemperaturaEquipamento | null {
@@ -1032,6 +1103,51 @@ export async function toggleCatalogOptionStatusAction(formData: FormData) {
   }
 }
 
+export async function createCategoryParameterAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(actor, "modulo.temperatura.gerenciar_cadastros", "Você não tem permissão para gerenciar cadastros de temperatura.");
+
+    const categoria = parseEquipmentCategory(getInputValue(formData, "categoria"));
+    if (!categoria) {
+      throw new Error("Selecione uma categoria válida.");
+    }
+
+    const existing = await prisma.controleTemperaturaCategoriaParametro.findUnique({
+      where: { categoria }
+    });
+
+    if (existing) {
+      throw new Error("Esta categoria já está cadastrada.");
+    }
+
+    const payload = getCategoryParameterPayload(formData);
+
+    await prisma.controleTemperaturaCategoriaParametro.create({
+      data: {
+        categoria,
+        ...payload
+      }
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Categoria Cadastrada com Sucesso."
+    );
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível processar a operação.")
+    );
+  }
+}
+
 export async function updateCategoryParameterAction(formData: FormData) {
   const returnTo = getReturnToPath(formData);
 
@@ -1052,65 +1168,11 @@ export async function updateCategoryParameterAction(formData: FormData) {
       throw new Error("Parâmetro de categoria não encontrado.");
     }
 
-    const nome = sanitizeCatalogName(getInputValue(formData, "nome"));
-    const acaoIdeal = sanitizeCatalogName(getInputValue(formData, "acaoIdeal"));
-    const acaoAlerta = sanitizeCatalogName(getInputValue(formData, "acaoAlerta"));
-    const acaoCritica = sanitizeCatalogName(getInputValue(formData, "acaoCritica"));
-    const orientacaoCorretivaPadrao = sanitizeCatalogName(
-      getInputValue(formData, "orientacaoCorretivaPadrao")
-    );
-
-    if (!nome) {
-      throw new Error("Informe o nome da categoria.");
-    }
-
-    if (!orientacaoCorretivaPadrao) {
-      throw new Error("Informe a orientação corretiva padrão da categoria.");
-    }
-
-    if (!acaoIdeal || !acaoAlerta || !acaoCritica) {
-      throw new Error(
-        "Preencha as ações corretivas de Ideal, Alerta e Crítica para a categoria."
-      );
-    }
-
-    const temperaturaIdealMin = parseTemperatureField(formData, "temperaturaIdealMin");
-    const temperaturaIdealMax = parseTemperatureField(formData, "temperaturaIdealMax");
-    const temperaturaAlertaMin = parseTemperatureField(formData, "temperaturaAlertaMin");
-    const temperaturaAlertaMax = parseTemperatureField(formData, "temperaturaAlertaMax");
-    const temperaturaCriticaMin = parseTemperatureField(formData, "temperaturaCriticaMin");
-    const temperaturaCriticaMax = parseTemperatureField(formData, "temperaturaCriticaMax");
-
-    validateRangeBounds(temperaturaIdealMin, temperaturaIdealMax, "ideal");
-    validateRangeBounds(temperaturaAlertaMin, temperaturaAlertaMax, "alerta");
-    validateRangeBounds(temperaturaCriticaMin, temperaturaCriticaMax, "crítica");
-
-    if (temperaturaIdealMin === null && temperaturaIdealMax === null) {
-      throw new Error("Configure ao menos um limite para a faixa ideal.");
-    }
-
-    if (temperaturaAlertaMin === null && temperaturaAlertaMax === null) {
-      throw new Error("Configure ao menos um limite para a faixa de alerta.");
-    }
-
-    const isActive = getInputValue(formData, "isActive") === "true";
+    const payload = getCategoryParameterPayload(formData);
 
     await prisma.controleTemperaturaCategoriaParametro.update({
       where: { id: parameterId },
-      data: {
-        nome,
-        temperaturaIdealMin,
-        temperaturaIdealMax,
-        temperaturaAlertaMin,
-        temperaturaAlertaMax,
-        temperaturaCriticaMin,
-        temperaturaCriticaMax,
-        acaoIdeal,
-        acaoAlerta,
-        acaoCritica,
-        orientacaoCorretivaPadrao,
-        isActive
-      }
+      data: payload
     });
 
     revalidateModulePaths();

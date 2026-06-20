@@ -103,6 +103,9 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
   const podeVerGestao = authUser
     ? hasPermission(authUser, "modulo.oleo.acessar_historico") || podeGerenciarOpcoes
     : false;
+  const podeCriarRegistro = authUser
+    ? hasPermission(authUser, "modulo.oleo.criar_registro")
+    : false;
   const podeExcluirRegistros = authUser
     ? hasPermission(authUser, "modulo.oleo.excluir_registro")
     : false;
@@ -283,7 +286,8 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
     return buildPathWithParams(query);
   })();
   const hrefCancelarFormulario = buildPathWithParams(parametrosRetorno);
-  const mostrarFormulario = novoRegistroSelecionado || Boolean(registroEmEdicao);
+  const mostrarFormulario =
+    (novoRegistroSelecionado && podeCriarRegistro) || Boolean(registroEmEdicao);
   const modalError = feedback && feedbackType === "error" ? feedback : "";
   const shouldRestoreFormValues = Boolean(modalError) && mostrarFormulario;
   const formFita = shouldRestoreFormValues
@@ -375,17 +379,19 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
               abre em modal sobreposto a partir da lista.
             </p>
           ) : !configuracaoDisponivel ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Nenhuma opção de fita do óleo está cadastrada.
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              <p>
+                Nenhuma opção de fita do óleo está cadastrada. Cadastre uma opção de fita antes
+                de criar o primeiro registro.
+              </p>
               {podeGerenciarOpcoes ? (
-                <>
-                  {" "}
-                  Use <strong>Gerenciar Opções</strong> para iniciar o módulo.
-                </>
+                <Link href="/controle-qualidade-oleo/opcoes" className="btn-secondary">
+                  Ir para Gerenciar Opções
+                </Link>
               ) : (
-                " Solicite à gestão a configuração inicial do módulo."
+                <p>Solicite à gestão a configuração inicial do módulo.</p>
               )}
-            </p>
+            </div>
           ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
               Este registro pertence a um mês fechado e não pode ser alterado.
@@ -454,7 +460,7 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
       <section className={CARD_CLASS}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Registros do Dia</h2>
-          {configuracaoDisponivel ? (
+          {podeCriarRegistro ? (
             <Link href={hrefNovoRegistro} className="btn-primary">
               Novo Registro
             </Link>
@@ -569,7 +575,24 @@ export default async function ControleQualidadeOleoPage({ searchParams }: PagePr
               {registros.length === 0 ? (
                 <tr>
                   <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={7}>
-                    Nenhum registro encontrado.
+                    {!configuracaoDisponivel ? (
+                      <div className="space-y-2">
+                        <p className="font-medium text-slate-700 dark:text-slate-200">
+                          Nenhuma opção de fita do óleo cadastrada.
+                        </p>
+                        <p>
+                          Para começar a utilizar o controle de qualidade do óleo, cadastre as
+                          opções de fita que serão utilizadas no registro.
+                        </p>
+                        {podeGerenciarOpcoes ? (
+                          <Link href="/controle-qualidade-oleo/opcoes" className="btn-secondary">
+                            Gerenciar opções
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "Nenhum registro encontrado."
+                    )}
                   </td>
                 </tr>
               ) : (

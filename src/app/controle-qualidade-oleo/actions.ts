@@ -161,6 +161,16 @@ async function getRegistroPayload(formData: FormData, responsavelLogado: string)
 
   const fitaOption = await findOilOptionByLabel(fitaInput, true);
   if (!fitaOption) {
+    const hasActiveOilOptions = await prisma.controleQualidadeOleoOpcaoFita.count({
+      where: { ativo: true }
+    });
+
+    if (hasActiveOilOptions === 0) {
+      throw new Error(
+        "Nenhuma opção de fita do óleo cadastrada. Cadastre uma opção de fita antes de criar o primeiro registro."
+      );
+    }
+
     throw new Error("Selecione uma opção válida no campo % da Fita do Óleo.");
   }
 

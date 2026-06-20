@@ -13,11 +13,13 @@ import { prisma } from "@/lib/prisma";
 
 import {
   createCatalogOptionAction,
+  createCategoryParameterAction,
   createCategoryRuleAction,
   deleteCategoryRuleAction,
   toggleCatalogOptionStatusAction,
   toggleCategoryRuleStatusAction,
   updateCatalogOptionAction,
+  updateCategoryParameterAction,
   updateCategoryRuleAction
 } from "../actions";
 import {
@@ -36,6 +38,21 @@ const INPUT_CLASS =
 const EQUIPMENT_SHIFT_OPTIONS = [
   { value: TurnoTemperaturaEquipamento.MANHA, label: "Manhã" },
   { value: TurnoTemperaturaEquipamento.TARDE, label: "Tarde" }
+];
+
+const TEMPERATURE_CATEGORY_OPTIONS = [
+  {
+    value: CategoriaEquipamentoTemperatura.REFRIGERACAO,
+    label: "Refrigeração"
+  },
+  {
+    value: CategoriaEquipamentoTemperatura.CONGELAMENTO,
+    label: "Congelamento"
+  },
+  {
+    value: CategoriaEquipamentoTemperatura.QUENTE,
+    label: "Quente"
+  }
 ];
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -66,6 +83,168 @@ function equipmentShiftLabels(option: {
   return labels.length > 0 ? labels.join(" e ") : "-";
 }
 
+type CategoryParameterDefaults = {
+  nome?: string;
+  temperaturaIdealMin?: number | null;
+  temperaturaIdealMax?: number | null;
+  temperaturaAlertaMin?: number | null;
+  temperaturaAlertaMax?: number | null;
+  temperaturaCriticaMin?: number | null;
+  temperaturaCriticaMax?: number | null;
+  acaoIdeal?: string;
+  acaoAlerta?: string;
+  acaoCritica?: string;
+  orientacaoCorretivaPadrao?: string;
+  isActive?: boolean;
+};
+
+function formatTemperatureFieldValue(value: number | null | undefined): string {
+  return value === null || value === undefined ? "" : String(value).replace(".", ",");
+}
+
+function CategoryParameterFields({
+  defaults,
+  inputClassName
+}: {
+  defaults?: CategoryParameterDefaults;
+  inputClassName: string;
+}) {
+  return (
+    <>
+      <label className="text-sm text-slate-700 dark:text-slate-200">
+        Nome da categoria
+        <input
+          type="text"
+          name="nome"
+          required
+          defaultValue={defaults?.nome ?? ""}
+          placeholder="Ex.: Refrigeração"
+          className={inputClassName}
+        />
+      </label>
+
+      <label className="text-sm text-slate-700 dark:text-slate-200">
+        Status
+        <select
+          name="isActive"
+          defaultValue={defaults?.isActive === false ? "false" : "true"}
+          className={inputClassName}
+        >
+          <option value="true">Ativa</option>
+          <option value="false">Inativa</option>
+        </select>
+      </label>
+
+      <fieldset className="grid gap-2 rounded-lg border border-slate-200 p-3 md:col-span-2 md:grid-cols-3 dark:border-slate-700">
+        <legend className="px-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Faixas de temperatura
+        </legend>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Ideal mín.
+          <input
+            type="text"
+            name="temperaturaIdealMin"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaIdealMin)}
+            className={inputClassName}
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Ideal máx.
+          <input
+            type="text"
+            name="temperaturaIdealMax"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaIdealMax)}
+            className={inputClassName}
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Alerta mín.
+          <input
+            type="text"
+            name="temperaturaAlertaMin"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaAlertaMin)}
+            className={inputClassName}
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Alerta máx.
+          <input
+            type="text"
+            name="temperaturaAlertaMax"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaAlertaMax)}
+            className={inputClassName}
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Crítica mín.
+          <input
+            type="text"
+            name="temperaturaCriticaMin"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaCriticaMin)}
+            className={inputClassName}
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-300">
+          Crítica máx.
+          <input
+            type="text"
+            name="temperaturaCriticaMax"
+            inputMode="text"
+            defaultValue={formatTemperatureFieldValue(defaults?.temperaturaCriticaMax)}
+            className={inputClassName}
+          />
+        </label>
+      </fieldset>
+
+      <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+        Ação para faixa ideal
+        <textarea
+          name="acaoIdeal"
+          rows={2}
+          required
+          defaultValue={defaults?.acaoIdeal ?? ""}
+          className={inputClassName}
+        />
+      </label>
+      <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+        Ação para faixa de alerta
+        <textarea
+          name="acaoAlerta"
+          rows={2}
+          required
+          defaultValue={defaults?.acaoAlerta ?? ""}
+          className={inputClassName}
+        />
+      </label>
+      <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+        Ação para faixa crítica
+        <textarea
+          name="acaoCritica"
+          rows={2}
+          required
+          defaultValue={defaults?.acaoCritica ?? ""}
+          className={inputClassName}
+        />
+      </label>
+      <label className="text-sm text-slate-700 md:col-span-2 dark:text-slate-200">
+        Orientação corretiva padrão
+        <textarea
+          name="orientacaoCorretivaPadrao"
+          rows={2}
+          required
+          defaultValue={defaults?.orientacaoCorretivaPadrao ?? ""}
+          className={inputClassName}
+        />
+      </label>
+    </>
+  );
+}
+
 export default async function ControleTemperaturaOpcoesPage({
   searchParams
 }: PageProps) {
@@ -74,6 +253,7 @@ export default async function ControleTemperaturaOpcoesPage({
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const editEquipamentoId = parsePositiveInt(firstParam(params.editEquipamentoId));
   const editAcaoId = parsePositiveInt(firstParam(params.editAcaoId));
+  const editCategoriaId = parsePositiveInt(firstParam(params.editCategoriaId));
   const editRegraId = parsePositiveInt(firstParam(params.editRegraId));
   const novaRegraCategoriaId = parsePositiveInt(firstParam(params.novaRegraCategoriaId));
 
@@ -101,6 +281,15 @@ export default async function ControleTemperaturaOpcoesPage({
     (option) => option.tipo === TipoOpcaoTemperaturaEquipamento.ACAO_CORRETIVA
   );
   const categoriasAtivas = categorias.filter((categoria) => categoria.isActive);
+  const categoriaEmEdicao = editCategoriaId
+    ? categorias.find((categoria) => categoria.id === editCategoriaId) ?? null
+    : null;
+  const categoriasCadastradas = new Set(
+    categorias.map((categoria) => categoria.categoria)
+  );
+  const categoriasDisponiveisParaCriacao = TEMPERATURE_CATEGORY_OPTIONS.filter(
+    (categoria) => !categoriasCadastradas.has(categoria.value)
+  );
   const modalError = feedback && feedbackType === "error" ? feedback : "";
 
   return (
@@ -135,16 +324,138 @@ export default async function ControleTemperaturaOpcoesPage({
         </section>
       ) : null}
 
-      {categorias.length === 0 ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          Nenhuma categoria de temperatura foi cadastrada ainda. Execute o seed do Prisma para carregar os parâmetros iniciais ou ajuste a base antes de usar este módulo.
-        </section>
-      ) : null}
-
       <ModuleHeaderTextSettings
         modulo={ModuloDocumento.CONTROLE_TEMPERATURA}
         returnTo={PAGE_PATH}
       />
+
+      <section className={CARD_CLASS}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Categorias de Equipamento
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Cadastre os parâmetros da categoria antes de vincular equipamentos.
+            </p>
+          </div>
+        </div>
+
+        {categoriasDisponiveisParaCriacao.length > 0 ? (
+          <form
+            action={createCategoryParameterAction}
+            className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-2 dark:bg-slate-800"
+          >
+            <input type="hidden" name="returnTo" value={PAGE_PATH} />
+
+            <label className="text-sm text-slate-700 dark:text-slate-200">
+              Categoria
+              <select name="categoria" required className={INPUT_CLASS}>
+                {categoriasDisponiveisParaCriacao.map((categoria) => (
+                  <option key={categoria.value} value={categoria.value}>
+                    {categoria.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <CategoryParameterFields inputClassName={INPUT_CLASS} />
+
+            <div className="md:col-span-2">
+              <button type="submit" className="btn-primary">
+                Criar categoria
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        <div className="mt-4 space-y-3">
+          {categorias.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              Nenhuma categoria de temperatura cadastrada. Crie a primeira categoria para
+              habilitar o cadastro dos equipamentos.
+            </div>
+          ) : (
+            categorias.map((categoria) => {
+              const isEditing = categoriaEmEdicao?.id === categoria.id;
+
+              if (isEditing) {
+                return (
+                  <form
+                    key={categoria.id}
+                    action={updateCategoryParameterAction}
+                    className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2 dark:border-slate-700"
+                  >
+                    <input type="hidden" name="parameterId" value={categoria.id} />
+                    <input
+                      type="hidden"
+                      name="returnTo"
+                      value={`${PAGE_PATH}?editCategoriaId=${categoria.id}`}
+                    />
+
+                    <div className="md:col-span-2">
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                        Editar {categoryLabel(categoria.categoria, categoria.nome)}
+                      </h3>
+                    </div>
+
+                    <CategoryParameterFields
+                      defaults={categoria}
+                      inputClassName={INPUT_CLASS}
+                    />
+
+                    <div className="btn-group md:col-span-2">
+                      <button type="submit" className="btn-primary">
+                        Salvar categoria
+                      </button>
+                      <Link href={PAGE_PATH} className="btn-secondary">
+                        Cancelar
+                      </Link>
+                    </div>
+                  </form>
+                );
+              }
+
+              return (
+                <article
+                  key={categoria.id}
+                  className="rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                        {categoryLabel(categoria.categoria, categoria.nome)}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {categoria.isActive ? "Categoria ativa" : "Categoria inativa"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Ideal:{" "}
+                        {formatTemperatureRange(
+                          categoria.temperaturaIdealMin,
+                          categoria.temperaturaIdealMax
+                        )}{" "}
+                        | Alerta:{" "}
+                        {formatTemperatureRange(
+                          categoria.temperaturaAlertaMin,
+                          categoria.temperaturaAlertaMax
+                        )}
+                      </p>
+                    </div>
+
+                    <Link
+                      href={`${PAGE_PATH}?editCategoriaId=${categoria.id}`}
+                      className="btn-action"
+                    >
+                      Editar
+                    </Link>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
 
       <section className={CARD_CLASS}>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -161,7 +472,17 @@ export default async function ControleTemperaturaOpcoesPage({
 
               <label className="text-sm text-slate-700 dark:text-slate-200">
                 Categoria
-                <select name="categoriaEquipamento" required className={INPUT_CLASS}>
+                <select
+                  name="categoriaEquipamento"
+                  required
+                  defaultValue={categoriasAtivas[0]?.categoria ?? ""}
+                  className={INPUT_CLASS}
+                >
+                  {categoriasAtivas.length === 0 ? (
+                    <option value="" disabled>
+                      Crie uma categoria ativa antes de cadastrar equipamentos
+                    </option>
+                  ) : null}
                   {categoriasAtivas.map((categoria) => (
                     <option key={categoria.id} value={categoria.categoria}>
                       {categoryLabel(categoria.categoria, categoria.nome)}
@@ -169,6 +490,11 @@ export default async function ControleTemperaturaOpcoesPage({
                   ))}
                 </select>
               </label>
+              {categoriasAtivas.length === 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                  Crie e ative uma categoria antes de salvar o primeiro equipamento.
+                </p>
+              ) : null}
 
               <fieldset className="rounded-lg border border-slate-200 p-3 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
                 <legend className="px-1 font-medium">Turnos de conferência</legend>
@@ -197,7 +523,12 @@ export default async function ControleTemperaturaOpcoesPage({
             </form>
 
             <ul className="mt-4 space-y-2">
-              {equipamentos.map((option) => {
+              {equipamentos.length === 0 ? (
+                <li className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Nenhum equipamento cadastrado.
+                </li>
+              ) : (
+              equipamentos.map((option) => {
                 const categoria = option.categoriaEquipamento
                   ? categorias.find((item) => item.categoria === option.categoriaEquipamento)
                   : null;
@@ -233,7 +564,8 @@ export default async function ControleTemperaturaOpcoesPage({
                     </div>
                   </li>
                 );
-              })}
+              })
+              )}
             </ul>
           </div>
 
