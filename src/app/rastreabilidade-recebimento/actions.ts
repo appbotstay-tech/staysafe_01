@@ -14,10 +14,12 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { getCurrentUserForAction, type AuthenticatedUser } from "@/lib/auth-session";
 import {
+  canManageHistoricalRecords,
   createSignatureLog,
   ensureCanCloseMonth,
   ensureCanManageOptions,
   ensureCanReopenMonth,
+  ensureDevUserForHistoricalRecords,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -824,10 +826,11 @@ export async function saveNotaItemsAction(formData: FormData) {
     }
 
     const period = getMonthYear(note.data);
-    if (await isMonthSigned(period.mes, period.ano)) {
+    const monthSigned = await isMonthSigned(period.mes, period.ano);
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
-    ensureCanEditReceivingNote(actor, note);
+    ensureCanEditReceivingNote(actor, note, monthSigned);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -889,6 +892,19 @@ export async function saveNotaItemsAction(formData: FormData) {
       });
     });
 
+    if (monthSigned || !canEditRecordDate(actor, "modulo.rastreabilidade", note.data, getTodaySystemDate())) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "rastreabilidade-recebimento/edicao-historica",
+        referenciaId: String(note.id),
+        observacao: [
+          `Edição histórica da nota ${note.notaFiscal}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
+
     revalidateModulePaths();
     redirectToNoteWithFeedback(note.id, "success", "Itens da Nota Atualizados com Sucesso.");
   } catch (error) {
@@ -920,10 +936,11 @@ export async function saveNotaItemsStateAction(
     }
 
     const period = getMonthYear(note.data);
-    if (await isMonthSigned(period.mes, period.ano)) {
+    const monthSigned = await isMonthSigned(period.mes, period.ano);
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser alterado.");
     }
-    ensureCanEditReceivingNote(actor, note);
+    ensureCanEditReceivingNote(actor, note, monthSigned);
 
     const categories = await getActiveCategories();
     const xmlProductLocked =
@@ -1004,6 +1021,19 @@ export async function saveNotaItemsStateAction(
       });
     });
 
+    if (monthSigned || !canEditRecordDate(actor, "modulo.rastreabilidade", note.data, getTodaySystemDate())) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "rastreabilidade-recebimento/edicao-historica",
+        referenciaId: String(note.id),
+        observacao: [
+          `Edição histórica da nota ${note.notaFiscal}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
+
     revalidateModulePaths();
 
     if (intent === "finalize") {
@@ -1049,10 +1079,11 @@ export async function finalizeNotaAction(formData: FormData) {
     }
 
     const period = getMonthYear(note.data);
-    if (await isMonthSigned(period.mes, period.ano)) {
+    const monthSigned = await isMonthSigned(period.mes, period.ano);
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês desta nota já foi fechado e não pode ser finalizado.");
     }
-    ensureCanEditReceivingNote(actor, note);
+    ensureCanEditReceivingNote(actor, note, monthSigned);
 
     if (!note.itens.length) {
       throw new Error("A nota não possui itens para finalização.");
@@ -1109,6 +1140,19 @@ export async function finalizeNotaAction(formData: FormData) {
       });
     });
 
+    if (monthSigned || !canEditRecordDate(actor, "modulo.rastreabilidade", note.data, getTodaySystemDate())) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "rastreabilidade-recebimento/finalizacao-historica",
+        referenciaId: String(note.id),
+        observacao: [
+          `Finalização histórica da nota ${note.notaFiscal}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
+
     revalidateModulePaths();
     redirectWithFeedback(
       MODULE_PATH,
@@ -1126,11 +1170,6 @@ export async function deleteItemAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensurePermission(
-      actor,
-      "modulo.rastreabilidade.excluir_registro",
-      "Seu perfil não pode excluir itens de recebimento."
-    );
 
     const itemId = parsePositiveInt(getInputValue(formData, "itemId"));
     if (!itemId) {
@@ -1145,14 +1184,33 @@ export async function deleteItemAction(formData: FormData) {
       throw new Error("Item não encontrado.");
     }
 
-    if (!canEditRecordDate(actor, "modulo.rastreabilidade", item.data, getTodaySystemDate())) {
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.rastreabilidade",
+      item.data,
+      getTodaySystemDate()
+    );
+    const period = getMonthYear(item.data);
+    const monthSigned = await isMonthSigned(period.mes, period.ano);
+    const usesHistoricalOverride = monthSigned || !canEditCurrentScope;
+
+    if (usesHistoricalOverride) {
+      ensureDevUserForHistoricalRecords(actor);
+    } else {
+      ensurePermission(
+        actor,
+        "modulo.rastreabilidade.excluir_registro",
+        "Seu perfil não pode excluir itens de recebimento."
+      );
+    }
+
+    if (!canEditCurrentScope && !canManageHistoricalRecords(actor)) {
       throw new Error(
         "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
       );
     }
 
-    const period = getMonthYear(item.data);
-    if (await isMonthSigned(period.mes, period.ano)) {
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês deste item já foi fechado e não pode ser excluído.");
     }
 
@@ -1172,6 +1230,19 @@ export async function deleteItemAction(formData: FormData) {
       }
     });
 
+    if (usesHistoricalOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "rastreabilidade-recebimento/exclusao-item-historica",
+        referenciaId: String(item.id),
+        observacao: [
+          `Exclusão histórica do item ${item.id} da nota ${item.notaFiscal}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
+
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Item Excluído com Sucesso.");
   } catch (error) {
@@ -1185,11 +1256,7 @@ export async function deleteNoteAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensurePermission(
-      actor,
-      "modulo.rastreabilidade.excluir_registro",
-      "Seu perfil não pode excluir notas de recebimento."
-    );
+    const canManageHistory = canManageHistoricalRecords(actor);
 
     const notaId = parsePositiveInt(getInputValue(formData, "notaId"));
     if (!notaId) {
@@ -1226,16 +1293,39 @@ export async function deleteNoteAction(formData: FormData) {
         }
       })
     ]);
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.rastreabilidade",
+      note.data,
+      getTodaySystemDate()
+    );
+    const protectedHistoricalDelete =
+      legacyMonthSigned ||
+      Boolean(monthlyClosure) ||
+      Boolean(dailySignature) ||
+      !canEditCurrentScope;
+    const usesDevOverride =
+      protectedHistoricalDelete || !canDeleteImportedReceivingNote(note);
 
-    if (legacyMonthSigned || monthlyClosure) {
+    if (protectedHistoricalDelete) {
+      ensureDevUserForHistoricalRecords(actor);
+    } else {
+      ensurePermission(
+        actor,
+        "modulo.rastreabilidade.excluir_registro",
+        "Seu perfil não pode excluir notas de recebimento."
+      );
+    }
+
+    if ((legacyMonthSigned || monthlyClosure) && !canManageHistory) {
       throw new Error("Esta nota pertence a um período já fechado e não pode ser excluída.");
     }
 
-    if (dailySignature) {
+    if (dailySignature && !canManageHistory) {
       throw new Error("Esta nota pertence a um dia já assinado e não pode ser excluída.");
     }
 
-    if (!canDeleteImportedReceivingNote(note)) {
+    if (!canDeleteImportedReceivingNote(note) && !canManageHistory) {
       throw new Error("Somente notas importadas e ainda não conferidas podem ser excluídas.");
     }
 
@@ -1248,6 +1338,20 @@ export async function deleteNoteAction(formData: FormData) {
         where: { id: note.id }
       });
     });
+
+    if (usesDevOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "rastreabilidade-recebimento/exclusao-nota-historica",
+        referenciaId: String(note.id),
+        observacao: [
+          `Exclusão histórica da nota ${note.notaFiscal}.`,
+          `Mês fechado: ${legacyMonthSigned || monthlyClosure ? "sim" : "não"}.`,
+          `Dia assinado: ${dailySignature ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Nota excluída com sucesso.");

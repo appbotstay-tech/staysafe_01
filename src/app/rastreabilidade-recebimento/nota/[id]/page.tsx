@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { canEditRecordDate, hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -185,20 +186,23 @@ export default async function NotaRecebimentoPage({ params, searchParams }: Page
   const canEditNote = editAccessReason === "EDITABLE";
   const readOnlyMode = !canEditNote;
   const readOnlyReasonMessage = getReadOnlyReasonMessage(editAccessReason);
+  const canManageHistory = authUser ? canManageHistoricalRecords(authUser) : false;
   const canDeleteByDate = authUser
     ? canEditRecordDate(authUser, "modulo.rastreabilidade", note.data, today)
     : false;
   const xmlProductLocked = note.origemXml && !canEditImportedXmlFields(authUser?.perfil);
   const canDeleteNote =
-    Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
-    !monthSigned &&
-    !daySigned &&
-    !noteFinalizada &&
-    canDeleteImportedReceivingNote(note);
+    canManageHistory ||
+    (Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
+      !monthSigned &&
+      !daySigned &&
+      !noteFinalizada &&
+      canDeleteImportedReceivingNote(note));
   const canDeleteItems =
-    Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
-    !readOnlyMode &&
-    canDeleteByDate;
+    canManageHistory ||
+    (Boolean(authUser && hasPermission(authUser, "modulo.rastreabilidade.excluir_registro")) &&
+      !readOnlyMode &&
+      canDeleteByDate);
   const returnTo = `/rastreabilidade-recebimento/nota/${note.id}`;
 
   const query = await searchParams;

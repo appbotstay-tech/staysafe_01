@@ -12,7 +12,10 @@ import {
   type UserRole
 } from "@/lib/rbac";
 
-type AuthorizationSubject = UserRole | PermissionAwareUser;
+export type AuthorizationSubject = UserRole | PermissionAwareUser;
+
+export const DEV_HISTORICAL_RECORDS_MESSAGE =
+  "Apenas o usuário DEV pode editar ou excluir registros históricos.";
 
 function subjectToUser(subject: AuthorizationSubject): PermissionAwareUser {
   if (typeof subject === "string") {
@@ -42,6 +45,23 @@ export function ensureAnyPermission(
   message = "Você não tem permissão para executar esta ação."
 ) {
   if (!hasAnyPermission(subjectToUser(subject), permissionCodes)) {
+    throw new Error(message);
+  }
+}
+
+export function isDevUser(subject: AuthorizationSubject): boolean {
+  return subjectRole(subject) === "DEV";
+}
+
+export function canManageHistoricalRecords(subject: AuthorizationSubject): boolean {
+  return isDevUser(subject);
+}
+
+export function ensureDevUserForHistoricalRecords(
+  subject: AuthorizationSubject,
+  message = DEV_HISTORICAL_RECORDS_MESSAGE
+) {
+  if (!canManageHistoricalRecords(subject)) {
     throw new Error(message);
   }
 }

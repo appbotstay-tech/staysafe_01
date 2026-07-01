@@ -10,7 +10,9 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
+  canManageHistoricalRecords,
   createSignatureLog,
+  ensureDevUserForHistoricalRecords,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -257,10 +259,18 @@ export async function updateRegistroAction(formData: FormData) {
     }
 
     const existingPeriod = getMonthYear(existing.data);
-    if (await isMonthSigned(existingPeriod.mes, existingPeriod.ano)) {
+    const monthSigned = await isMonthSigned(existingPeriod.mes, existingPeriod.ano);
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.oleo",
+      existing.data,
+      getTodaySystemDate()
+    );
+    const usesHistoricalOverride = monthSigned || !canEditCurrentScope;
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês deste registro já foi fechado e não pode ser editado.");
     }
-    if (!canEditRecordDate(actor, "modulo.oleo", existing.data, getTodaySystemDate())) {
+    if (!canEditCurrentScope && !canManageHistoricalRecords(actor)) {
       throw new Error("Seu perfil não pode editar este registro de óleo.");
     }
 
@@ -270,6 +280,19 @@ export async function updateRegistroAction(formData: FormData) {
       where: { id },
       data: payload
     });
+
+    if (usesHistoricalOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "controle-qualidade-oleo/edicao-historica",
+        referenciaId: String(existing.id),
+        observacao: [
+          `Edição histórica do registro ${existing.id}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Registro Atualizado com Sucesso.");
@@ -289,7 +312,6 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensurePermission(actor, "modulo.oleo.excluir_registro", "Seu perfil não pode excluir registros de óleo.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -304,18 +326,50 @@ export async function deleteRegistroAction(formData: FormData) {
       throw new Error("Registro não encontrado.");
     }
 
-    if (!canEditRecordDate(actor, "modulo.oleo", existing.data, getTodaySystemDate())) {
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.oleo",
+      existing.data,
+      getTodaySystemDate()
+    );
+    const { mes, ano } = getMonthYear(existing.data);
+    const monthSigned = await isMonthSigned(mes, ano);
+    const usesHistoricalOverride = monthSigned || !canEditCurrentScope;
+
+    if (usesHistoricalOverride) {
+      ensureDevUserForHistoricalRecords(actor);
+    } else {
+      ensurePermission(
+        actor,
+        "modulo.oleo.excluir_registro",
+        "Seu perfil não pode excluir registros de óleo."
+      );
+    }
+
+    if (!canEditCurrentScope && !canManageHistoricalRecords(actor)) {
       throw new Error(
         "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
       );
     }
 
-    const { mes, ano } = getMonthYear(existing.data);
-    if (await isMonthSigned(mes, ano)) {
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês deste registro já foi fechado e o item não pode ser excluído.");
     }
 
     await prisma.controleQualidadeOleoRegistro.delete({ where: { id } });
+
+    if (usesHistoricalOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "controle-qualidade-oleo/exclusao-historica",
+        referenciaId: String(existing.id),
+        observacao: [
+          `Exclusão histórica do registro ${existing.id}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Registro Excluído com Sucesso.");

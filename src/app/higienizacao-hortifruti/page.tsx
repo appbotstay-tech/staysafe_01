@@ -9,6 +9,7 @@ import Link from "next/link";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { canViewManagementSections } from "@/lib/rbac";
@@ -83,6 +84,9 @@ export default async function HigienizacaoHortifrutiPage({
     : false;
   const podeExcluirRegistros = authUser
     ? hasPermission(authUser, "modulo.hortifruti.excluir_registro")
+    : false;
+  const podeGerenciarHistorico = authUser
+    ? canManageHistoricalRecords(authUser)
     : false;
 
   const params = await searchParams;
@@ -182,11 +186,20 @@ export default async function HigienizacaoHortifrutiPage({
   const registroEmEdicaoBloqueado = periodoEdicao
     ? assinadosSet.has(periodKey(periodoEdicao.mes, periodoEdicao.ano))
     : false;
+  const registroEmEdicaoHistorico = registroEmEdicao
+    ? formatDateInput(registroEmEdicao.data) !== todayInput
+    : false;
+  const registroEmEdicaoRestrito = registroEmEdicaoBloqueado || registroEmEdicaoHistorico;
   const registroEmEdicaoBloqueadoPorPerfil = Boolean(registroEmEdicao && isColaborador);
   const periodoExclusao = registroParaExcluir ? getMonthYear(registroParaExcluir.data) : null;
   const registroParaExcluirBloqueado = periodoExclusao
     ? assinadosSet.has(periodKey(periodoExclusao.mes, periodoExclusao.ano))
     : false;
+  const registroParaExcluirHistorico = registroParaExcluir
+    ? formatDateInput(registroParaExcluir.data) !== todayInput
+    : false;
+  const registroParaExcluirRestrito =
+    registroParaExcluirBloqueado || registroParaExcluirHistorico;
 
   const parametrosRetorno = new URLSearchParams();
   if (filtroData) parametrosRetorno.set("filtroData", filtroData);
@@ -295,9 +308,9 @@ export default async function HigienizacaoHortifrutiPage({
                 <p>Solicite à gestão a configuração inicial do módulo.</p>
               )}
             </div>
-          ) : registroEmEdicao && registroEmEdicaoBloqueado ? (
+          ) : registroEmEdicao && registroEmEdicaoRestrito && !podeGerenciarHistorico ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Este registro pertence a um mês fechado e não pode ser alterado.
+              Este registro é histórico ou pertence a um mês fechado e não pode ser alterado por este perfil.
             </p>
           ) : registroEmEdicao && registroEmEdicaoBloqueadoPorPerfil ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
@@ -307,6 +320,11 @@ export default async function HigienizacaoHortifrutiPage({
             <form action={registroEmEdicao ? updateRegistroAction : createRegistroAction} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="returnTo" value={formReturnTo} />
               {registroEmEdicao ? <input type="hidden" name="id" value={registroEmEdicao.id} /> : null}
+              {registroEmEdicao && registroEmEdicaoRestrito && podeGerenciarHistorico ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200 md:col-span-2">
+                  Este registro é histórico ou pertence a um mês fechado. A alteração será permitida para DEV e registrada em auditoria.
+                </p>
+              ) : null}
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2 dark:border-slate-700 dark:bg-slate-800">
               <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Data do Procedimento</p>
@@ -422,7 +440,13 @@ export default async function HigienizacaoHortifrutiPage({
               ) : (
                 registros.map((registro) => {
                   const periodo = getMonthYear(registro.data);
-                  const bloqueado = assinadosSet.has(periodKey(periodo.mes, periodo.ano));
+                  const bloqueado =
+                    assinadosSet.has(periodKey(periodo.mes, periodo.ano)) ||
+                    formatDateInput(registro.data) !== todayInput;
+                  const podeEditarRegistro =
+                    (!bloqueado && !isColaborador) || podeGerenciarHistorico;
+                  const podeExcluirRegistro =
+                    (!bloqueado && podeExcluirRegistros) || podeGerenciarHistorico;
                   const hrefEditar = (() => {
                     const query = new URLSearchParams(parametrosRetorno);
                     query.set("editId", String(registro.id));
@@ -440,17 +464,12 @@ export default async function HigienizacaoHortifrutiPage({
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2">
                         <div className="btn-group">
-                          {!isColaborador ? (
+                          {podeEditarRegistro ? (
                             <Link href={hrefEditar} className="btn-action">
                               Editar
                             </Link>
                           ) : null}
-                          {podeExcluirRegistros ? (
-                            bloqueado ? (
-                              <button type="button" disabled className="btn-danger">
-                                Excluir
-                              </button>
-                            ) : (
+                          {podeExcluirRegistro ? (
                               <Link
                                 href={(() => {
                                   const query = new URLSearchParams(parametrosRetorno);
@@ -461,7 +480,6 @@ export default async function HigienizacaoHortifrutiPage({
                               >
                                 Excluir
                               </Link>
-                            )
                           ) : null}
                         </div>
                       </td>
@@ -490,14 +508,19 @@ export default async function HigienizacaoHortifrutiPage({
               {modalError}
             </p>
           ) : null}
-          {registroParaExcluirBloqueado ? (
+          {registroParaExcluirRestrito && !podeGerenciarHistorico ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              Este registro pertence a um mês fechado e não pode ser excluído.
+              Este registro é histórico ou pertence a um mês fechado e não pode ser excluído por este perfil.
             </p>
           ) : (
             <form action={deleteRegistroAction}>
               <input type="hidden" name="id" value={registroParaExcluir.id} />
               <input type="hidden" name="returnTo" value={deleteReturnTo} />
+              {registroParaExcluirRestrito && podeGerenciarHistorico ? (
+                <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  Este registro é histórico ou pertence a um mês fechado. A exclusão será permitida para DEV e registrada em auditoria.
+                </p>
+              ) : null}
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 Confirme a exclusão deste registro. A validação de permissão também será feita no servidor.
               </p>

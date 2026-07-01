@@ -14,7 +14,9 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
+  canManageHistoricalRecords,
   createSignatureLog,
+  ensureDevUserForHistoricalRecords,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -596,10 +598,18 @@ export async function updateRegistroAction(formData: FormData) {
     }
 
     const existingPeriod = getMonthYear(existing.data);
-    if (await isMonthSigned(existingPeriod.mes, existingPeriod.ano)) {
+    const monthSigned = await isMonthSigned(existingPeriod.mes, existingPeriod.ano);
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.temperatura",
+      existing.data,
+      getTodaySystemDate()
+    );
+    const usesHistoricalOverride = monthSigned || !canEditCurrentScope;
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error("O mês deste registro já foi fechado e não pode ser editado.");
     }
-    if (!canEditRecordDate(actor, "modulo.temperatura", existing.data, getTodaySystemDate())) {
+    if (!canEditCurrentScope && !canManageHistoricalRecords(actor)) {
       throw new Error("Seu perfil não pode editar este registro de temperatura.");
     }
 
@@ -675,6 +685,19 @@ export async function updateRegistroAction(formData: FormData) {
       }
     });
 
+    if (usesHistoricalOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "controle-temperatura-equipamentos/edicao-historica",
+        referenciaId: String(existing.id),
+        observacao: [
+          `Edição histórica do registro ${existing.id}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
+
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Registro Atualizado com Sucesso.");
   } catch (error) {
@@ -692,7 +715,6 @@ export async function deleteRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensurePermission(actor, "modulo.temperatura.excluir_registro", "Seu perfil não pode excluir registros de temperatura.");
 
     const id = parsePositiveInt(getInputValue(formData, "id"));
     if (!id) {
@@ -707,20 +729,52 @@ export async function deleteRegistroAction(formData: FormData) {
       throw new Error("Registro não encontrado.");
     }
 
-    if (!canEditRecordDate(actor, "modulo.temperatura", existing.data, getTodaySystemDate())) {
+    const canEditCurrentScope = canEditRecordDate(
+      actor,
+      "modulo.temperatura",
+      existing.data,
+      getTodaySystemDate()
+    );
+    const { mes, ano } = getMonthYear(existing.data);
+    const monthSigned = await isMonthSigned(mes, ano);
+    const usesHistoricalOverride = monthSigned || !canEditCurrentScope;
+
+    if (usesHistoricalOverride) {
+      ensureDevUserForHistoricalRecords(actor);
+    } else {
+      ensurePermission(
+        actor,
+        "modulo.temperatura.excluir_registro",
+        "Seu perfil não pode excluir registros de temperatura."
+      );
+    }
+
+    if (!canEditCurrentScope && !canManageHistoricalRecords(actor)) {
       throw new Error(
         "Registros históricos não podem ser editados. Apenas registros do dia atual podem ser ajustados."
       );
     }
 
-    const { mes, ano } = getMonthYear(existing.data);
-    if (await isMonthSigned(mes, ano)) {
+    if (monthSigned && !canManageHistoricalRecords(actor)) {
       throw new Error(
         "O mês deste registro já foi fechado e o item não pode ser excluído."
       );
     }
 
     await prisma.controleTemperaturaEquipamento.delete({ where: { id } });
+
+    if (usesHistoricalOverride) {
+      await createSignatureLog({
+        user: actor,
+        tipo: "RESPONSAVEL_TECNICO",
+        modulo: "controle-temperatura-equipamentos/exclusao-historica",
+        referenciaId: String(existing.id),
+        observacao: [
+          `Exclusão histórica do registro ${existing.id}.`,
+          `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+        ].join(" ")
+      });
+    }
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Registro Excluído com Sucesso.");

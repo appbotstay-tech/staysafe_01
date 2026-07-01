@@ -9,12 +9,12 @@ import Link from "next/link";
 import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
-import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
-import { updateHistoricoRegistroAction } from "../actions";
+import { deleteHistoricoRegistroAction, updateHistoricoRegistroAction } from "../actions";
 import {
   buildBuffetServiceHistoryGroups,
   buildBuffetServiceHistoryTotals,
@@ -122,9 +122,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
-  const canEditHistory = authUser
-    ? hasPermission(authUser, "modulo.amostras.editar_historico")
-    : false;
+  const canManageHistory = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -139,6 +137,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const diaAberto = firstParam(params.dia).trim();
   const editRegistroId = parsePositiveInt(firstParam(params.editRegistroId).trim());
+  const deleteRegistroId = parsePositiveInt(firstParam(params.deleteRegistroId).trim());
 
   const todayMonth = getAppMonthYear(getAppDate());
   const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
@@ -252,8 +251,11 @@ export default async function ControleBuffetAmostrasHistoricoPage({
   const assinaturasMensaisPorData = new Set(
     assinaturasMensais.map((assinatura) => formatAppDateInput(assinatura.dataReferencia))
   );
-  const registroParaEditar = canEditHistory && editRegistroId
+  const registroParaEditar = canManageHistory && editRegistroId
     ? registros.find((registro) => registro.id === editRegistroId) ?? null
+    : null;
+  const registroParaExcluir = canManageHistory && deleteRegistroId
+    ? registros.find((registro) => registro.id === deleteRegistroId) ?? null
     : null;
   const periodoRegistroParaEditar = registroParaEditar
     ? getMonthYear(registroParaEditar.data)
@@ -313,10 +315,22 @@ export default async function ControleBuffetAmostrasHistoricoPage({
     query.set("editRegistroId", String(registroId));
     return buildPathWithParams(query);
   };
+  const buildDeleteRecordHref = (dateInput: string, registroId: number): string => {
+    const query = new URLSearchParams(parametrosRetorno);
+    query.set("dia", dateInput);
+    query.set("deleteRegistroId", String(registroId));
+    return buildPathWithParams(query);
+  };
   const diaSelecionado = diaAberto ? diasHistorico.find((dia) => dia.dataInput === diaAberto) : null;
   const editReturnTo = diaSelecionado ? buildOpenDayHref(diaSelecionado.dataInput) : returnTo;
   const editFormReturnTo = registroParaEditar
     ? buildEditRecordHref(formatAppDateInput(registroParaEditar.data), registroParaEditar.id)
+    : returnTo;
+  const deleteReturnTo = registroParaExcluir
+    ? buildDeleteRecordHref(formatAppDateInput(registroParaExcluir.data), registroParaExcluir.id)
+    : returnTo;
+  const deleteCancelHref = registroParaExcluir
+    ? buildOpenDayHref(formatAppDateInput(registroParaExcluir.data))
     : returnTo;
 
   const totaisMensais = buildBuffetServiceHistoryTotals(gruposMensais);
@@ -549,7 +563,7 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                         <th className="px-3 py-2">Status item</th>
                         <th className="px-3 py-2">Ação corretiva</th>
                         <th className="px-3 py-2">Observação</th>
-                        {canEditHistory ? <th className="px-3 py-2">Ação</th> : null}
+                        {canManageHistory ? <th className="px-3 py-2">Ação</th> : null}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -564,15 +578,24 @@ export default async function ControleBuffetAmostrasHistoricoPage({
                           <td className="px-3 py-2"><ItemStatusBadge status={item.status} /></td>
                           <td className="px-3 py-2">{item.acaoCorretiva}</td>
                           <td className="px-3 py-2 max-w-80 whitespace-normal break-words">{item.observacao}</td>
-                          {canEditHistory ? (
+                          {canManageHistory ? (
                             <td className="px-3 py-2">
-                              <Link
-                                href={buildEditRecordHref(diaSelecionado.dataInput, item.id)}
-                                scroll={false}
-                                className="btn-action"
-                              >
-                                Editar
-                              </Link>
+                              <div className="btn-group">
+                                <Link
+                                  href={buildEditRecordHref(diaSelecionado.dataInput, item.id)}
+                                  scroll={false}
+                                  className="btn-action"
+                                >
+                                  Editar
+                                </Link>
+                                <Link
+                                  href={buildDeleteRecordHref(diaSelecionado.dataInput, item.id)}
+                                  scroll={false}
+                                  className="btn-danger"
+                                >
+                                  Excluir
+                                </Link>
+                              </div>
                             </td>
                           ) : null}
                         </tr>
@@ -729,6 +752,43 @@ export default async function ControleBuffetAmostrasHistoricoPage({
               </Link>
               <button type="submit" className="btn-primary">
                 Salvar alterações
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
+
+      {registroParaExcluir ? (
+        <ActionModal
+          title="Excluir registro histórico"
+          cancelHref={deleteCancelHref}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              {registroParaExcluir.itemNome} - {formatAppDate(registroParaExcluir.data)}
+            </p>
+          }
+        >
+          <form action={deleteHistoricoRegistroAction} className="space-y-4">
+            <input type="hidden" name="registroId" value={String(registroParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteReturnTo} />
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Esta ação é exclusiva do usuário DEV. O registro será excluído do histórico, mas
+              assinaturas e fechamentos já realizados não serão removidos automaticamente.
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Tem certeza de que deseja excluir este registro histórico? Esta ação não deve ser
+              usada para ajustes operacionais do dia.
+            </p>
+
+            <ModalActions>
+              <Link href={deleteCancelHref} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
               </button>
             </ModalActions>
           </form>

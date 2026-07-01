@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
@@ -19,6 +20,7 @@ import {
 } from "../utils";
 
 const PAGE_PATH = "/controle-qualidade-oleo/historico";
+const MODULE_PATH = "/controle-qualidade-oleo";
 const CARD_CLASS = "bpma-card";
 const INPUT_CLASS = "bpma-input";
 const MODULE_CODE = "oleo";
@@ -74,6 +76,7 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const canManageHistory = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -187,6 +190,17 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
     const query = new URLSearchParams(parametrosRetorno);
     query.set("dia", dateInput);
     return buildPathWithParams(query);
+  };
+  const buildManageRecordHref = (
+    registroId: number,
+    action: "editId" | "deleteId",
+    dataInput: string
+  ): string => {
+    const query = new URLSearchParams({
+      filtroData: dataInput,
+      [action]: String(registroId)
+    });
+    return `${MODULE_PATH}?${query.toString()}`;
   };
 
   const totalAlertasMensais = registrosMensais.filter(isOilAlert).length;
@@ -378,7 +392,7 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
             />
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            <table className="min-w-[920px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
               <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2">% da Fita</th>
@@ -386,6 +400,7 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Responsável</th>
                   <th className="px-3 py-2">Observação / ação</th>
+                  {canManageHistory ? <th className="px-3 py-2">Ações</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -402,6 +417,32 @@ export default async function ControleQualidadeOleoHistoricoPage({ searchParams 
                     <td className="px-3 py-2 max-w-80 whitespace-normal break-words">
                       {registro.observacao ?? registro.orientacao}
                     </td>
+                    {canManageHistory ? (
+                      <td className="px-3 py-2">
+                        <div className="btn-group">
+                          <Link
+                            href={buildManageRecordHref(
+                              registro.id,
+                              "editId",
+                              formatAppDateInput(registro.data)
+                            )}
+                            className="btn-action"
+                          >
+                            Editar
+                          </Link>
+                          <Link
+                            href={buildManageRecordHref(
+                              registro.id,
+                              "deleteId",
+                              formatAppDateInput(registro.data)
+                            )}
+                            className="btn-danger"
+                          >
+                            Excluir
+                          </Link>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
 import { ActionModal } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
 import { getImageDataUrl, hasStoredImage as hasImageEvidence } from "@/lib/image-upload";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
@@ -28,6 +29,7 @@ import {
 } from "../utils";
 
 const PAGE_PATH = "/controle-temperatura-equipamentos/historico";
+const MODULE_PATH = "/controle-temperatura-equipamentos";
 const CARD_CLASS = "bpma-card";
 const INPUT_CLASS = "bpma-input";
 const MODULE_CODE = "temperatura";
@@ -91,6 +93,7 @@ export default async function ControleTemperaturaHistoricoPage({
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const canManageHistory = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -211,6 +214,17 @@ export default async function ControleTemperaturaHistoricoPage({
     }
     query.set("fotoId", String(registroId));
     return buildPathWithParams(query);
+  };
+  const buildManageRecordHref = (
+    registroId: number,
+    action: "editId" | "deleteId",
+    dataInput: string
+  ): string => {
+    const query = new URLSearchParams({
+      filtroData: dataInput,
+      [action]: String(registroId)
+    });
+    return `${MODULE_PATH}?${query.toString()}`;
   };
   const closePhotoHref = grupoSelecionado
     ? buildOpenDayHref(formatAppDateInput(grupoSelecionado.data))
@@ -401,7 +415,7 @@ export default async function ControleTemperaturaHistoricoPage({
             />
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[1080px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            <table className="min-w-[1180px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
               <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2">Equipamento</th>
@@ -413,6 +427,7 @@ export default async function ControleTemperaturaHistoricoPage({
                   <th className="px-3 py-2">Foto</th>
                   <th className="px-3 py-2">Responsável</th>
                   <th className="px-3 py-2">Observações</th>
+                  {canManageHistory ? <th className="px-3 py-2">Ações</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -460,6 +475,32 @@ export default async function ControleTemperaturaHistoricoPage({
                       </td>
                       <td className="px-3 py-2">{registro.responsavel}</td>
                       <td className="px-3 py-2 max-w-80 whitespace-normal break-words">{observacaoRegistro?.trim() || "-"}</td>
+                      {canManageHistory ? (
+                        <td className="px-3 py-2">
+                          <div className="btn-group">
+                            <Link
+                              href={buildManageRecordHref(
+                                registro.id,
+                                "editId",
+                                formatAppDateInput(registro.data)
+                              )}
+                              className="btn-action"
+                            >
+                              Editar
+                            </Link>
+                            <Link
+                              href={buildManageRecordHref(
+                                registro.id,
+                                "deleteId",
+                                formatAppDateInput(registro.data)
+                              )}
+                              className="btn-danger"
+                            >
+                              Excluir
+                            </Link>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}

@@ -15,6 +15,7 @@ import {
   getAppMonthDateRange,
   getAppMonthYear
 } from "@/lib/date-time";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { prisma } from "@/lib/prisma";
 
@@ -67,6 +68,7 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const canManageHistory = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -176,6 +178,17 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
     const query = new URLSearchParams(parametrosRetorno);
     query.set("dia", dateInput);
     return buildPathWithParams(query);
+  };
+  const buildManageRecordHref = (
+    registroId: number,
+    action: "editId" | "deleteId",
+    dataInput: string
+  ): string => {
+    const query = new URLSearchParams({
+      filtroData: dataInput,
+      [action]: String(registroId)
+    });
+    return `${MODULE_PATH}?${query.toString()}`;
   };
 
   const diasComRegistro = new Set(
@@ -360,7 +373,7 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+            <table className="min-w-[980px] divide-y divide-slate-200 text-sm dark:divide-slate-700">
               <thead className="bg-slate-50 text-left text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2">Hortifruti</th>
@@ -370,6 +383,7 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
                   <th className="px-3 py-2">Duração</th>
                   <th className="px-3 py-2">Responsável</th>
                   <th className="px-3 py-2 min-w-56">Observações</th>
+                  {canManageHistory ? <th className="px-3 py-2">Ações</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -384,6 +398,32 @@ export default async function HigienizacaoHortifrutiHistoricoPage({
                     <td className="px-3 py-2 max-w-80 whitespace-normal break-words">
                       {registro.observacoes ?? "-"}
                     </td>
+                    {canManageHistory ? (
+                      <td className="px-3 py-2">
+                        <div className="btn-group">
+                          <Link
+                            href={buildManageRecordHref(
+                              registro.id,
+                              "editId",
+                              formatAppDateInput(registro.data)
+                            )}
+                            className="btn-action"
+                          >
+                            Editar
+                          </Link>
+                          <Link
+                            href={buildManageRecordHref(
+                              registro.id,
+                              "deleteId",
+                              formatAppDateInput(registro.data)
+                            )}
+                            className="btn-danger"
+                          >
+                            Excluir
+                          </Link>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

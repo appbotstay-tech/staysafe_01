@@ -13,6 +13,7 @@ import { rethrowIfRedirectError } from "@/lib/redirect-error";
 import { getCurrentUserForAction } from "@/lib/auth-session";
 import {
   createSignatureLog,
+  ensureDevUserForHistoricalRecords,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -154,6 +155,7 @@ function redirectWithFeedback(
     url.searchParams.delete("editItemId");
     url.searchParams.delete("editAcaoId");
     url.searchParams.delete("editRegistroId");
+    url.searchParams.delete("deleteRegistroId");
     url.searchParams.delete("signItemId");
   }
   url.searchParams.set("feedbackType", feedbackType);
@@ -925,11 +927,7 @@ export async function updateHistoricoRegistroAction(formData: FormData) {
 
   try {
     const actor = await getCurrentUserForAction();
-    ensurePermission(
-      actor,
-      "modulo.amostras.editar_historico",
-      "Seu perfil não pode editar registros históricos de amostras."
-    );
+    ensureDevUserForHistoricalRecords(actor);
 
     const registroId = parsePositiveInt(getInputValue(formData, "registroId"));
     const temperaturaTipo = getInputValue(formData, "temperaturaTipo");
@@ -1039,6 +1037,66 @@ export async function updateHistoricoRegistroAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível atualizar o registro histórico.")
+    );
+  }
+}
+
+export async function deleteHistoricoRegistroAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, HISTORY_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureDevUserForHistoricalRecords(actor);
+
+    const registroId = parsePositiveInt(getInputValue(formData, "registroId"));
+    if (!registroId) {
+      throw new Error("Registro inválido para exclusão histórica.");
+    }
+
+    const registro = await prisma.controleBuffetAmostraRegistro.findUnique({
+      where: { id: registroId },
+      include: {
+        servico: {
+          select: { nome: true }
+        }
+      }
+    });
+
+    if (!registro) {
+      throw new Error("Registro histórico não encontrado.");
+    }
+
+    const monthClosed = await isHistoricalBuffetMonthClosed(registro.data);
+
+    await prisma.controleBuffetAmostraRegistro.delete({
+      where: { id: registro.id }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "controle-buffet-amostras/exclusao-historica",
+      referenciaId: String(registro.id),
+      observacao: [
+        `Exclusão histórica do registro ${registro.id} em ${formatDateInput(registro.data)}.`,
+        `Serviço: ${registro.servico.nome}.`,
+        `Item: ${registro.itemNome}.`,
+        `Mês fechado: ${monthClosed ? "sim" : "não"}.`,
+        `Assinatura do item preservada no log: ${registro.assinaturaDataHora ? "sim" : "não"}.`,
+        `Assinatura do supervisor preservada no log: ${
+          registro.assinaturaNutricionistaDataHora ? "sim" : "não"
+        }.`
+      ].join(" ")
+    });
+
+    revalidateModulePaths(registro.servicoId);
+    redirectWithFeedback(returnTo, "success", "Registro histórico excluído com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir o registro histórico.")
     );
   }
 }

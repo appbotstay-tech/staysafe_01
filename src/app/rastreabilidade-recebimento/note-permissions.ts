@@ -1,5 +1,6 @@
 import { StatusNotaRecebimento, StatusRecebimento } from "@prisma/client";
 
+import { canManageHistoricalRecords } from "@/lib/authz";
 import {
   canEditRecordDate,
   hasPermission,
@@ -74,6 +75,10 @@ export function getReceivingNoteEditAccessReason(
 ): ReceivingNoteEditAccessReason {
   if (!params.user) {
     return "NO_USER";
+  }
+
+  if (canManageHistoricalRecords(params.user)) {
+    return "EDITABLE";
   }
 
   if (params.monthSigned) {
