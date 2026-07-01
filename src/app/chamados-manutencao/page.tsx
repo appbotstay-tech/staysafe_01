@@ -9,7 +9,9 @@ import Link from "next/link";
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ImageUploadField } from "@/components/forms/image-upload-field";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import {
   formatAppDateTime,
   getAppNow,
@@ -25,7 +27,7 @@ import {
   getRoleLabel
 } from "@/lib/rbac";
 
-import { createChamadoAction } from "./actions";
+import { createChamadoAction, deleteChamadoAction } from "./actions";
 
 const PAGE_PATH = "/chamados-manutencao";
 const CARD_CLASS =
@@ -40,6 +42,20 @@ export const dynamic = "force-dynamic";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function buildPathWithParams(params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${PAGE_PATH}?${query}` : PAGE_PATH;
+}
+
+function parsePositiveInt(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function formatDateTimeDisplay(date: Date): string {
@@ -101,6 +117,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const perfilLogado = authUser ? getRoleLabel(authUser.perfil) : "";
   const podeAtualizar = authUser ? canUpdateMaintenanceTicket(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeExcluirChamados = authUser ? canManageHistoricalRecords(authUser) : false;
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const now = getAppNow();
 
@@ -122,6 +139,7 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
   const filtroStatus = parseStatus(firstParam(params.filtroStatus));
   const filtroOrigem = firstParam(params.filtroOrigem).trim();
   const filtroData = firstParam(params.filtroData).trim();
+  const deleteId = parsePositiveInt(firstParam(params.deleteId).trim());
 
   const where: Prisma.ChamadoManutencaoWhereInput = {};
   if (filtroStatus) {
@@ -144,6 +162,21 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
     where,
     orderBy: [{ dataHoraCriacao: "desc" }]
   });
+  const chamadoParaExcluir = podeExcluirChamados && deleteId
+    ? await prisma.chamadoManutencao.findUnique({ where: { id: deleteId } })
+    : null;
+  const parametrosRetorno = new URLSearchParams();
+  if (filtroStatus) parametrosRetorno.set("filtroStatus", filtroStatus);
+  if (filtroOrigem) parametrosRetorno.set("filtroOrigem", filtroOrigem);
+  if (filtroData) parametrosRetorno.set("filtroData", filtroData);
+  const returnTo = buildPathWithParams(parametrosRetorno);
+  const deleteReturnTo = chamadoParaExcluir
+    ? buildPathWithParams(
+        new URLSearchParams([...parametrosRetorno.entries(), ["deleteId", String(chamadoParaExcluir.id)]])
+      )
+    : returnTo;
+  const buildDeleteHref = (id: number): string =>
+    buildPathWithParams(new URLSearchParams([...parametrosRetorno.entries(), ["deleteId", String(id)]]));
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -387,6 +420,11 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
                             Atualizar Status
                           </Link>
                         ) : null}
+                        {podeExcluirChamados ? (
+                          <Link href={buildDeleteHref(chamado.id)} scroll={false} className="btn-danger">
+                            Excluir
+                          </Link>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -396,6 +434,36 @@ export default async function ChamadosManutencaoPage({ searchParams }: PageProps
           </table>
         </div>
       </section>
+
+      {chamadoParaExcluir ? (
+        <ActionModal
+          title="Excluir chamado"
+          cancelHref={returnTo}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Chamado #{chamadoParaExcluir.id} - {chamadoParaExcluir.titulo}
+            </p>
+          }
+        >
+          <form action={deleteChamadoAction} className="space-y-4">
+            <input type="hidden" name="chamadoId" value={String(chamadoParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteReturnTo} />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Tem certeza que deseja excluir este registro? Esta ação é restrita ao DEV e deve
+              ser usada apenas para correção administrativa.
+            </div>
+            <ModalActions>
+              <Link href={returnTo} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir chamado
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
     </div>
   );
 }

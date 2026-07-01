@@ -13,6 +13,7 @@ import {
   createSignatureLog,
   ensureCanOpenMaintenance,
   ensureCanUpdateMaintenance,
+  ensureDevUserForHistoricalRecords,
   validateSignaturePassword
 } from "@/lib/authz";
 import { getAppNow } from "@/lib/date-time";
@@ -87,6 +88,7 @@ function redirectWithFeedback(
   const url = new URL(returnTo, "http://localhost");
   if (feedbackType === "success") {
     url.searchParams.delete("abrir");
+    url.searchParams.delete("deleteId");
     url.searchParams.delete("statusModal");
   }
   if (extraParams) {
@@ -237,6 +239,58 @@ export async function updateChamadoStatusAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível processar o chamado de manutenção.")
+    );
+  }
+}
+
+export async function deleteChamadoAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureDevUserForHistoricalRecords(
+      actor,
+      "Apenas o usuário DEV pode excluir registros históricos."
+    );
+
+    const chamadoId = parsePositiveInt(getInputValue(formData, "chamadoId"));
+    if (!chamadoId) {
+      throw new Error("Chamado inválido para exclusão.");
+    }
+
+    const chamado = await prisma.chamadoManutencao.findUnique({
+      where: { id: chamadoId }
+    });
+
+    if (!chamado) {
+      throw new Error("Chamado não encontrado.");
+    }
+
+    await prisma.chamadoManutencao.delete({
+      where: { id: chamado.id }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "chamados-manutencao/exclusao",
+      referenciaId: String(chamado.id),
+      observacao: [
+        `Exclusão do chamado ${chamado.id}.`,
+        `Título: ${chamado.titulo}.`,
+        `Origem: ${chamado.origem}.`,
+        `Status: ${chamado.status}.`
+      ].join(" ")
+    });
+
+    revalidatePaths(chamado.id);
+    redirectWithFeedback(returnTo, "success", "Chamado excluído com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir o chamado de manutenção.")
     );
   }
 }

@@ -8,7 +8,9 @@ import {
 import Link from "next/link";
 
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import {
   canManageModuleOptions,
@@ -16,6 +18,7 @@ import {
   canViewManagementSections
 } from "@/lib/rbac";
 
+import { deleteWeeklyRecordAction } from "../actions";
 import { MONTH_OPTIONS, WEEKLY_STATUS_OPTIONS } from "../constants";
 import {
   consolidateWeeklyExecutionsByAreaWeek,
@@ -148,6 +151,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeExcluirRegistros = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -160,6 +164,7 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   const filtroArea = firstParam(params.filtroArea).trim();
   const filtroStatusRaw = firstParam(params.filtroStatus).trim();
   const filtroItem = firstParam(params.filtroItem).trim();
+  const deleteWeeklyRecordId = parsePositiveInt(firstParam(params.deleteWeeklyRecordId).trim());
 
   const hasManualFilters =
     !isColaborador &&
@@ -310,6 +315,23 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
         orderBy: [{ item: { ordem: "asc" } }, { id: "asc" }]
       })
     : [];
+  const registroSemanalParaExcluir =
+    podeExcluirRegistros && deleteWeeklyRecordId
+      ? await prisma.planoLimpezaSemanalExecucao.findUnique({
+          where: { id: deleteWeeklyRecordId },
+          select: {
+            id: true,
+            dataExecucao: true,
+            area: true,
+            itemDescricao: true,
+            item: {
+              select: {
+                oQueLimpar: true
+              }
+            }
+          }
+        })
+      : null;
 
   const periodos = new Map<string, { mes: number; ano: number }>();
   for (const summary of summaries) {
@@ -318,6 +340,10 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   }
   if (executionParaAssinatura) {
     const periodo = getMonthYear(executionParaAssinatura.weekStart);
+    periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
+  }
+  if (registroSemanalParaExcluir) {
+    const periodo = getMonthYear(registroSemanalParaExcluir.dataExecucao);
     periodos.set(periodKey(periodo.mes, periodo.ano), periodo);
   }
   const periodosFechados = periodos.size
@@ -374,6 +400,31 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
   if (filtroStatus) paramsRetorno.set("filtroStatus", filtroStatus);
   if (filtroItem) paramsRetorno.set("filtroItem", filtroItem);
   const returnTo = buildPathWithParams(paramsRetorno);
+  const buildOpenExecutionHref = (executionId: number): string => {
+    const query = new URLSearchParams(paramsRetorno);
+    query.set("signId", String(executionId));
+    return buildPathWithParams(query);
+  };
+  const buildDeleteWeeklyRecordHref = (registroId: number): string => {
+    const query = new URLSearchParams(paramsRetorno);
+    if (executionParaAssinatura) {
+      query.set("signId", String(executionParaAssinatura.executionId));
+    }
+    query.set("deleteWeeklyRecordId", String(registroId));
+    return buildPathWithParams(query);
+  };
+  const deleteWeeklyRecordReturnTo = registroSemanalParaExcluir
+    ? buildDeleteWeeklyRecordHref(registroSemanalParaExcluir.id)
+    : returnTo;
+  const deleteWeeklyRecordCancelHref = executionParaAssinatura
+    ? buildOpenExecutionHref(executionParaAssinatura.executionId)
+    : returnTo;
+  const deleteWeeklyRecordPeriod = registroSemanalParaExcluir
+    ? getMonthYear(registroSemanalParaExcluir.dataExecucao)
+    : null;
+  const deleteWeeklyRecordMonthClosed = deleteWeeklyRecordPeriod
+    ? fechadosSet.has(periodKey(deleteWeeklyRecordPeriod.mes, deleteWeeklyRecordPeriod.ano))
+    : false;
 
   return (
     <div className="space-y-6 dark:text-slate-100">
@@ -619,7 +670,8 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
 
       {executionParaAssinatura &&
       executionItemsParaAssinatura.length > 0 &&
-      !assinaturaBloqueadaPorFechamento ? (
+      !assinaturaBloqueadaPorFechamento &&
+      !registroSemanalParaExcluir ? (
         <WeeklySignChecklistModal
           closeHref={returnTo}
           returnTo={returnTo}
@@ -627,6 +679,8 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
           podeAssinarSupervisor={podeAssinarSupervisorSelecionado}
           podeAssinarItens={podeAssinarItensSelecionados}
           podeAssinarTodosItens={podeAssinarTodosItensSelecionados}
+          podeExcluirItens={podeExcluirRegistros}
+          buildDeleteItemHref={buildDeleteWeeklyRecordHref}
           isHistorico={assinaturaHistoricaSelecionada}
           dataHoraAtual={formatDateTimeDisplay(now)}
           execution={executionParaAssinatura}
@@ -644,6 +698,48 @@ export default async function PlanoLimpezaSemanalPage({ searchParams }: PageProp
             }
           }))}
         />
+      ) : null}
+
+      {registroSemanalParaExcluir ? (
+        <ActionModal
+          title="Excluir Registro Semanal"
+          cancelHref={deleteWeeklyRecordCancelHref}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Confirme a exclusão do item{" "}
+              <strong>
+                {registroSemanalParaExcluir.itemDescricao ??
+                  registroSemanalParaExcluir.item.oQueLimpar}
+              </strong>{" "}
+              em {formatDateDisplay(registroSemanalParaExcluir.dataExecucao)}.
+            </p>
+          }
+        >
+          <form action={deleteWeeklyRecordAction} className="space-y-4">
+            <input type="hidden" name="id" value={String(registroSemanalParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteWeeklyRecordReturnTo} />
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Apenas o usuário DEV pode excluir registros históricos. Esta ação remove somente
+              este registro operacional do plano semanal.
+              {deleteWeeklyRecordMonthClosed ? (
+                <span className="mt-2 block font-medium">
+                  Este registro pertence a um mês fechado.
+                </span>
+              ) : null}
+            </div>
+
+            <ModalActions>
+              <Link href={deleteWeeklyRecordCancelHref} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
       ) : null}
     </div>
   );

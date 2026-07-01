@@ -4,13 +4,15 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { formatAppDateTime } from "@/lib/date-time";
 import { getImageDataUrl } from "@/lib/image-upload";
 import { prisma } from "@/lib/prisma";
 import { canUpdateMaintenanceTicket } from "@/lib/rbac";
 
-import { updateChamadoStatusAction } from "../actions";
+import { deleteChamadoAction, updateChamadoStatusAction } from "../actions";
 
 const PAGE_PATH = "/chamados-manutencao";
 const CARD_CLASS =
@@ -84,6 +86,7 @@ export default async function ChamadoManutencaoDetalhePage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const canUpdate = authUser ? canUpdateMaintenanceTicket(authUser) : false;
+  const canDelete = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const { id } = await params;
   const chamadoId = parsePositiveInt(id);
@@ -105,8 +108,10 @@ export default async function ChamadoManutencaoDetalhePage({
   const feedback = firstParam(query.feedback).trim();
   const feedbackType = firstParam(query.feedbackType) === "error" ? "error" : "success";
   const statusModalOpen = firstParam(query.statusModal) === "1";
+  const deleteModalOpen = canDelete && firstParam(query.delete) === "1";
   const modalError = feedback && feedbackType === "error" ? feedback : "";
   const statusReturnTo = `${PAGE_PATH}/${chamado.id}?statusModal=1`;
+  const deleteReturnTo = `${PAGE_PATH}/${chamado.id}?delete=1`;
   const fotoDataUrl = getImageDataUrl(chamado.fotoMimeType, chamado.fotoBase64);
 
   return (
@@ -123,6 +128,11 @@ export default async function ChamadoManutencaoDetalhePage({
             <Link href={PAGE_PATH} className="btn-secondary">
               ← Voltar ao Módulo
             </Link>
+            {canDelete ? (
+              <Link href={deleteReturnTo} scroll={false} className="btn-danger">
+                Excluir
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
@@ -263,6 +273,36 @@ export default async function ChamadoManutencaoDetalhePage({
             )}
           </section>
         </div>
+      ) : null}
+
+      {deleteModalOpen ? (
+        <ActionModal
+          title="Excluir chamado"
+          cancelHref={`${PAGE_PATH}/${chamado.id}`}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Chamado #{chamado.id} - {chamado.titulo}
+            </p>
+          }
+        >
+          <form action={deleteChamadoAction} className="space-y-4">
+            <input type="hidden" name="chamadoId" value={String(chamado.id)} />
+            <input type="hidden" name="returnTo" value={deleteReturnTo} />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Tem certeza que deseja excluir este registro? Esta ação é restrita ao DEV e deve
+              ser usada apenas para correção administrativa.
+            </div>
+            <ModalActions>
+              <Link href={`${PAGE_PATH}/${chamado.id}`} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir chamado
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
       ) : null}
     </div>
   );

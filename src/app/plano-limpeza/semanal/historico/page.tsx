@@ -2,8 +2,9 @@ import { Prisma, StatusPlanoLimpeza } from "@prisma/client";
 import Link from "next/link";
 
 import { MonthlyClosureSection } from "@/components/historico/technical-signature";
-import { ActionModal } from "@/components/ui/action-modal";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import {
   formatAppDateInput,
   getAppDate,
@@ -15,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { canSignAsResponsible, getRoleLabel, type UserRole } from "@/lib/rbac";
 
 import {
+  deleteWeeklyRecordAction,
   signWeeklyAreaPendingItemsAction,
   signWeeklyAreaSupervisorAction,
   updateWeeklyRecordAction
@@ -82,6 +84,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
 }: PageProps) {
   const authUser = await getCurrentUser();
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const podeExcluirRegistros = authUser ? canManageHistoricalRecords(authUser) : false;
   const now = getCurrentSystemDateTime();
 
   const params = await searchParams;
@@ -95,6 +98,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
   const filtroItem = firstParam(params.filtroItem).trim();
   const areaAberta = firstParam(params.areaAberta).trim();
   const semanaInicioAberta = firstParam(params.semanaInicio).trim();
+  const deleteWeeklyRecordId = parsePositiveInt(firstParam(params.deleteWeeklyRecordId).trim());
   const todayMonth = getAppMonthYear(getAppDate());
   const selectedMonth = filtroMes && filtroMes <= 12 ? filtroMes : todayMonth.mes;
   const selectedYear = filtroAno ?? todayMonth.ano;
@@ -345,6 +349,25 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         );
       })
     : [];
+  const registroSemanalParaExcluir =
+    podeExcluirRegistros && deleteWeeklyRecordId
+      ? rawRecords.find((record) => record.id === deleteWeeklyRecordId) ?? null
+      : null;
+  const buildDeleteWeeklyRecordHref = (registroId: number): string => {
+    const deleteParams = new URLSearchParams(returnParams);
+    if (selectedSummary) {
+      deleteParams.set("areaAberta", selectedSummary.area);
+      deleteParams.set("semanaInicio", formatDateInput(selectedSummary.weekStart));
+    }
+    deleteParams.set("deleteWeeklyRecordId", String(registroId));
+    return buildPathWithParams(deleteParams);
+  };
+  const deleteWeeklyRecordReturnTo = registroSemanalParaExcluir
+    ? buildDeleteWeeklyRecordHref(registroSemanalParaExcluir.id)
+    : filteredReturnTo;
+  const deleteWeeklyRecordCancelHref = selectedSummary
+    ? buildOpenSummaryHref(selectedSummary)
+    : filteredReturnTo;
   const selectedSignature = selectedSummary
     ? supervisorSignatureByAreaWeek.get(selectedSummaryKey) ?? null
     : null;
@@ -619,7 +642,7 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
         </div>
       </section>
 
-      {selectedSummary ? (
+      {selectedSummary && !registroSemanalParaExcluir ? (
         <ActionModal
           title="Detalhes da Área na Semana"
           cancelHref={filteredReturnTo}
@@ -894,44 +917,55 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
                           </td>
                           <td className="px-3 py-2">{observacoes || "-"}</td>
                           <td className="px-3 py-2">
-                            {!record.assinaturaResponsavel.trim() &&
-                            selectedCanSignItemRecords ? (
-                              <form action={updateWeeklyRecordAction} className="grid min-w-[300px] gap-2">
-                                <input type="hidden" name="id" value={String(record.id)} />
-                                <input
-                                  type="hidden"
-                                  name="returnTo"
-                                  value={buildOpenSummaryHref(selectedSummary)}
-                                />
-                                <input type="hidden" name="etapa" value="responsavel" />
-                                <input
-                                  type="password"
-                                  name="senhaConfirmacao"
-                                  required
-                                  placeholder="Confirme sua senha"
-                                  className="bpma-input text-xs"
-                                />
-                                <input
-                                  type="text"
-                                  name="observacaoAssinatura"
-                                  placeholder="Observação (Opcional)"
-                                  className="bpma-input text-xs"
-                                />
-                                <button type="submit" className="btn-primary whitespace-nowrap">
-                                  Assinar item
-                                </button>
-                              </form>
-                            ) : !record.assinaturaResponsavel.trim() ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {selectedIsHistoricalWeek
-                                  ? "Sem permissão para assinar item histórico"
-                                  : "Sem permissão para assinar item"}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                Item executado
-                              </span>
-                            )}
+                            <div className="grid gap-2">
+                              {!record.assinaturaResponsavel.trim() &&
+                              selectedCanSignItemRecords ? (
+                                <form action={updateWeeklyRecordAction} className="grid min-w-[300px] gap-2">
+                                  <input type="hidden" name="id" value={String(record.id)} />
+                                  <input
+                                    type="hidden"
+                                    name="returnTo"
+                                    value={buildOpenSummaryHref(selectedSummary)}
+                                  />
+                                  <input type="hidden" name="etapa" value="responsavel" />
+                                  <input
+                                    type="password"
+                                    name="senhaConfirmacao"
+                                    required
+                                    placeholder="Confirme sua senha"
+                                    className="bpma-input text-xs"
+                                  />
+                                  <input
+                                    type="text"
+                                    name="observacaoAssinatura"
+                                    placeholder="Observação (Opcional)"
+                                    className="bpma-input text-xs"
+                                  />
+                                  <button type="submit" className="btn-primary whitespace-nowrap">
+                                    Assinar item
+                                  </button>
+                                </form>
+                              ) : !record.assinaturaResponsavel.trim() ? (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  {selectedIsHistoricalWeek
+                                    ? "Sem permissão para assinar item histórico"
+                                    : "Sem permissão para assinar item"}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  Item executado
+                                </span>
+                              )}
+                              {podeExcluirRegistros ? (
+                                <Link
+                                  href={buildDeleteWeeklyRecordHref(record.id)}
+                                  scroll={false}
+                                  className="btn-danger w-fit"
+                                >
+                                  Excluir
+                                </Link>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -941,6 +975,43 @@ export default async function PlanoLimpezaSemanalHistoricoPage({
               </table>
             </div>
           </div>
+        </ActionModal>
+      ) : null}
+
+      {registroSemanalParaExcluir ? (
+        <ActionModal
+          title="Excluir Registro Semanal"
+          cancelHref={deleteWeeklyRecordCancelHref}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Confirme a exclusão do item{" "}
+              <strong>
+                {registroSemanalParaExcluir.itemDescricao ??
+                  registroSemanalParaExcluir.item.oQueLimpar}
+              </strong>{" "}
+              em {formatDateDisplay(registroSemanalParaExcluir.dataExecucao)}.
+            </p>
+          }
+        >
+          <form action={deleteWeeklyRecordAction} className="space-y-4">
+            <input type="hidden" name="id" value={String(registroSemanalParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteWeeklyRecordReturnTo} />
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Apenas o usuário DEV pode excluir registros históricos. Esta ação remove somente
+              este registro operacional do plano semanal.
+            </div>
+
+            <ModalActions>
+              <Link href={deleteWeeklyRecordCancelHref} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
+              </button>
+            </ModalActions>
+          </form>
         </ActionModal>
       ) : null}
 

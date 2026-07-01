@@ -6,13 +6,14 @@ import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { MonthlyClosureSection, SignDayForm, SupervisorSignatureStatus } from "@/components/historico/technical-signature";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { formatAppDate, formatAppDateInput, getAppDate, getAppMonthDateRange, getAppMonthYear } from "@/lib/date-time";
 import { canSignModuleDay, canSignModuleMonthlyClosure } from "@/lib/module-signatures";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
-import { signDailyAreaPendingItemsAction } from "../../actions";
+import { deleteDailyRecordAction, signDailyAreaPendingItemsAction } from "../../actions";
 import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS, TURNO_OPTIONS } from "../../constants";
 import {
   getExpectedDailyCleaningTasksForDateRange,
@@ -60,6 +61,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
   const authUser = await getCurrentUser();
   const canSignDay = authUser ? canSignModuleDay(authUser, MODULE_CODE) : false;
   const canSignMonthly = authUser ? canSignModuleMonthlyClosure(authUser, MODULE_CODE) : false;
+  const podeExcluirRegistros = authUser ? canManageHistoricalRecords(authUser) : false;
   const canRegularizeHistory = authUser
     ? hasPermission(authUser, "modulo.limpeza_diaria.assinar_historico") ||
       hasPermission(authUser, "modulo.limpeza_diaria.assinar_todos")
@@ -80,6 +82,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
   const diaAberto = firstParam(params.dia).trim();
   const regularizarArea = firstParam(params.regularizarArea).trim();
+  const deleteDailyRecordId = parsePositiveInt(firstParam(params.deleteDailyRecordId).trim());
 
   const today = getAppDate();
   const todayMonth = getAppMonthYear(today);
@@ -472,6 +475,24 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
     diaSelecionado && regularizarArea
       ? diaSelecionado.areas.find((area) => area.area === regularizarArea) ?? null
       : null;
+  const registroDiarioParaExcluir =
+    podeExcluirRegistros && deleteDailyRecordId
+      ? registros.find((registro) => registro.id === deleteDailyRecordId) ?? null
+      : null;
+  const buildDeleteDailyRecordHref = (registroId: number): string => {
+    const query = new URLSearchParams(parametrosRetorno);
+    if (diaSelecionado) {
+      query.set("dia", formatDateInput(diaSelecionado.data));
+    }
+    query.set("deleteDailyRecordId", String(registroId));
+    return buildPathWithParams(query);
+  };
+  const deleteDailyRecordReturnTo = registroDiarioParaExcluir
+    ? buildDeleteDailyRecordHref(registroDiarioParaExcluir.id)
+    : returnTo;
+  const deleteDailyRecordCancelHref = diaSelecionado
+    ? buildOpenDayHref(formatDateInput(diaSelecionado.data))
+    : returnTo;
 
   const totalAreasCompletas = resumoMensal.reduce((total, dia) => total + dia.concluido, 0);
   const totalAreasParciais = resumoMensal.reduce((total, dia) => total + dia.parcial, 0);
@@ -657,7 +678,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
         pendingDailySignatures={indicadoresMensais["Dias pendentes de assinatura"]}
       />
 
-      {diaSelecionado && !areaRegularizacao ? (
+      {diaSelecionado && !areaRegularizacao && !registroDiarioParaExcluir ? (
         <ActionModal
           title={`Plano Diário de ${formatAppDate(diaSelecionado.data)}`}
           cancelHref={returnTo}
@@ -680,6 +701,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
                   <th className="px-3 py-2">Responsável</th>
                   <th className="px-3 py-2">Supervisor</th>
                   <th className="px-3 py-2">Observações</th>
+                  {podeExcluirRegistros ? <th className="px-3 py-2">Ações</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -699,7 +721,7 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
                             {area.statusLabel}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-3 py-3 text-right" colSpan={podeExcluirRegistros ? 2 : 1}>
                           {canRegularizeHistory && area.pendingItems > 0 ? (
                             <Link
                               href={buildRegularizeAreaHref(dateInput, area.area)}
@@ -725,6 +747,23 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
                               item.record?.observacao ??
                               "-"}
                           </td>
+                          {podeExcluirRegistros ? (
+                            <td className="px-3 py-2">
+                              {item.record ? (
+                                <Link
+                                  href={buildDeleteDailyRecordHref(item.record.id)}
+                                  scroll={false}
+                                  className="btn-danger w-fit"
+                                >
+                                  Excluir
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  -
+                                </span>
+                              )}
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </Fragment>
@@ -741,6 +780,44 @@ export default async function PlanoLimpezaDiarioHistoricoPage({ searchParams }: 
             alreadySigned={Boolean(assinaturasPorData.get(formatAppDateInput(diaSelecionado.data)))}
             hasOperationalWarnings={diaSelecionado.pendente > 0 || diaSelecionado.parcial > 0}
           />
+        </ActionModal>
+      ) : null}
+
+      {registroDiarioParaExcluir ? (
+        <ActionModal
+          title="Excluir Registro Diário"
+          cancelHref={deleteDailyRecordCancelHref}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Confirme a exclusão do item{" "}
+              <strong>
+                {registroDiarioParaExcluir.itemDescricao ??
+                  registroDiarioParaExcluir.area}
+              </strong>{" "}
+              em {formatDateDisplay(registroDiarioParaExcluir.data)} no turno{" "}
+              {registroDiarioParaExcluir.turno}.
+            </p>
+          }
+        >
+          <form action={deleteDailyRecordAction} className="space-y-4">
+            <input type="hidden" name="id" value={String(registroDiarioParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteDailyRecordReturnTo} />
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Apenas o usuário DEV pode excluir registros históricos. Esta ação remove somente
+              este registro operacional do plano diário.
+            </div>
+
+            <ModalActions>
+              <Link href={deleteDailyRecordCancelHref} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
+              </button>
+            </ModalActions>
+          </form>
         </ActionModal>
       ) : null}
 

@@ -16,6 +16,8 @@ type WeeklySignChecklistModalProps = {
   podeAssinarSupervisor: boolean;
   podeAssinarItens: boolean;
   podeAssinarTodosItens: boolean;
+  podeExcluirItens?: boolean;
+  buildDeleteItemHref?: (id: number) => string;
   isHistorico: boolean;
   dataHoraAtual: string;
   execution: {
@@ -55,6 +57,8 @@ export function WeeklySignChecklistModal({
   podeAssinarSupervisor,
   podeAssinarItens,
   podeAssinarTodosItens,
+  podeExcluirItens = false,
+  buildDeleteItemHref,
   isHistorico,
   dataHoraAtual,
   execution,
@@ -258,45 +262,56 @@ export function WeeklySignChecklistModal({
                         {executionItem.observacaoResponsavel || "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {executionItem.etapa === "responsavel" && podeAssinarItens ? (
-                          <form action={updateWeeklyRecordAction} className="grid min-w-[320px] gap-2">
-                            <input type="hidden" name="id" value={String(executionItem.id)} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <input type="hidden" name="etapa" value="responsavel" />
-                            <input
-                              type="password"
-                              name="senhaConfirmacao"
-                              required
-                              placeholder="Confirme sua senha"
-                              className="bpma-input text-xs"
-                            />
-                            <input
-                              type="text"
-                              name="observacaoAssinatura"
-                              placeholder="Observação (Opcional)"
-                              className="bpma-input text-xs"
-                            />
-                            <button type="submit" className="btn-primary whitespace-nowrap">
-                              Assinar item
-                            </button>
-                          </form>
-                        ) : executionItem.etapa === "responsavel" && isHistorico ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Sem permissão para assinar item histórico
-                          </span>
-                        ) : executionItem.etapa === "responsavel" ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Sem permissão para assinar item
-                          </span>
-                        ) : executionItem.etapa === "supervisor" ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Aguardando assinatura da área da semana
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Item Concluído
-                          </span>
-                        )}
+                        <div className="grid gap-2">
+                          {executionItem.etapa === "responsavel" && podeAssinarItens ? (
+                            <form action={updateWeeklyRecordAction} className="grid min-w-[320px] gap-2">
+                              <input type="hidden" name="id" value={String(executionItem.id)} />
+                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <input type="hidden" name="etapa" value="responsavel" />
+                              <input
+                                type="password"
+                                name="senhaConfirmacao"
+                                required
+                                placeholder="Confirme sua senha"
+                                className="bpma-input text-xs"
+                              />
+                              <input
+                                type="text"
+                                name="observacaoAssinatura"
+                                placeholder="Observação (Opcional)"
+                                className="bpma-input text-xs"
+                              />
+                              <button type="submit" className="btn-primary whitespace-nowrap">
+                                Assinar item
+                              </button>
+                            </form>
+                          ) : executionItem.etapa === "responsavel" && isHistorico ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Sem permissão para assinar item histórico
+                            </span>
+                          ) : executionItem.etapa === "responsavel" ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Sem permissão para assinar item
+                            </span>
+                          ) : executionItem.etapa === "supervisor" ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Aguardando assinatura da área da semana
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Item Concluído
+                            </span>
+                          )}
+                          {podeExcluirItens && buildDeleteItemHref ? (
+                            <Link
+                              href={buildDeleteItemHref(executionItem.id)}
+                              scroll={false}
+                              className="btn-danger w-fit"
+                            >
+                              Excluir
+                            </Link>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))

@@ -17,6 +17,7 @@ import {
   ensureCanManageOptions,
   ensureCanReopenMonth,
   ensureCanSignResponsible,
+  ensureDevUserForHistoricalRecords,
   ensurePermission,
   validateSignaturePassword
 } from "@/lib/authz";
@@ -109,8 +110,10 @@ function redirectWithFeedback(
       "editItemId",
       "editWeeklyAreaId",
       "deleteAreaId",
+      "deleteDailyRecordId",
       "deleteDailyItemId",
       "deleteItemId",
+      "deleteWeeklyRecordId",
       "deleteWeeklyAreaId"
     ].forEach((key) => {
       if (!preservedParams.has(key)) {
@@ -387,6 +390,59 @@ export async function updateDailyRecordAction(formData: FormData) {
 
     revalidateModulePaths();
     redirectWithFeedback(successReturnTo, "success", "Checklist Diário Assinado com Sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function deleteDailyRecordAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, DIARIO_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureDevUserForHistoricalRecords(
+      actor,
+      "Apenas o usuário DEV pode excluir registros históricos."
+    );
+
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) {
+      throw new Error("Registro diário inválido para exclusão.");
+    }
+
+    const registro = await prisma.planoLimpezaDiarioRegistro.findUnique({
+      where: { id }
+    });
+
+    if (!registro) {
+      throw new Error("Registro diário não encontrado.");
+    }
+
+    const period = getMonthYear(registro.data);
+    const monthSigned = await isMonthSigned(TipoPlanoLimpeza.DIARIO, period.mes, period.ano);
+
+    await prisma.planoLimpezaDiarioRegistro.delete({
+      where: { id: registro.id }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "plano-limpeza/diario/exclusao-historica",
+      referenciaId: String(registro.id),
+      observacao: [
+        `Exclusão do registro diário ${registro.id} em ${formatDateInput(registro.data)}.`,
+        `Área: ${registro.area}.`,
+        `Item: ${registro.itemDescricao ?? "-"}.`,
+        `Turno: ${registro.turno}.`,
+        `Status: ${registro.status}.`,
+        `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+      ].join(" ")
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Registro diário excluído com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));
@@ -1302,6 +1358,58 @@ export async function updateWeeklyRecordAction(formData: FormData) {
 
     revalidateModulePaths();
     redirectWithFeedback(returnTo, "success", "Item semanal assinado como responsável pela limpeza.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(returnTo, "error", getErrorMessage(error));
+  }
+}
+
+export async function deleteWeeklyRecordAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData, SEMANAL_PATH);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureDevUserForHistoricalRecords(
+      actor,
+      "Apenas o usuário DEV pode excluir registros históricos."
+    );
+
+    const id = parsePositiveInt(getInputValue(formData, "id"));
+    if (!id) {
+      throw new Error("Registro semanal inválido para exclusão.");
+    }
+
+    const registro = await prisma.planoLimpezaSemanalExecucao.findUnique({
+      where: { id }
+    });
+
+    if (!registro) {
+      throw new Error("Registro semanal não encontrado.");
+    }
+
+    const period = getMonthYear(registro.dataExecucao);
+    const monthSigned = await isMonthSigned(TipoPlanoLimpeza.SEMANAL, period.mes, period.ano);
+
+    await prisma.planoLimpezaSemanalExecucao.delete({
+      where: { id: registro.id }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "plano-limpeza/semanal/exclusao-historica",
+      referenciaId: String(registro.id),
+      observacao: [
+        `Exclusão do registro semanal ${registro.id} em ${formatDateInput(registro.dataExecucao)}.`,
+        `Área: ${registro.area}.`,
+        `Item: ${registro.itemDescricao ?? "-"}.`,
+        `Status: ${registro.status}.`,
+        `Mês fechado: ${monthSigned ? "sim" : "não"}.`
+      ].join(" ")
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Registro semanal excluído com sucesso.");
   } catch (error) {
     rethrowIfRedirectError(error);
     redirectWithFeedback(returnTo, "error", getErrorMessage(error));

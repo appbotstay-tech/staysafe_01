@@ -2,12 +2,14 @@ import { StatusFechamentoPlanoLimpeza, StatusPlanoLimpeza, TipoPlanoLimpeza } fr
 import Link from "next/link";
 
 import { SignatureContextCard } from "@/components/auth/signature-context-card";
+import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getRoleLabel } from "@/lib/rbac";
 
-import { bulkSignDailyByDateAction } from "@/app/plano-limpeza/actions";
+import { bulkSignDailyByDateAction, deleteDailyRecordAction } from "@/app/plano-limpeza/actions";
 import { StatusBadge } from "@/app/plano-limpeza/status-badge";
 import {
   consolidateDailyRecordsByDay,
@@ -20,7 +22,8 @@ import {
   getCurrentSystemDateTime,
   getMonthYear,
   getTurnoLabel,
-  parseDateInput
+  parseDateInput,
+  parsePositiveInt
 } from "@/app/plano-limpeza/utils";
 
 const CARD_CLASS =
@@ -47,12 +50,14 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
   const canBulkSign = authUser
     ? hasPermission(authUser, "modulo.limpeza_diaria.assinar_todos")
     : false;
+  const podeExcluirRegistros = authUser ? canManageHistoricalRecords(authUser) : false;
   const now = getCurrentSystemDateTime();
 
   const { data } = await params;
   const query = await searchParams;
   const feedback = firstParam(query.feedback).trim();
   const feedbackType = firstParam(query.feedbackType) === "error" ? "error" : "success";
+  const deleteDailyRecordId = parsePositiveInt(firstParam(query.deleteDailyRecordId).trim());
 
   const decoded = decodeURIComponent(data);
   const dateDb = parseDateInput(decoded);
@@ -116,6 +121,12 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
   const summary = consolidateDailyRecordsByDay(registros, formatDateInput)[0];
   const normalizedDate = formatDateInput(dateDb);
   const returnTo = `/plano-limpeza/diario/historico/dia/${encodeURIComponent(normalizedDate)}`;
+  const registroDiarioParaExcluir =
+    podeExcluirRegistros && deleteDailyRecordId
+      ? registros.find((registro) => registro.id === deleteDailyRecordId) ?? null
+      : null;
+  const buildDeleteDailyRecordHref = (registroId: number): string =>
+    `${returnTo}?deleteDailyRecordId=${registroId}`;
 
   const aguardandoSupervisor = registros.filter(
     (item) =>
@@ -279,12 +290,16 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Obs. Responsável</th>
                 <th className="px-3 py-2">Obs. Supervisor</th>
+                {podeExcluirRegistros ? <th className="px-3 py-2">Ações</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {registros.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-3 text-slate-500 dark:text-slate-400">
+                  <td
+                    colSpan={podeExcluirRegistros ? 9 : 8}
+                    className="px-3 py-3 text-slate-500 dark:text-slate-400"
+                  >
                     Nenhum registro para este dia.
                   </td>
                 </tr>
@@ -315,6 +330,17 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
                       {registro.observacaoResponsavel || registro.observacao || "-"}
                     </td>
                     <td className="px-3 py-2">{registro.observacaoSupervisor || "-"}</td>
+                    {podeExcluirRegistros ? (
+                      <td className="px-3 py-2">
+                        <Link
+                          href={buildDeleteDailyRecordHref(registro.id)}
+                          scroll={false}
+                          className="btn-danger w-fit"
+                        >
+                          Excluir
+                        </Link>
+                      </td>
+                    ) : null}
                   </tr>
                   );
                 })
@@ -323,6 +349,44 @@ export default async function PlanoLimpezaDiarioHistoricoDiaPage({
           </table>
         </div>
       </section>
+
+      {registroDiarioParaExcluir ? (
+        <ActionModal
+          title="Excluir Registro Diário"
+          cancelHref={returnTo}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Confirme a exclusão do item{" "}
+              <strong>
+                {registroDiarioParaExcluir.itemDescricao ??
+                  registroDiarioParaExcluir.area}
+              </strong>{" "}
+              em {formatDateDisplay(registroDiarioParaExcluir.data)} no turno{" "}
+              {getTurnoLabel(registroDiarioParaExcluir.turno)}.
+            </p>
+          }
+        >
+          <form action={deleteDailyRecordAction} className="space-y-4">
+            <input type="hidden" name="id" value={String(registroDiarioParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={buildDeleteDailyRecordHref(registroDiarioParaExcluir.id)} />
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Apenas o usuário DEV pode excluir registros históricos. Esta ação remove somente
+              este registro operacional do plano diário.
+            </div>
+
+            <ModalActions>
+              <Link href={returnTo} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
     </div>
   );
 }

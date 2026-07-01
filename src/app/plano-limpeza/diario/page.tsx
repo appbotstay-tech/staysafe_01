@@ -10,6 +10,7 @@ import { SignatureContextCard } from "@/components/auth/signature-context-card";
 import { DocumentosModuleHeader } from "@/components/documentos/documentos-module-header";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
 import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
@@ -18,7 +19,7 @@ import {
   getRoleLabel
 } from "@/lib/rbac";
 
-import { signDailyAreaPendingItemsAction } from "../actions";
+import { deleteDailyRecordAction, signDailyAreaPendingItemsAction } from "../actions";
 import { DAILY_STATUS_OPTIONS, MONTH_OPTIONS } from "../constants";
 import { StatusBadge } from "../status-badge";
 import {
@@ -85,6 +86,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const isColaborador = authUser?.perfil === "COLABORADOR";
   const podeVerGestao = authUser ? canViewManagementSections(authUser) : false;
   const podeGerenciarOpcoes = authUser ? canManageModuleOptions(authUser) : false;
+  const podeExcluirRegistros = authUser ? canManageHistoricalRecords(authUser) : false;
 
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
@@ -102,6 +104,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
   const filtroResponsavel = firstParam(params.filtroResponsavel).trim();
   const openArea = firstParam(params.openArea).trim();
   const openData = parseDateInput(firstParam(params.openData).trim());
+  const deleteDailyRecordId = parsePositiveInt(firstParam(params.deleteDailyRecordId).trim());
 
   const hasManualFilters =
     !isColaborador &&
@@ -396,6 +399,9 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
             summary.area === openArea
         ) ?? null
       : null;
+  const registroDiarioParaExcluir = podeExcluirRegistros && deleteDailyRecordId
+    ? await prisma.planoLimpezaDiarioRegistro.findUnique({ where: { id: deleteDailyRecordId } })
+    : null;
 
   const returnTo = buildPathWithParams(paramsRetorno);
   const openSummaryReturnTo = openedSummary
@@ -426,6 +432,25 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
         return buildPathWithParams(query);
       })()
     : returnTo;
+  const buildDeleteDailyRecordHref = (registroId: number): string => {
+    const query = new URLSearchParams(paramsRetorno);
+    if (openedSummary) {
+      query.set("openData", formatDateInput(openedSummary.data));
+      query.set("openArea", openedSummary.area);
+    }
+    query.set("deleteDailyRecordId", String(registroId));
+    return buildPathWithParams(query);
+  };
+  const deleteDailyRecordReturnTo = registroDiarioParaExcluir
+    ? buildDeleteDailyRecordHref(registroDiarioParaExcluir.id)
+    : returnTo;
+  const deleteDailyRecordCancelHref = openedSummary ? openSummaryReturnTo : returnTo;
+  const deleteDailyRecordPeriod = registroDiarioParaExcluir
+    ? getMonthYear(registroDiarioParaExcluir.data)
+    : null;
+  const deleteDailyRecordMonthClosed = deleteDailyRecordPeriod
+    ? fechadosSet.has(periodKey(deleteDailyRecordPeriod.mes, deleteDailyRecordPeriod.ano))
+    : false;
 
   const modalDailyRows = openedSummary
     ? openedSummary.items.length > 0
@@ -688,7 +713,7 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
           </>
         )}
       </section>
-      {openedSummary ? (
+      {openedSummary && !registroDiarioParaExcluir ? (
         <ActionModal
           title={openedSummary.area}
           cancelHref={returnTo}
@@ -810,6 +835,15 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
                             Sem Ação
                           </span>
                         )}
+                        {podeExcluirRegistros && registro ? (
+                          <Link
+                            href={buildDeleteDailyRecordHref(registro.id)}
+                            scroll={false}
+                            className="btn-danger"
+                          >
+                            Excluir
+                          </Link>
+                        ) : null}
                       </div>
                     </div>
                   </article>
@@ -817,6 +851,39 @@ export default async function PlanoLimpezaDiarioPage({ searchParams }: PageProps
               })}
             </div>
           )}
+        </ActionModal>
+      ) : null}
+
+      {registroDiarioParaExcluir ? (
+        <ActionModal
+          title="Excluir registro diário"
+          cancelHref={deleteDailyRecordCancelHref}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              {registroDiarioParaExcluir.area} - {formatDateDisplay(registroDiarioParaExcluir.data)}
+            </p>
+          }
+        >
+          <form action={deleteDailyRecordAction} className="space-y-4">
+            <input type="hidden" name="id" value={String(registroDiarioParaExcluir.id)} />
+            <input type="hidden" name="returnTo" value={deleteDailyRecordReturnTo} />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Tem certeza que deseja excluir este registro? Esta ação é restrita ao DEV e deve
+              ser usada apenas para correção administrativa.
+              {deleteDailyRecordMonthClosed
+                ? " Este registro pertence a um mês fechado; o fechamento não será removido automaticamente."
+                : ""}
+            </div>
+            <ModalActions>
+              <Link href={deleteDailyRecordCancelHref} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir registro
+              </button>
+            </ModalActions>
+          </form>
         </ActionModal>
       ) : null}
 
