@@ -7,7 +7,6 @@ import {
 } from "@prisma/client";
 
 import { formatSifDisplayValue } from "@/app/rastreabilidade-recebimento/sif";
-import { APP_NAME } from "@/lib/app-branding";
 import { getCurrentUser } from "@/lib/auth-session";
 import {
   formatAppDate,
@@ -291,16 +290,19 @@ function renderStyles(): string {
 
       .brand-cell {
         width: 20%;
-        font-size: 13px;
         text-align: center;
         vertical-align: middle;
+        padding: 4px 6px;
       }
 
-      .brand-cell span {
+      .brand-logo {
         display: block;
-        margin-top: 3px;
-        font-size: 9px;
-        font-weight: 400;
+        width: 100%;
+        max-width: 150px;
+        max-height: 52px;
+        height: auto;
+        margin: 0 auto;
+        object-fit: contain;
       }
 
       .title-cell {
@@ -512,8 +514,11 @@ function renderHeader(report: MonthlyReceivingReport): string {
         <tbody>
           <tr>
             <td class="brand-cell">
-              <strong>${escapeHtml(APP_NAME)}</strong>
-              <span>${escapeHtml(report.unitName)}</span>
+              <img
+                src="/logo-relatorios-staysafe-botstay.png"
+                alt="StaySafe BotStay"
+                class="brand-logo"
+              />
             </td>
             <td class="title-cell">${escapeHtml(REPORT_TITLE)}</td>
             <td class="month-cell">
