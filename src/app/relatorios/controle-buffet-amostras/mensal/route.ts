@@ -30,6 +30,7 @@ const REPORT_NAME = "Relatório mensal - controle de buffet / amostras";
 
 type BuffetReportRow = {
   produto: string;
+  observacao: string;
   temperaturaEquipamento: string;
   temperaturaProduto: string;
   acaoCorretiva: string;
@@ -216,6 +217,7 @@ function buildServiceTables(
       title: group.title,
       rows: group.records.sort(compareBuffetRecords).map((record) => ({
         produto: getProductLabel(record),
+        observacao: valueOrDash(record.observacao),
         temperaturaEquipamento: formatRecordTemperature(record, "equipamento"),
         temperaturaProduto: formatRecordTemperature(record, "produto"),
         acaoCorretiva:
@@ -383,34 +385,39 @@ function renderStyles(): string {
 
       .service-table th:nth-child(1),
       .service-table td:nth-child(1) {
-        width: 28%;
+        width: 20%;
       }
 
       .service-table th:nth-child(2),
       .service-table td:nth-child(2) {
-        width: 12%;
-        text-align: center;
+        width: 16%;
       }
 
       .service-table th:nth-child(3),
       .service-table td:nth-child(3) {
-        width: 10%;
+        width: 11%;
         text-align: center;
       }
 
       .service-table th:nth-child(4),
       .service-table td:nth-child(4) {
-        width: 18%;
+        width: 8%;
+        text-align: center;
       }
 
       .service-table th:nth-child(5),
       .service-table td:nth-child(5) {
-        width: 16%;
+        width: 17%;
       }
 
       .service-table th:nth-child(6),
       .service-table td:nth-child(6) {
-        width: 16%;
+        width: 14%;
+      }
+
+      .service-table th:nth-child(7),
+      .service-table td:nth-child(7) {
+        width: 14%;
       }
 
       .empty-message {
@@ -536,6 +543,7 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
             (row) => `
               <tr>
                 <td>${escapeHtml(row.produto)}</td>
+                <td>${escapeHtml(row.observacao)}</td>
                 <td>${escapeHtml(row.temperaturaEquipamento)}</td>
                 <td>${escapeHtml(row.temperaturaProduto)}</td>
                 <td>${escapeHtml(row.acaoCorretiva)}</td>
@@ -546,7 +554,7 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
           .join("")
       : `
         <tr>
-          <td colspan="6" class="empty-message">
+          <td colspan="7" class="empty-message">
             Nenhum registro encontrado para o período.
           </td>
         </tr>`;
@@ -558,6 +566,7 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
         <thead>
           <tr>
             <th>Produto</th>
+            <th>Observação</th>
             <th>T°C Equipamento</th>
             <th>T°C</th>
             <th>Ação Corretiva</th>
@@ -568,7 +577,7 @@ function renderServiceTable(service: BuffetServiceTable, report: MonthlyBuffetRe
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="6" class="signature-wrapper">
+            <td colspan="7" class="signature-wrapper">
               ${renderSignatureTable(report)}
             </td>
           </tr>
@@ -628,6 +637,7 @@ async function getMonthlyBuffetRecords(month: number, year: number) {
       servicoId: true,
       itemNome: true,
       itemExtra: true,
+      observacao: true,
       tcEquipamento: true,
       primeiraTc: true,
       usaGarrafaTermica: true,
