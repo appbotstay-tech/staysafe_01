@@ -31,12 +31,12 @@ export function SearchableOptionField({
     const normalizedQuery = normalizeOption(inputValue);
 
     if (!normalizedQuery) {
-      return options.slice(0, 8);
+      return options;
     }
 
-    return options
-      .filter((option) => normalizeOption(option).startsWith(normalizedQuery))
-      .slice(0, 8);
+    return options.filter((option) =>
+      normalizeOption(option).startsWith(normalizedQuery)
+    );
   }, [inputValue, options]);
 
   const hasExactMatch = useMemo(() => {
