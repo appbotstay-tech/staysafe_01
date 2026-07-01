@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  ModuloDocumento,
   StatusFechamentoTemperaturaEquipamento,
   StatusOperacionalEquipamento,
   StatusTemperaturaEquipamento,
@@ -34,6 +35,10 @@ import {
   parseOptionType,
   sanitizeCatalogName
 } from "./catalog";
+import {
+  FOTO_ALERTA_CRITICO_REQUIRED_MESSAGE,
+  getExigirFotoEmAlertaCritico
+} from "./configuracao";
 import {
   findMatchingTemperatureRule,
   getAutomaticCorrectiveAction,
@@ -527,15 +532,17 @@ export async function createRegistroAction(formData: FormData) {
       turno
     });
 
+    const exigirFotoEmAlertaCritico = await getExigirFotoEmAlertaCritico();
     const fotoDesvio =
       payload.statusOperacionalEquipamento === StatusOperacionalEquipamento.EM_OPERACAO
         ? await parseImageUploadFromFormData({
             formData,
             key: "fotoDesvio",
             maxBytes: TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES,
-            required: isCorrectiveActionRequired(payload.status),
-            requiredMessage:
-              "Anexe uma foto da evidência para salvar este registro."
+            required:
+              exigirFotoEmAlertaCritico &&
+              isCorrectiveActionRequired(payload.status),
+            requiredMessage: FOTO_ALERTA_CRITICO_REQUIRED_MESSAGE
           })
         : null;
     const fotoArmazenada = fotoDesvio
@@ -619,7 +626,11 @@ export async function updateRegistroAction(formData: FormData) {
           maxBytes: TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES
         })
       : null;
-    const exigeFoto = registroEmOperacao && isCorrectiveActionRequired(payload.status);
+    const exigirFotoEmAlertaCritico = await getExigirFotoEmAlertaCritico();
+    const exigeFoto =
+      exigirFotoEmAlertaCritico &&
+      registroEmOperacao &&
+      isCorrectiveActionRequired(payload.status);
     const temFotoExistente =
       registroEmOperacao &&
       hasStoredImage({
@@ -629,9 +640,7 @@ export async function updateRegistroAction(formData: FormData) {
       });
 
     if (exigeFoto && !fotoDesvio && !temFotoExistente) {
-      throw new Error(
-        "Anexe uma foto da evidência para salvar este registro."
-      );
+      throw new Error(FOTO_ALERTA_CRITICO_REQUIRED_MESSAGE);
     }
     const fotoArmazenada = fotoDesvio
       ? await saveTemperatureEquipmentEvidenceImage(fotoDesvio)
@@ -910,6 +919,49 @@ export async function signRegistroNutricionistaAction(formData: FormData) {
         error,
         "Não foi possível assinar a conferência como revisada pelo supervisor."
       )
+    );
+  }
+}
+
+export async function updateTemperaturePhotoRequirementAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensurePermission(
+      actor,
+      "modulo.temperatura.gerenciar_cadastros",
+      "Você não tem permissão para gerenciar configurações de temperatura."
+    );
+
+    const exigirFotoEmAlertaCritico =
+      getInputValue(formData, "exigirFotoEmAlertaCritico") === "true";
+
+    await prisma.moduloConfiguracao.upsert({
+      where: { modulo: ModuloDocumento.CONTROLE_TEMPERATURA },
+      create: {
+        modulo: ModuloDocumento.CONTROLE_TEMPERATURA,
+        exigirFotoEmAlertaCritico,
+        atualizadoPorUsuarioId: actor.id
+      },
+      update: {
+        exigirFotoEmAlertaCritico,
+        atualizadoPorUsuarioId: actor.id
+      }
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(
+      returnTo,
+      "success",
+      "Configuração de foto salva com sucesso."
+    );
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível salvar a configuração de foto.")
     );
   }
 }

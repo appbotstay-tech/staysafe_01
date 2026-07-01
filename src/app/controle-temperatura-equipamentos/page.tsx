@@ -32,6 +32,10 @@ import {
   updateRegistroAction
 } from "./actions";
 import { AutomaticCorrectiveActionFields } from "./automatic-corrective-action-fields";
+import {
+  FOTO_ALERTA_CRITICO_REQUIRED_MESSAGE,
+  getExigirFotoEmAlertaCritico
+} from "./configuracao";
 import { EvidencePhoto } from "./evidence-photo";
 import { TemperatureStatusBadge } from "./temperature-status-badge";
 import {
@@ -180,7 +184,12 @@ export default async function ControleTemperaturaEquipamentosPage({
     where.responsavel = { contains: filtroResponsavel, mode: "insensitive" };
   }
 
-  const [registros, options, categoryRules] = await Promise.all([
+  const [
+    registros,
+    options,
+    categoryRules,
+    exigirFotoEmAlertaCritico
+  ] = await Promise.all([
     prisma.controleTemperaturaEquipamento.findMany({
       where,
       orderBy: [{ data: "desc" }, { createdAt: "desc" }]
@@ -192,7 +201,8 @@ export default async function ControleTemperaturaEquipamentosPage({
       where: { isActive: true },
       include: { categoria: { select: { categoria: true } } },
       orderBy: [{ categoriaId: "asc" }, { ordem: "asc" }]
-    })
+    }),
+    getExigirFotoEmAlertaCritico()
   ]);
 
   const equipamentoCatalogOptionsAtivas = options.filter(
@@ -526,14 +536,22 @@ export default async function ControleTemperaturaEquipamentosPage({
               label="Anexar foto da evidência"
               existingImageDataUrl={fotoRegistroEmEdicao}
               existingFileName={registroEmEdicao?.fotoNome ?? null}
-              helperText="Obrigatória em Alerta/Crítico. A imagem será otimizada para até 1280 px e deve ficar com no máximo 1 MB."
+              helperText={
+                exigirFotoEmAlertaCritico
+                  ? "Obrigatória em Alerta/Crítico. A imagem será otimizada para até 1280 px e deve ficar com no máximo 1 MB."
+                  : "Opcional. A imagem será otimizada para até 1280 px e deve ficar com no máximo 1 MB."
+              }
               maxBytes={TEMPERATURE_EVIDENCE_IMAGE_MAX_BYTES}
               compressBeforeUpload
               compressionTargetBytes={TEMPERATURE_EVIDENCE_IMAGE_TARGET_BYTES}
               compressionMaxWidth={TEMPERATURE_EVIDENCE_IMAGE_MAX_WIDTH}
-              requiredStatusFieldName="statusCalculado"
-              requiredStatusValues={["ALERTA", "CRITICO"]}
-              requiredMessage="Anexe uma foto da evidência para salvar este registro."
+              requiredStatusFieldName={
+                exigirFotoEmAlertaCritico ? "statusCalculado" : undefined
+              }
+              requiredStatusValues={
+                exigirFotoEmAlertaCritico ? ["ALERTA", "CRITICO"] : []
+              }
+              requiredMessage={FOTO_ALERTA_CRITICO_REQUIRED_MESSAGE}
               disabledStatusFieldName="statusOperacionalEquipamento"
               disabledStatusValues={[
                 StatusOperacionalEquipamento.MANUTENCAO,

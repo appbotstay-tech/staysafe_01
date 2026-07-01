@@ -20,8 +20,10 @@ import {
   toggleCategoryRuleStatusAction,
   updateCatalogOptionAction,
   updateCategoryParameterAction,
-  updateCategoryRuleAction
+  updateCategoryRuleAction,
+  updateTemperaturePhotoRequirementAction
 } from "../actions";
+import { getExigirFotoEmAlertaCritico } from "../configuracao";
 import {
   formatTemperatureRange,
   getCategoriaLabel,
@@ -257,7 +259,7 @@ export default async function ControleTemperaturaOpcoesPage({
   const editRegraId = parsePositiveInt(firstParam(params.editRegraId));
   const novaRegraCategoriaId = parsePositiveInt(firstParam(params.novaRegraCategoriaId));
 
-  const [options, categorias] = await Promise.all([
+  const [options, categorias, exigirFotoEmAlertaCritico] = await Promise.all([
     prisma.controleTemperaturaEquipamentoOpcao.findMany({
       orderBy: [{ tipo: "asc" }, { ativo: "desc" }, { nome: "asc" }]
     }),
@@ -268,7 +270,8 @@ export default async function ControleTemperaturaOpcoesPage({
         }
       },
       orderBy: { categoria: "asc" }
-    })
+    }),
+    getExigirFotoEmAlertaCritico()
   ]);
 
   const equipamentos = options.filter(
@@ -328,6 +331,49 @@ export default async function ControleTemperaturaOpcoesPage({
         modulo={ModuloDocumento.CONTROLE_TEMPERATURA}
         returnTo={PAGE_PATH}
       />
+
+      <section className={CARD_CLASS}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Configurações operacionais
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Defina regras de preenchimento aplicadas aos registros do módulo.
+            </p>
+          </div>
+        </div>
+
+        <form
+          action={updateTemperaturePhotoRequirementAction}
+          className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-4 md:grid-cols-2 dark:bg-slate-800"
+        >
+          <input type="hidden" name="returnTo" value={PAGE_PATH} />
+
+          <label className="text-sm text-slate-700 dark:text-slate-200">
+            Obrigar foto em registros com alerta ou crítico
+            <select
+              name="exigirFotoEmAlertaCritico"
+              defaultValue={exigirFotoEmAlertaCritico ? "true" : "false"}
+              className={INPUT_CLASS}
+            >
+              <option value="true">Ativado</option>
+              <option value="false">Desativado</option>
+            </select>
+          </label>
+
+          <p className="text-sm text-slate-600 md:self-end dark:text-slate-300">
+            Quando ativado, registros com temperatura em alerta ou crítico exigirão
+            foto antes de salvar. Quando desativado, a foto será opcional.
+          </p>
+
+          <div className="md:col-span-2">
+            <button type="submit" className="btn-primary">
+              Salvar configuração
+            </button>
+          </div>
+        </form>
+      </section>
 
       <section className={CARD_CLASS}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
