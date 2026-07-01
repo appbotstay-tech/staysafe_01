@@ -21,6 +21,7 @@ export type MonthlySanitaryReport = {
   moduleName: string;
   brandName: string;
   emittedAt: string;
+  closureStatus: string;
   generatedAtSentence: string;
   footerResponsibleName?: string | null;
   footerDate: string;
@@ -122,36 +123,27 @@ function renderHeader(report: MonthlySanitaryReport): string {
       <table class="header-table">
         <tbody>
           <tr>
-            <td class="brand-cell" rowspan="4">
+            <td class="brand-cell">
               <img
                 src="/logo-relatorios-staysafe-botstay.png"
                 alt="StaySafe BotStay"
                 class="brand-logo"
               />
             </td>
-            <td class="title-cell" colspan="4">${escapeHtml(report.title)}</td>
-          </tr>
-          <tr>
-            <th>Relatório</th>
-            <td>${escapeHtml(report.reportName)}</td>
-            <th>Anexo</th>
-            <td>${escapeHtml(report.annexCode)}</td>
-          </tr>
-          <tr>
-            <th>Data da elaboração</th>
-            <td>${escapeHtml(report.elaborationDate)}</td>
-            <th>Emissão</th>
-            <td>${escapeHtml(report.emittedAt)}</td>
-          </tr>
-          <tr>
-            <th>Mês/Ano</th>
-            <td>${escapeHtml(report.referenceMonthYear)}</td>
-            <th>Unidade</th>
-            <td>${escapeHtml(report.unitName)}</td>
+            <td class="title-cell">${escapeHtml(report.title)}</td>
+            <td class="month-cell">
+              <strong>Mês/Ano</strong><br />
+              ${escapeHtml(report.referenceMonthYear)}
+            </td>
           </tr>
         </tbody>
       </table>
-      <p class="module-line"><strong>Módulo:</strong> ${escapeHtml(report.moduleName)}</p>
+      <div class="meta-line">
+        <span><strong>Relatório:</strong> ${escapeHtml(report.reportName)}</span>
+        <span><strong>Módulo:</strong> ${escapeHtml(report.moduleName)}</span>
+        <span><strong>Emissão:</strong> ${escapeHtml(report.emittedAt)}</span>
+        <span><strong>Fechamento mensal:</strong> ${escapeHtml(report.closureStatus)}</span>
+      </div>
     </header>`;
 }
 
@@ -235,10 +227,11 @@ function renderStyles(): string {
 
       .header-table {
         table-layout: fixed;
+        margin-bottom: 8px;
       }
 
       .brand-cell {
-        width: 18%;
+        width: 20%;
         text-align: center;
         vertical-align: middle;
         padding: 4px 6px;
@@ -255,14 +248,28 @@ function renderStyles(): string {
       }
 
       .title-cell {
+        width: 54%;
         text-align: center;
-        font-size: 16px;
+        vertical-align: middle;
+        font-size: 15px;
         font-weight: 700;
         letter-spacing: 0;
       }
 
-      .module-line {
-        margin-top: 6px;
+      .month-cell {
+        width: 26%;
+        font-size: 11px;
+        text-align: center;
+        vertical-align: middle;
+      }
+
+      .meta-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 10px;
       }
 
       .report-section {

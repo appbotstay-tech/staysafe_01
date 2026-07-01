@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 const MODULE_CODE = "hortifruti";
 const MODULE_NAME = "Higienização de Hortifruti";
 const REPORT_TITLE = "HIGIENIZAÇÃO DE HORTIFRUTI";
-const REPORT_NAME = "Relatório mensal sanitário";
+const REPORT_NAME = "Relatório mensal - higienização de hortifruti";
 const ANNEX_CODE = "ANEXO 3";
 const REVISION = "00";
 const ELABORATION_DATE = "06/01/2021";
@@ -125,6 +125,9 @@ export async function GET(request: NextRequest) {
     Boolean(record.observacoes?.trim())
   ).length;
   const referenceMonthYear = formatMonthYear(month, year);
+  const closureStatus = monthlyClosure
+    ? "Assinado digitalmente"
+    : "Pendente de assinatura digital";
 
   const report: MonthlySanitaryReport = {
     title: REPORT_TITLE,
@@ -137,6 +140,7 @@ export async function GET(request: NextRequest) {
     moduleName: MODULE_NAME,
     brandName: APP_NAME,
     emittedAt: formatAppDateTime(generatedAt),
+    closureStatus,
     generatedAtSentence,
     footerResponsibleName: monthlyClosure?.usuarioNomeSnapshot ?? "",
     footerDate: generatedAtSentence,
@@ -152,7 +156,7 @@ export async function GET(request: NextRequest) {
       { label: "Total de dias pendentes de assinatura", value: pendingDailySignatures },
       {
         label: "Status do fechamento mensal",
-        value: monthlyClosure ? "Assinado digitalmente" : "Pendente de assinatura digital"
+        value: closureStatus
       },
       {
         label: "Responsável técnico no sistema",
