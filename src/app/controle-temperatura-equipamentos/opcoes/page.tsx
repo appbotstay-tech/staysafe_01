@@ -9,12 +9,15 @@ import Link from "next/link";
 
 import { ModuleHeaderTextSettings } from "@/components/documentos/module-header-text-settings";
 import { ActionModal, ModalActions } from "@/components/ui/action-modal";
+import { getCurrentUser } from "@/lib/auth-session";
+import { canManageHistoricalRecords } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 import {
   createCatalogOptionAction,
   createCategoryParameterAction,
   createCategoryRuleAction,
+  deleteCatalogOptionAction,
   deleteCategoryRuleAction,
   toggleCatalogOptionStatusAction,
   toggleCategoryRuleStatusAction,
@@ -250,6 +253,8 @@ function CategoryParameterFields({
 export default async function ControleTemperaturaOpcoesPage({
   searchParams
 }: PageProps) {
+  const authUser = await getCurrentUser();
+  const podeExcluirCadastros = authUser ? canManageHistoricalRecords(authUser) : false;
   const params = await searchParams;
   const feedback = firstParam(params.feedback).trim();
   const feedbackType = firstParam(params.feedbackType) === "error" ? "error" : "success";
@@ -258,6 +263,8 @@ export default async function ControleTemperaturaOpcoesPage({
   const editCategoriaId = parsePositiveInt(firstParam(params.editCategoriaId));
   const editRegraId = parsePositiveInt(firstParam(params.editRegraId));
   const novaRegraCategoriaId = parsePositiveInt(firstParam(params.novaRegraCategoriaId));
+  const deleteEquipamentoId = parsePositiveInt(firstParam(params.deleteEquipamentoId));
+  const deleteAcaoId = parsePositiveInt(firstParam(params.deleteAcaoId));
 
   const [options, categorias, exigirFotoEmAlertaCritico] = await Promise.all([
     prisma.controleTemperaturaEquipamentoOpcao.findMany({
@@ -280,9 +287,17 @@ export default async function ControleTemperaturaOpcoesPage({
   const equipamentoEmEdicao = editEquipamentoId
     ? equipamentos.find((option) => option.id === editEquipamentoId) ?? null
     : null;
+  const equipamentoParaExcluir =
+    podeExcluirCadastros && deleteEquipamentoId
+      ? equipamentos.find((option) => option.id === deleteEquipamentoId) ?? null
+      : null;
   const acoesCorretivas = options.filter(
     (option) => option.tipo === TipoOpcaoTemperaturaEquipamento.ACAO_CORRETIVA
   );
+  const acaoParaExcluir =
+    podeExcluirCadastros && deleteAcaoId
+      ? acoesCorretivas.find((option) => option.id === deleteAcaoId) ?? null
+      : null;
   const categoriasAtivas = categorias.filter((categoria) => categoria.isActive);
   const categoriaEmEdicao = editCategoriaId
     ? categorias.find((categoria) => categoria.id === editCategoriaId) ?? null
@@ -606,6 +621,15 @@ export default async function ControleTemperaturaOpcoesPage({
                             {option.ativo ? "Inativar" : "Ativar"}
                           </button>
                         </form>
+                        {podeExcluirCadastros ? (
+                          <Link
+                            href={`${PAGE_PATH}?deleteEquipamentoId=${option.id}`}
+                            scroll={false}
+                            className="btn-danger"
+                          >
+                            Excluir
+                          </Link>
+                        ) : null}
                       </div>
                     </div>
                   </li>
@@ -679,6 +703,15 @@ export default async function ControleTemperaturaOpcoesPage({
                             {option.ativo ? "Inativar" : "Ativar"}
                           </button>
                         </form>
+                        {podeExcluirCadastros ? (
+                          <Link
+                            href={`${PAGE_PATH}?deleteAcaoId=${option.id}`}
+                            scroll={false}
+                            className="btn-danger"
+                          >
+                            Excluir
+                          </Link>
+                        ) : null}
                       </div>
                     </div>
                   </li>
@@ -770,6 +803,74 @@ export default async function ControleTemperaturaOpcoesPage({
               </Link>
               <button type="submit" className="btn-primary">
                 Salvar
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
+
+      {equipamentoParaExcluir ? (
+        <ActionModal
+          title="Excluir equipamento"
+          cancelHref={PAGE_PATH}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Equipamento selecionado: <strong>{equipamentoParaExcluir.nome}</strong>
+            </p>
+          }
+        >
+          <form action={deleteCatalogOptionAction} className="space-y-4">
+            <input type="hidden" name="optionId" value={String(equipamentoParaExcluir.id)} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={`${PAGE_PATH}?deleteEquipamentoId=${equipamentoParaExcluir.id}`}
+            />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Tem certeza que deseja excluir este equipamento? Esta ação é restrita ao DEV e
+              deve ser usada apenas para correção administrativa.
+            </div>
+            <ModalActions>
+              <Link href={PAGE_PATH} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir equipamento
+              </button>
+            </ModalActions>
+          </form>
+        </ActionModal>
+      ) : null}
+
+      {acaoParaExcluir ? (
+        <ActionModal
+          title="Excluir ação corretiva"
+          cancelHref={PAGE_PATH}
+          maxWidthClassName="max-w-2xl"
+          description={
+            <p>
+              Ação corretiva selecionada: <strong>{acaoParaExcluir.nome}</strong>
+            </p>
+          }
+        >
+          <form action={deleteCatalogOptionAction} className="space-y-4">
+            <input type="hidden" name="optionId" value={String(acaoParaExcluir.id)} />
+            <input
+              type="hidden"
+              name="returnTo"
+              value={`${PAGE_PATH}?deleteAcaoId=${acaoParaExcluir.id}`}
+            />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              Tem certeza que deseja excluir esta ação corretiva? Esta ação é restrita ao DEV e
+              deve ser usada apenas para correção administrativa.
+            </div>
+            <ModalActions>
+              <Link href={PAGE_PATH} scroll={false} className="btn-secondary">
+                Cancelar
+              </Link>
+              <button type="submit" className="btn-danger">
+                Excluir ação corretiva
               </button>
             </ModalActions>
           </form>

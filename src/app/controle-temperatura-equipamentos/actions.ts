@@ -114,6 +114,8 @@ function redirectWithFeedback(
     url.searchParams.delete("editRegraId");
     url.searchParams.delete("novaRegraCategoriaId");
     url.searchParams.delete("deleteId");
+    url.searchParams.delete("deleteEquipamentoId");
+    url.searchParams.delete("deleteAcaoId");
   }
   url.searchParams.set("feedbackType", feedbackType);
   url.searchParams.set("feedback", feedback);
@@ -1205,6 +1207,86 @@ export async function toggleCatalogOptionStatusAction(formData: FormData) {
       returnTo,
       "error",
       getErrorMessage(error, "Não foi possível processar a operação.")
+    );
+  }
+}
+
+export async function deleteCatalogOptionAction(formData: FormData) {
+  const returnTo = getReturnToPath(formData);
+
+  try {
+    const actor = await getCurrentUserForAction();
+    ensureDevUserForHistoricalRecords(
+      actor,
+      "Apenas o usuário DEV pode excluir este cadastro."
+    );
+
+    const optionId = parsePositiveInt(getInputValue(formData, "optionId"));
+    if (!optionId) {
+      throw new Error("Cadastro inválido para exclusão.");
+    }
+
+    const option = await prisma.controleTemperaturaEquipamentoOpcao.findUnique({
+      where: { id: optionId }
+    });
+
+    if (!option) {
+      throw new Error("Cadastro não encontrado.");
+    }
+
+    if (option.tipo === TipoOpcaoTemperaturaEquipamento.EQUIPAMENTO) {
+      const registrosVinculados = await prisma.controleTemperaturaEquipamento.count({
+        where: { equipamento: option.nome }
+      });
+
+      if (registrosVinculados > 0) {
+        throw new Error(
+          "Este equipamento possui registros vinculados e não pode ser excluído diretamente. Exclua primeiro os registros de teste vinculados ou utilize a opção Inativar."
+        );
+      }
+    }
+
+    if (option.tipo === TipoOpcaoTemperaturaEquipamento.ACAO_CORRETIVA) {
+      const [registrosVinculados, regrasVinculadas] = await Promise.all([
+        prisma.controleTemperaturaEquipamento.count({
+          where: { acaoCorretiva: option.nome }
+        }),
+        prisma.controleTemperaturaCategoriaRegra.count({
+          where: { acaoCorretiva: option.nome }
+        })
+      ]);
+
+      if (registrosVinculados > 0 || regrasVinculadas > 0) {
+        throw new Error(
+          "Esta ação corretiva possui registros vinculados e não pode ser excluída diretamente. Exclua primeiro os registros de teste vinculados ou utilize a opção Inativar."
+        );
+      }
+    }
+
+    await prisma.controleTemperaturaEquipamentoOpcao.delete({
+      where: { id: option.id }
+    });
+
+    await createSignatureLog({
+      user: actor,
+      tipo: "RESPONSAVEL_TECNICO",
+      modulo: "controle-temperatura-equipamentos/cadastro/exclusao",
+      referenciaId: String(option.id),
+      observacao: [
+        `Exclusão administrativa de cadastro ${option.id}.`,
+        `Tipo: ${option.tipo}.`,
+        `Nome: ${option.nome}.`
+      ].join(" ")
+    });
+
+    revalidateModulePaths();
+    redirectWithFeedback(returnTo, "success", "Cadastro excluído com sucesso.");
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirectWithFeedback(
+      returnTo,
+      "error",
+      getErrorMessage(error, "Não foi possível excluir o cadastro.")
     );
   }
 }
