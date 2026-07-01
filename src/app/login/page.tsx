@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { PasswordInput } from "@/components/auth/password-input";
-import { APP_DESCRIPTION, APP_NAME } from "@/lib/app-branding";
+import { APP_DESCRIPTION } from "@/lib/app-branding";
 
 import { loginAction } from "./actions";
 
@@ -29,22 +29,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <section className="flex min-h-screen items-center justify-center py-8 dark:text-slate-100">
       <div className="w-full max-w-md bpma-card">
-        <div className="mb-6 flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{APP_NAME}</h1>
-            <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-300">
-              {APP_DESCRIPTION}
-            </p>
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="relative aspect-[14/5] w-full max-w-[280px] overflow-hidden">
+            <Image
+              src="/logo-staysafe.png"
+              alt="StaySafe"
+              fill
+              priority
+              sizes="280px"
+              className="object-cover object-center"
+            />
           </div>
-          <Image
-            src="/logo-staysafe.png"
-            alt="StaySafe"
-            width={280}
-            height={158}
-            priority
-            sizes="(min-width: 640px) 220px, 280px"
-            className="h-auto w-full max-w-[280px] flex-shrink-0 object-contain sm:w-[220px]"
-          />
+          <p className="mt-4 max-w-sm text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {APP_DESCRIPTION}
+          </p>
         </div>
 
         {feedback ? (
